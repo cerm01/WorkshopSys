@@ -11,10 +11,18 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(800, 600)
         self.showMaximized()  # Mostrar maximizada
 
+        # Fondo degradado
+        self.setStyleSheet("""
+            background: qlineargradient(
+                x1: 0, y1: 0, x2: 1, y2: 1,
+                stop: 0 #2CD5C4, stop: 1 #00788E
+            );
+        """)
+
         # Contenedor (frame) con fondo y bordes redondeados
         self.frame = QFrame()
         self.frame.setStyleSheet("""
-            background: rgba(255, 255, 255, 200);
+            background: rgba(245, 245, 245, 200);
             border-radius: 10px;
             padding: 20px;
         """)
@@ -23,18 +31,77 @@ class MainWindow(QMainWindow):
         frame_layout = QVBoxLayout()
         frame_layout.setAlignment(Qt.AlignCenter)
 
-        # Crear botones 
+        # Crear botones Inicio -------------------------------------------
         button_Administracion = QPushButton("Administración")
-        button_Administracion.
-
-        # Layout para los botones de la fila superior
+        button_Administracion.setStyleSheet("""
+            background: #00788E;
+            color: white;
+            font-size: 20px;
+        """)
+        button_Administracion.setMinimumHeight(50)
+        button_Administracion.setMinimumWidth(200)
+        button_Administracion.setCursor(Qt.PointingHandCursor)
+        #----------------------------------------------------------------
+        button_Clientes = QPushButton("Clientes")
+        button_Clientes.setStyleSheet("""
+            background: #00788E;
+            color: white;
+            font-size: 20px;
+        """)
+        button_Clientes.setMinimumHeight(50)
+        button_Clientes.setMinimumWidth(200)
+        button_Clientes.setCursor(Qt.PointingHandCursor)
+        #----------------------------------------------------------------
+        button_Proveedores = QPushButton("Proveedores")
+        button_Proveedores.setStyleSheet("""
+            background: #00788E;
+            color: white;
+            font-size: 20px;
+        """)
+        button_Proveedores.setMinimumHeight(50)
+        button_Proveedores.setMinimumWidth(200)
+        button_Proveedores.setCursor(Qt.PointingHandCursor)
+        #----------------------------------------------------------------
+        button_Inventario = QPushButton("Inventario")
+        button_Inventario.setStyleSheet("""
+            background: #00788E;
+            color: white;
+            font-size: 20px;
+        """)
+        button_Inventario.setMinimumHeight(50)
+        button_Inventario.setMinimumWidth(200)
+        button_Inventario.setCursor(Qt.PointingHandCursor)
+        #----------------------------------------------------------------
+        button_Reportes = QPushButton("Reportes")
+        button_Reportes.setStyleSheet("""
+            background: #00788E;
+            color: white;
+            font-size: 20px;
+        """)
+        button_Reportes.setMinimumHeight(50)
+        button_Reportes.setMinimumWidth(200)
+        button_Reportes.setCursor(Qt.PointingHandCursor)
+        # Crear Botonoes Fin --------------------------------------------
+        
+        # Layout para los botones de la fila superior 
         top_layout = QHBoxLayout()
+        top_layout.addStretch()  # Espaciador antes del primer botón
         top_layout.addWidget(button_Administracion)
+        top_layout.addStretch()  # Espaciador entre los botones
+        top_layout.addWidget(button_Clientes)
+        top_layout.addStretch()  # Espaciador entre los botones
+        top_layout.addWidget(button_Proveedores)
+        top_layout.addStretch()  # Espaciador entre los botones
+        top_layout.addWidget(button_Inventario)
+        top_layout.addStretch()  # Espaciador entre los botones
+        top_layout.addWidget(button_Reportes)
+        top_layout.addStretch()  # Espaciador después del último botón
+        top_layout.setAlignment(Qt.AlignCenter)
 
-        # Agregar los layouts de arriba y abajo al layout principal
+        # Agregar el layout de los botones a la ventana
         frame_layout.addLayout(top_layout)
 
-        # Agregar el layout al QFrame
+        # Establecer el layout del frame
         self.frame.setLayout(frame_layout)
 
         # Crear un widget central y agregar el frame
@@ -51,13 +118,7 @@ class MainWindow(QMainWindow):
         # Establecer el widget central
         self.setCentralWidget(central_widget)
 
-        # Fondo degradado
-        self.setStyleSheet("""
-            background: qlineargradient(
-                x1: 0, y1: 0, x2: 1, y2: 1,
-                stop: 0 #2CD5C4, stop: 1 #00788E
-            );
-        """)
+        
 
 if __name__ == "__main__":
     app = QApplication([])
