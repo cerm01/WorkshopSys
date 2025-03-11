@@ -1,16 +1,16 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QFrame, QWidget
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFrame, QWidget
 from PyQt5.QtCore import Qt
 
-class AdministracionWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Reportes")
+class AdministracionWindow(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Administración")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
 
         # Dimensiones iniciales
         self.setMinimumSize(800, 600)
-        self.showMaximized()  # Mostrar maximizada
+        self.setWindowState(Qt.WindowMaximized)  # Mostrar maximizada
 
         # Fondo degradado
         self.setStyleSheet("""
@@ -35,23 +35,12 @@ class AdministracionWindow(QMainWindow):
         # Establecer el Layout del frame
         self.frame.setLayout(frame_layout)
 
-        # Crear un widget central y agregar el frame
-        central_widget = QWidget()
-        central_layout = QVBoxLayout()
-        central_layout.addWidget(self.frame)
+        # Layout principal del diálogo
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(self.frame)
 
         # Establecer márgenes del layout para aumentar el espacio entre el frame y la ventana
-        central_layout.setContentsMargins(150, 150, 150, 150)  # Márgenes en el orden: (izquierda, arriba, derecha, abajo)
+        main_layout.setContentsMargins(150, 150, 150, 150)  # Márgenes en el orden: (izquierda, arriba, derecha, abajo)
 
-        # Asignar el layout al widget central
-        central_widget.setLayout(central_layout)
-
-        # Establecer el widget central
-        self.setCentralWidget(central_widget)
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = AdministracionWindow()
-    window.show()
-    sys.exit(app.exec_())
+        # Asignar el layout al diálogo
+        self.setLayout(main_layout)

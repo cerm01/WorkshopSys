@@ -1,6 +1,12 @@
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QFrame, QPushButton, QHBoxLayout)
+import sys
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFrame, QPushButton, QHBoxLayout
 from PyQt5.QtCore import Qt
 
+from administracion_windows import AdministracionWindow
+from clientes_windows import ClientesWindow
+from proveedores_windows import ProveedoresWindow
+from inventario_windows import InventarioWindow
+from reportes_windows import ReportesWindow
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -27,61 +33,60 @@ class MainWindow(QMainWindow):
             padding: 20px;
         """)
 
+        # Estilo de los botones
+        button_style = """
+            QPushButton {
+                background: #00788E;
+                color: white;
+                font-size: 20px;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background: #005F6B;
+            }
+        """
+
         # Layout interno del frame
         frame_layout = QVBoxLayout()
         frame_layout.setAlignment(Qt.AlignCenter)
 
         # Crear botones Inicio -------------------------------------------
         button_Administracion = QPushButton("Administración")
-        button_Administracion.setStyleSheet("""
-            background: #00788E;
-            color: white;
-            font-size: 20px;
-        """)
+        button_Administracion.setStyleSheet(button_style)
         button_Administracion.setMinimumHeight(50)
         button_Administracion.setMinimumWidth(200)
         button_Administracion.setCursor(Qt.PointingHandCursor)
+
+        button_Administracion.clicked.connect(lambda: self.open_window("administracion"))
         #----------------------------------------------------------------
         button_Clientes = QPushButton("Clientes")
-        button_Clientes.setStyleSheet("""
-            background: #00788E;
-            color: white;
-            font-size: 20px;
-        """)
+        button_Clientes.setStyleSheet(button_style)
         button_Clientes.setMinimumHeight(50)
         button_Clientes.setMinimumWidth(200)
         button_Clientes.setCursor(Qt.PointingHandCursor)
+        button_Clientes.clicked.connect(lambda: self.open_window("clientes"))
         #----------------------------------------------------------------
         button_Proveedores = QPushButton("Proveedores")
-        button_Proveedores.setStyleSheet("""
-            background: #00788E;
-            color: white;
-            font-size: 20px;
-        """)
+        button_Proveedores.setStyleSheet(button_style)
         button_Proveedores.setMinimumHeight(50)
         button_Proveedores.setMinimumWidth(200)
         button_Proveedores.setCursor(Qt.PointingHandCursor)
+        button_Proveedores.clicked.connect(lambda: self.open_window("proveedores"))
         #----------------------------------------------------------------
         button_Inventario = QPushButton("Inventario")
-        button_Inventario.setStyleSheet("""
-            background: #00788E;
-            color: white;
-            font-size: 20px;
-        """)
+        button_Inventario.setStyleSheet(button_style)
         button_Inventario.setMinimumHeight(50)
         button_Inventario.setMinimumWidth(200)
         button_Inventario.setCursor(Qt.PointingHandCursor)
+        button_Inventario.clicked.connect(lambda: self.open_window("inventario"))
         #----------------------------------------------------------------
         button_Reportes = QPushButton("Reportes")
-        button_Reportes.setStyleSheet("""
-            background: #00788E;
-            color: white;
-            font-size: 20px;
-        """)
+        button_Reportes.setStyleSheet(button_style)
         button_Reportes.setMinimumHeight(50)
         button_Reportes.setMinimumWidth(200)
         button_Reportes.setCursor(Qt.PointingHandCursor)
-        # Crear Botonoes Fin --------------------------------------------
+        button_Reportes.clicked.connect(lambda: self.open_window("reportes"))
         
         # Layout para los botones de la fila superior 
         top_layout = QHBoxLayout()
@@ -118,11 +123,37 @@ class MainWindow(QMainWindow):
         # Establecer el widget central
         self.setCentralWidget(central_widget)
 
-        
+        # Almacenar referencias a ventanas secundarias
+        self.windows = {
+            "administracion": None,
+            "clientes": None,
+            "proveedores": None,
+            "inventario": None,
+            "reportes": None,
+        }
 
+    
+    def open_window(self, window_name):
+        
+        
+        if window_name == "administracion":
+            self.windows[window_name] = AdministracionWindow(self)
+            self.windows[window_name].exec_()
+        elif window_name == "clientes":
+            self.windows[window_name] = ClientesWindow(self)
+            self.windows[window_name].exec_()
+        elif window_name == "proveedores":
+            self.windows[window_name] = ProveedoresWindow(self)
+            self.windows[window_name].exec_()
+        elif window_name == "inventario":
+            self.windows[window_name] = InventarioWindow(self)
+            self.windows[window_name].exec_()
+        elif window_name == "reportes":
+            self.windows[window_name] = ReportesWindow(self)
+            self.windows[window_name].exec_()
+    
 if __name__ == "__main__":
-    app = QApplication([])
+    app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-
-    app.exec_()
+    sys.exit(app.exec_())
