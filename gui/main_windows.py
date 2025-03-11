@@ -14,7 +14,7 @@ class MainWindow(QMainWindow):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
 
         # Dimensiones iniciales
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(1200, 600)
         self.showMaximized()  # Mostrar maximizada
 
         # Fondo degradado
@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(self.frame)
 
         # Establecer márgenes del layout para aumentar el espacio entre el frame y la ventana
-        central_layout.setContentsMargins(150, 150, 150, 150)  # Márgenes en el orden: (izquierda, arriba, derecha, abajo)
+        central_layout.setContentsMargins(20, 20, 20, 20)  # Márgenes en el orden: (izquierda, arriba, derecha, abajo)
 
         # Asignar el layout al widget central
         central_widget.setLayout(central_layout)
