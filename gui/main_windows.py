@@ -125,6 +125,16 @@ class MainWindow(QMainWindow):
         button_Reportes.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         button_Reportes.clicked.connect(lambda: self.open_window("reportes"))
         #----------------------------------------------------------------
+        button_Configuracion = QToolButton()
+        button_Configuracion.setStyleSheet(button_style)
+        button_Configuracion.setMinimumHeight(80)
+        button_Configuracion.setMinimumWidth(80)
+        button_Configuracion.setCursor(Qt.PointingHandCursor)
+        icon_path = "assets/icons/configuracion.png"
+        button_Configuracion.setIcon(recolor_icon(icon_path, "#FFFFFF"))
+        button_Configuracion.setIconSize(QSize(50,50))
+        button_Configuracion.clicked.connect(lambda: self.open_window("configuracion"))
+        
         
         # Layout para los botones de la fila superior 
         top_layout = QHBoxLayout()
@@ -141,8 +151,21 @@ class MainWindow(QMainWindow):
         top_layout.addStretch()  # Espaciador después del último botón
         top_layout.setAlignment(Qt.AlignCenter)
 
-        # Agregar el layout de los botones a la ventana
-        frame_layout.addLayout(top_layout)
+        config_layout = QHBoxLayout()
+        config_layout.addStretch(1)
+        config_layout.addWidget(button_Configuracion)
+        config_layout.setContentsMargins(5, 5, 5, 5)  # Añade margen a la derecha e inferior
+        
+        # Crear un layout vertical principal para el frame
+        main_content_layout = QVBoxLayout()
+        main_content_layout.addStretch(1)  # Espacio superior
+        main_content_layout.addLayout(top_layout)  # Botones principales
+        main_content_layout.addStretch(1)  # Espacio inferior
+        
+        # Crear un layout para posicionar el contenido principal y el botón de configuración
+        frame_layout = QVBoxLayout()
+        frame_layout.addLayout(main_content_layout)  # Contenido principal (centrado)
+        frame_layout.addLayout(config_layout)  # Botón de configuración (abajo a la derecha)
 
         # Establecer el layout del frame
         self.frame.setLayout(frame_layout)
