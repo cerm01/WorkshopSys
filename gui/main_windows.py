@@ -1,6 +1,7 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFrame, QPushButton, QHBoxLayout
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFrame, QPushButton, QHBoxLayout, QToolButton
+from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor
 
 from administracion_windows import AdministracionWindow
 from clientes_windows import ClientesWindow
@@ -19,9 +20,9 @@ class MainWindow(QMainWindow):
 
         # Fondo degradado
         self.setStyleSheet("""
-            background: qlineargradient(
-                x1: 0, y1: 0, x2: 1, y2: 1,
-                stop: 0 #2CD5C4, stop: 1 #00788E
+            background: qradialgradient(
+            cx: 0.5, cy: 0.5, radius: 0.9,
+            stop: 0 #2CD5C4, stop: 1 #00788E
             );
         """)
 
@@ -33,60 +34,97 @@ class MainWindow(QMainWindow):
             padding: 20px;
         """)
 
-        # Estilo de los botones
+        # Estilo para QToolButton
         button_style = """
-            QPushButton {
-                background: #00788E;
+            QToolButton {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #2CD5C4, stop: 1 #00788E
+                );
                 color: white;
                 font-size: 20px;
-                border-radius: 5px;
-                padding: 10px;
+                font-weight: bold;
+                border-radius: 15px;
+                padding: 15px, 10px, 20px, 10px;
             }
-            QPushButton:hover {
-                background: #005F6B;
+            QToolButton::menu-indicator {  /* Oculta el indicador de menú si no se usa */
+                image: none;
             }
         """
+
+        def recolor_icon(icon_path, color):
+            pixmap = QPixmap(icon_path)  # Cargar la imagen original
+            painter = QPainter(pixmap)
+            painter.setCompositionMode(QPainter.CompositionMode_SourceIn)  # Modo para cambiar el color
+            painter.fillRect(pixmap.rect(), QColor(color))  # Aplicar color
+            painter.end()
+            return QIcon(pixmap)
 
         # Layout interno del frame
         frame_layout = QVBoxLayout()
         frame_layout.setAlignment(Qt.AlignCenter)
 
         # Crear botones Inicio -------------------------------------------
-        button_Administracion = QPushButton("Administración")
+        button_Administracion = QToolButton()  # Usamos QToolButton en lugar de QPushButton
+        button_Administracion.setText("Administración")
         button_Administracion.setStyleSheet(button_style)
-        button_Administracion.setMinimumHeight(50)
+        button_Administracion.setMinimumHeight(200)  # Ajustar tamaño para acomodar el icono y texto
         button_Administracion.setMinimumWidth(200)
         button_Administracion.setCursor(Qt.PointingHandCursor)
-
+        icon_path = "assets/icons/administracion.png"
+        button_Administracion.setIcon(recolor_icon(icon_path, "#FFFFFF"))  # Cambiar color del icono
+        button_Administracion.setIconSize(QSize(120,120))  # Ajusta el tamaño del icono
+        button_Administracion.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)  # Texto debajo del icono
         button_Administracion.clicked.connect(lambda: self.open_window("administracion"))
         #----------------------------------------------------------------
-        button_Clientes = QPushButton("Clientes")
+        button_Clientes = QToolButton()
+        button_Clientes.setText("Clientes")
         button_Clientes.setStyleSheet(button_style)
-        button_Clientes.setMinimumHeight(50)
+        button_Clientes.setMinimumHeight(200)
         button_Clientes.setMinimumWidth(200)
         button_Clientes.setCursor(Qt.PointingHandCursor)
+        icon_path = "assets/icons/clientes.png"
+        button_Clientes.setIcon(recolor_icon(icon_path, "#FFFFFF"))
+        button_Clientes.setIconSize(QSize(120,120))
+        button_Clientes.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         button_Clientes.clicked.connect(lambda: self.open_window("clientes"))
         #----------------------------------------------------------------
-        button_Proveedores = QPushButton("Proveedores")
+        button_Proveedores = QToolButton()
+        button_Proveedores.setText("Proveedores")
         button_Proveedores.setStyleSheet(button_style)
-        button_Proveedores.setMinimumHeight(50)
+        button_Proveedores.setMinimumHeight(200)
         button_Proveedores.setMinimumWidth(200)
         button_Proveedores.setCursor(Qt.PointingHandCursor)
+        icon_path = "assets/icons/proveedores.png"
+        button_Proveedores.setIcon(recolor_icon(icon_path, "#FFFFFF"))
+        button_Proveedores.setIconSize(QSize(120,120))
+        button_Proveedores.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         button_Proveedores.clicked.connect(lambda: self.open_window("proveedores"))
         #----------------------------------------------------------------
-        button_Inventario = QPushButton("Inventario")
+        button_Inventario = QToolButton()
+        button_Inventario.setText("Inventario")
         button_Inventario.setStyleSheet(button_style)
-        button_Inventario.setMinimumHeight(50)
+        button_Inventario.setMinimumHeight(200)
         button_Inventario.setMinimumWidth(200)
         button_Inventario.setCursor(Qt.PointingHandCursor)
+        icon_path = "assets/icons/inventario.png"
+        button_Inventario.setIcon(recolor_icon(icon_path, "#FFFFFF"))
+        button_Inventario.setIconSize(QSize(120,120))
+        button_Inventario.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         button_Inventario.clicked.connect(lambda: self.open_window("inventario"))
         #----------------------------------------------------------------
-        button_Reportes = QPushButton("Reportes")
+        button_Reportes = QToolButton()
+        button_Reportes.setText("Reportes")
         button_Reportes.setStyleSheet(button_style)
-        button_Reportes.setMinimumHeight(50)
+        button_Reportes.setMinimumHeight(200)
         button_Reportes.setMinimumWidth(200)
         button_Reportes.setCursor(Qt.PointingHandCursor)
+        icon_path = "assets/icons/reportes.png"
+        button_Reportes.setIcon(recolor_icon(icon_path, "#FFFFFF"))
+        button_Reportes.setIconSize(QSize(120,120))
+        button_Reportes.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         button_Reportes.clicked.connect(lambda: self.open_window("reportes"))
+        #----------------------------------------------------------------
         
         # Layout para los botones de la fila superior 
         top_layout = QHBoxLayout()
@@ -115,7 +153,7 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(self.frame)
 
         # Establecer márgenes del layout para aumentar el espacio entre el frame y la ventana
-        central_layout.setContentsMargins(20, 20, 20, 20)  # Márgenes en el orden: (izquierda, arriba, derecha, abajo)
+        central_layout.setContentsMargins(30, 30, 30, 30)  # Márgenes en el orden: (izquierda, arriba, derecha, abajo)
 
         # Asignar el layout al widget central
         central_widget.setLayout(central_layout)
@@ -134,7 +172,6 @@ class MainWindow(QMainWindow):
 
     
     def open_window(self, window_name):
-        
         
         if window_name == "administracion":
             self.windows[window_name] = AdministracionWindow(self)
