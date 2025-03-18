@@ -8,6 +8,7 @@ from clientes_windows import ClientesWindow
 from proveedores_windows import ProveedoresWindow
 from inventario_windows import InventarioWindow
 from reportes_windows import ReportesWindow
+from configuracion_windows import ConfiguracionWindow
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -191,6 +192,7 @@ class MainWindow(QMainWindow):
             "proveedores": None,
             "inventario": None,
             "reportes": None,
+            "configuracion": None
         }
 
     
@@ -210,6 +212,9 @@ class MainWindow(QMainWindow):
             self.windows[window_name].exec_()
         elif window_name == "reportes":
             self.windows[window_name] = ReportesWindow(self)
+            self.windows[window_name].exec_()
+        elif window_name == "configuracion":
+            self.windows[window_name] = ConfiguracionWindow(self)
             self.windows[window_name].exec_()
     
 if __name__ == "__main__":
