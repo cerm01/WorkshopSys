@@ -1,8 +1,36 @@
 import sys
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFrame, QWidget
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFrame, QToolButton, QHBoxLayout, QApplication
+from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor
+
+from utils import recolor_icon
+
+from notas_windows import NotasWindow
+from cotizaciones_windows import CotizacionesWindow
+from ordenes_windows import OrdenesWindow
+# Importar los estilos
+from styles import WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
 
 class AdministracionWindow(QDialog):
+    # Definición de las ventanas y sus configuraciones como constante de clase
+    WINDOW_CONFIG = {
+        "notas": {
+            "class": NotasWindow,
+            "display_name": "Notas",
+            "icon": "assets/icons/notas.png"
+        },
+        "cotizaciones": {
+            "class": CotizacionesWindow,
+            "display_name": "Cotizaciones",
+            "icon": "assets/icons/cotizaciones.png"
+        },
+        "ordenes": {
+            "class": OrdenesWindow,
+            "display_name": "Órdenes de Trabajo",
+            "icon": "assets/icons/ordenes.png"
+        }
+    }
+        
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Administración")
@@ -12,35 +40,86 @@ class AdministracionWindow(QDialog):
         self.setMinimumSize(800, 600)
         self.setWindowState(Qt.WindowMaximized)  # Mostrar maximizada
 
-        # Fondo degradado
-        self.setStyleSheet("""
-            background: qlineargradient(
-                x1: 0, y1: 0, x2: 1, y2: 1,
-                stop: 0 #2CD5C4, stop: 1 #00788E
-            );
-        """)
-
+        # Inicializar diccionario para las instancias de ventanas
+        self.window_instances = {key: None for key in self.WINDOW_CONFIG.keys()}
+        
+        # Aplicar estilos
+        self.setStyleSheet(WINDOW_GRADIENT)
+        
+        # Crear la interfaz
+        self.setup_ui()
+    
+    def setup_ui(self):
+        """Configurar la interfaz de usuario"""
         # Contenedor (frame) con fondo y bordes redondeados
         self.frame = QFrame()
-        self.frame.setStyleSheet("""
-            background: rgba(245, 245, 245, 200);
-            border-radius: 10px;
-            padding: 20px;
-        """)
+        self.frame.setStyleSheet(ROUNDED_FRAME)
 
+        # Layout para los botones 
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        
+        # Crear los botones dinámicamente basados en la configuración
+        for identifier, config in self.WINDOW_CONFIG.items():
+            button = self.create_button(
+                display_text=config["display_name"],
+                identifier=identifier,
+                icon_path=config["icon"]
+            )
+            buttons_layout.addWidget(button)
+            buttons_layout.addStretch()
+        
         # Layout interno del frame
         frame_layout = QVBoxLayout()
         frame_layout.setAlignment(Qt.AlignCenter)
-
+        frame_layout.addLayout(buttons_layout)
+        
         # Establecer el Layout del frame
         self.frame.setLayout(frame_layout)
 
-        # Layout principal del diálogo
+        # Layout principal del diálogo con márgenes
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(50, 50, 50, 50)
         main_layout.addWidget(self.frame)
-
-        # Establecer márgenes del layout para aumentar el espacio entre el frame y la ventana
-        main_layout.setContentsMargins(150, 150, 150, 150)  # Márgenes en el orden: (izquierda, arriba, derecha, abajo)
 
         # Asignar el layout al diálogo
         self.setLayout(main_layout)
+    
+    def create_button(self, display_text, identifier, icon_path):
+        """
+        Método para crear botones con estilo consistente
+        
+        Args:
+            display_text (str): Texto que se mostrará en el botón
+            identifier (str): Identificador interno para la lógica de la aplicación
+            icon_path (str): Ruta al archivo de ícono
+        """
+        button = QToolButton()
+        button.setText(display_text)
+        button.setProperty("identifier", identifier)
+        button.setStyleSheet(BUTTON_STYLE_2)
+        button.setMinimumSize(250, 250)  # Simplificación de las dos líneas de tamaño
+        button.setCursor(Qt.PointingHandCursor)
+        button.setIcon(recolor_icon(icon_path, "#FFFFFF"))
+        button.setIconSize(QSize(120, 120))
+        button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        button.clicked.connect(lambda checked=False, id=identifier: self.open_window(id))
+        return button
+    
+    def open_window(self, window_id):
+        """
+        Abre la ventana correspondiente al identificador
+        
+        Args:
+            window_id (str): Identificador de la ventana a abrir
+        """
+        if window_id in self.WINDOW_CONFIG:
+            # Crear nueva instancia si no existe
+            if self.window_instances[window_id] is None:
+                window_class = self.WINDOW_CONFIG[window_id]["class"]
+                self.window_instances[window_id] = window_class(self)
+            
+            # Mostrar la ventana
+            self.window_instances[window_id].exec_()
+        else:
+            print(f"Error: No se encontró una ventana con el identificador '{window_id}'")
