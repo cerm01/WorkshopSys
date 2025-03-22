@@ -1,8 +1,11 @@
 import sys
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFrame, QWidget
+from PyQt5.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QFrame, 
+    QPushButton, QSizePolicy, QApplication
+)
 from PyQt5.QtCore import Qt
 # Importar los estilos
-from styles import WINDOW_GRADIENT, ROUNDED_FRAME
+from styles import WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
 
 class NotasWindow(QDialog):
     def __init__(self, parent=None):
@@ -34,7 +37,36 @@ class NotasWindow(QDialog):
         # Layout interno del frame
         frame_layout = QVBoxLayout()
         frame_layout.setAlignment(Qt.AlignCenter)
-
+        
+        # Añadir espacio flexible para empujar los botones hacia abajo
+        frame_layout.addStretch(1)
+        
+        # Crear layout para los botones (fila horizontal)
+        botones_layout = QHBoxLayout()
+        botones_layout.setSpacing(10)  # Espacio entre botones
+        botones_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes adicionales
+        botones_layout.setStretch(0, 1)  # Hacer que se estire horizontalmente
+        
+        # Usamos el estilo BUTTON_STYLE_2 importado de styles.py
+        # Modificamos para usar QPushButton en lugar de QToolButton
+        estilo_boton = BUTTON_STYLE_2.replace("QToolButton", "QPushButton")
+        
+        # Textos de los botones
+        textos_botones = ["Nuevo", "Guardar", "Cancelar", "Buscar", "Editar", "Limpiar", "Imprimir"]
+        
+        # Crear los botones y añadirlos al layout
+        self.botones = []
+        for texto in textos_botones:
+            boton = QPushButton(texto)
+            boton.setStyleSheet(estilo_boton)
+            boton.setCursor(Qt.PointingHandCursor)
+            boton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # Expandir horizontalmente
+            botones_layout.addWidget(boton)
+            self.botones.append(boton)
+        
+        # Añadir el layout de botones al layout del frame
+        frame_layout.addLayout(botones_layout)
+        
         # Establecer el Layout del frame
         self.frame.setLayout(frame_layout)
 
@@ -48,8 +80,11 @@ class NotasWindow(QDialog):
         # Asignar el layout al diálogo
         self.setLayout(main_layout)
     
+    def closeEvent(self, event):
+        """Evento que se dispara al cerrar la ventana"""
+        event.accept()
+    
 if __name__ == "__main__":
-    from PyQt5.QtWidgets import QApplication
     app = QApplication(sys.argv)
     window = NotasWindow()
     window.show()
