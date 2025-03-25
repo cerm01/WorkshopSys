@@ -10,7 +10,7 @@ from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem
 # Import styles
 from styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2,
-    GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE
+    GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )
 
 class NotasWindow(QDialog):
@@ -26,7 +26,8 @@ class NotasWindow(QDialog):
 
         # Aplicar estilos
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
-        
+        #self.setStyleSheet(f"NotasWindow {SECONDARY_WINDOW_GRADIENT}")
+
         # Crear la interfaz
         self.setup_ui()
     
@@ -285,17 +286,16 @@ class NotasWindow(QDialog):
         
         # Limpiar el formulario para un nuevo ingreso
         self.limpiar_formulario()
-    
+
     def mostrar_advertencia(self, mensaje):
         msg_box = QMessageBox(QMessageBox.Warning, "Advertencia", mensaje, QMessageBox.Ok, self)
-        #msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
+        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         
-        # También se puede personalizar cada botón individualmente
         ok_button = msg_box.button(QMessageBox.Ok)
         if ok_button:
             ok_button.setText("OK")
             ok_button.setCursor(Qt.PointingHandCursor)
-    
+        
         msg_box.exec_()
 
     def validar_datos(self):

@@ -21,10 +21,12 @@ WINDOW_GRADIENT = f"""
 
 # Gradiente para ventanas secundarias
 SECONDARY_WINDOW_GRADIENT = f"""
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 0, y2: 1,
-        stop: 0 {main_color}, stop: 1 {third_color}
-    );
+    QDialog {{
+        background: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 {main_color}, stop: 1 {third_color}
+        );
+    }}
 """
 
 # Estilos de contenedores
@@ -153,6 +155,13 @@ TABLE_STYLE = f"""
     QTableView::item:selected {{
         background-color: #BBDEFB;
     }}
+"""
+
+# Estilo para QMessageBox
+MESSAGE_BOX_STYLE = """
+    QMessageBox {
+        background-color: #F5F5F5;
+    }
 """
 
 # Botón pequeño para formularios
