@@ -13,7 +13,7 @@ from configuracion_windows import ConfiguracionWindow
 from utils import recolor_icon
 
 # Importar los estilos desde styles.py
-from styles import WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2, main_color
+from styles import WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
 
 class MainWindow(QMainWindow):
     # Definición de las ventanas y sus configuraciones como constante de clase
@@ -24,7 +24,7 @@ class MainWindow(QMainWindow):
             "icon": "assets/icons/administracion.png",
             "size": (200, 200),
             "icon_size": (120, 120),
-            "position": "main"  # Nueva propiedad para identificar ubicación
+            "position": "main"  # Propiedad para identificar ubicación
         },
         "clientes": {
             "class": ClientesWindow,
@@ -176,7 +176,6 @@ class MainWindow(QMainWindow):
         button = QToolButton()
         button.setText(config["display_name"])
         button.setProperty("identifier", identifier)
-        # Usamos el estilo importado
         button.setStyleSheet(BUTTON_STYLE_2)
         button.setMinimumSize(*config["size"])
         button.setCursor(Qt.PointingHandCursor)

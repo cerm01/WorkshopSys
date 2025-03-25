@@ -13,10 +13,12 @@ background_light = "rgba(245, 245, 245, 200)"
 
 # Estilos de ventanas
 WINDOW_GRADIENT = f"""
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 1, y2: 1,
-        stop: 0 {secondary_color}, stop: 1 {main_color}
-    );
+    QDialog {{
+        background: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 {main_color}, stop: 1 {secondary_color}
+        );
+    }}
 """
 
 # Gradiente para ventanas secundarias

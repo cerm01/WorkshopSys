@@ -26,7 +26,6 @@ class NotasWindow(QDialog):
 
         # Aplicar estilos
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
-        #self.setStyleSheet(f"NotasWindow {SECONDARY_WINDOW_GRADIENT}")
 
         # Crear la interfaz
         self.setup_ui()

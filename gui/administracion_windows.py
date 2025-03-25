@@ -17,17 +17,23 @@ class AdministracionWindow(QDialog):
         "notas": {
             "class": NotasWindow,
             "display_name": "Notas",
-            "icon": "assets/icons/notas.png"
+            "icon": "assets/icons/notas.png",
+            "size": (250, 250),
+            "icon_size": (120, 120)
         },
         "cotizaciones": {
             "class": CotizacionesWindow,
             "display_name": "Cotizaciones",
-            "icon": "assets/icons/cotizaciones.png"
+            "icon": "assets/icons/cotizaciones.png",
+            "size": (250, 250),
+            "icon_size": (120, 120)
         },
         "ordenes": {
             "class": OrdenesWindow,
             "display_name": "Órdenes de Trabajo",
-            "icon": "assets/icons/ordenes.png"
+            "icon": "assets/icons/ordenes.png",
+            "size": (250, 250),
+            "icon_size": (120, 120)
         }
     }
         
@@ -62,9 +68,8 @@ class AdministracionWindow(QDialog):
         # Crear los botones dinámicamente basados en la configuración
         for identifier, config in self.WINDOW_CONFIG.items():
             button = self.create_button(
-                display_text=config["display_name"],
-                identifier=identifier,
-                icon_path=config["icon"]
+                config=config,
+                identifier=identifier
             )
             buttons_layout.addWidget(button)
             buttons_layout.addStretch()
@@ -85,23 +90,22 @@ class AdministracionWindow(QDialog):
         # Asignar el layout al diálogo
         self.setLayout(main_layout)
     
-    def create_button(self, display_text, identifier, icon_path):
+    def create_button(self, config, identifier):
         """
         Método para crear botones con estilo consistente
         
         Args:
-            display_text (str): Texto que se mostrará en el botón
-            identifier (str): Identificador interno para la lógica de la aplicación
-            icon_path (str): Ruta al archivo de ícono
+            config (dict): Configuración del botón
+            identifier (str): Identificador del botón
         """
         button = QToolButton()
-        button.setText(display_text)
+        button.setText(config["display_name"])
         button.setProperty("identifier", identifier)
         button.setStyleSheet(BUTTON_STYLE_2)
-        button.setMinimumSize(250, 250)  # Simplificación de las dos líneas de tamaño
+        button.setMinimumSize(*config["size"])
         button.setCursor(Qt.PointingHandCursor)
-        button.setIcon(recolor_icon(icon_path, "#FFFFFF"))
-        button.setIconSize(QSize(120, 120))
+        button.setIcon(recolor_icon(config["icon"], "#FFFFFF"))
+        button.setIconSize(QSize(*config["icon_size"]))
         button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         button.clicked.connect(lambda checked=False, id=identifier: self.open_window(id))
         return button
