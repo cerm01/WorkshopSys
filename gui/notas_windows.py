@@ -1,14 +1,17 @@
 import sys
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFrame, 
+    QDialog, QVBoxLayout, QHBoxLayout, 
     QPushButton, QSizePolicy, QApplication,
     QLabel, QLineEdit, QComboBox, QGridLayout, QGroupBox,
     QDoubleSpinBox, QMessageBox, QTableView, QHeaderView
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QDoubleValidator, QIntValidator, QStandardItemModel, QStandardItem
-# Importar los estilos
-from styles import WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
+from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem
+# Import styles
+from styles import (
+    SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2,
+    GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE
+)
 
 class NotasWindow(QDialog):
     def __init__(self, parent=None):
@@ -19,21 +22,17 @@ class NotasWindow(QDialog):
 
         # Dimensiones iniciales
         self.setMinimumSize(800, 600)
-        self.setWindowState(Qt.WindowMaximized)  # Mostrar maximizada
+        self.setWindowState(Qt.WindowMaximized)
 
         # Aplicar estilos
-        self.apply_styles()
+        self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
         
         # Crear la interfaz
         self.setup_ui()
     
-    def apply_styles(self):
-        """Método para aplicar los estilos importados del archivo styles.py"""
-        self.setStyleSheet(WINDOW_GRADIENT)
-    
     def setup_ui(self):
         """Configurar la interfaz de usuario"""
-        # Layout principal directamente en el diálogo (sin frame contenedor)
+        # Layout principal 
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
         
@@ -48,12 +47,8 @@ class NotasWindow(QDialog):
         
         # Crear layout para los botones (fila horizontal)
         botones_layout = QHBoxLayout()
-        botones_layout.setSpacing(10)  # Espacio entre botones
-        botones_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes adicionales
-        
-        # Usamos el estilo BUTTON_STYLE_2 importado de styles.py
-        # Modificamos para usar QPushButton en lugar de QToolButton
-        estilo_boton = BUTTON_STYLE_2.replace("QToolButton", "QPushButton")
+        botones_layout.setSpacing(10)
+        botones_layout.setContentsMargins(0, 0, 0, 0)
         
         # Textos de los botones
         textos_botones = ["Nuevo", "Guardar", "Cancelar", "Buscar", "Editar", "Limpiar", "Imprimir"]
@@ -62,9 +57,9 @@ class NotasWindow(QDialog):
         self.botones = []
         for texto in textos_botones:
             boton = QPushButton(texto)
-            boton.setStyleSheet(estilo_boton)
+            boton.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
             boton.setCursor(Qt.PointingHandCursor)
-            boton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # Expandir horizontalmente
+            boton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             botones_layout.addWidget(boton)
             self.botones.append(boton)
         
@@ -81,126 +76,63 @@ class NotasWindow(QDialog):
         """Crear grupo de campos para producto/servicio"""
         # Crear un groupbox para agrupar los elementos - sin título
         grupo = QGroupBox("")
-        grupo.setStyleSheet("""
-            QGroupBox {
-                border: 2px solid rgba(255, 255, 255, 100);
-                border-radius: 8px;
-                margin-top: 5px;
-                padding-top: 5px;
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 rgba(44, 213, 196, 150), stop: 1 rgba(0, 120, 142, 150)
-                );
-            }
-        """)
+        grupo.setStyleSheet(GROUP_BOX_STYLE)
         
-        # Crear un grid layout para organizar los campos (más compacto)
+        # Crear un grid layout para organizar los campos
         grid_layout = QGridLayout()
         grid_layout.setVerticalSpacing(8)
         grid_layout.setHorizontalSpacing(15)
         grid_layout.setContentsMargins(10, 10, 10, 10)
         
-        # Estilos para labels e inputs
-        label_estilo = """
-            QLabel {
-                font-size: 16px;
-                font-weight: bold;
-                color: white;
-                background-color: transparent;
-                margin-bottom: 0px;
-                qproperty-alignment: AlignCenter;
-            }
-        """
-        
-        input_estilo = """
-            QLineEdit, QComboBox, QDoubleSpinBox {
-                padding: 8px;
-                border: 2px solid rgba(255, 255, 255, 150);
-                border-radius: 6px;
-                background-color: rgba(255, 255, 255, 200);
-                min-height: 25px;
-                font-size: 16px;
-                margin-top: 0px;
-            }
-            
-            QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus {
-                border: 2px solid #2CD5C4;
-                background-color: white;
-            }
-            
-            QComboBox::drop-down {
-                border: 0px;
-                background: transparent;
-            }
-            
-            QComboBox::down-arrow {
-                image: url(assets/icons/down-arrow.png);
-                width: 12px;
-                height: 12px;
-            }
-            
-            QDoubleSpinBox {
-                padding-right: 15px;
-            }
-            
-            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
-                width: 0px;
-                height: 0px;
-            }
-        """
-        
-        # Definir proporciones de columnas (stretch)
-        # Producto(2), Cantidad(1), Descripción(6), Precio(2), Importe(2)
+        # Definir proporciones de columnas
         grid_layout.setColumnStretch(0, 2)    # Producto
-        grid_layout.setColumnStretch(1, 1)    # Cantidad (reducido)
-        grid_layout.setColumnStretch(2, 6)    # Descripción (aumentado)
-        grid_layout.setColumnStretch(3, 2)    # Precio (reducido)
+        grid_layout.setColumnStretch(1, 1)    # Cantidad
+        grid_layout.setColumnStretch(2, 6)    # Descripción
+        grid_layout.setColumnStretch(3, 2)    # Precio
         grid_layout.setColumnStretch(4, 2)    # Importe
         grid_layout.setColumnStretch(5, 1)    # Botón Agregar
         
         # ---- Fila 1: Labels ----
         lbl_producto = QLabel("Producto o Servicio")
-        lbl_producto.setStyleSheet(label_estilo)
+        lbl_producto.setStyleSheet(LABEL_STYLE)
         grid_layout.addWidget(lbl_producto, 0, 0)
         
         lbl_cantidad = QLabel("Cantidad")
-        lbl_cantidad.setStyleSheet(label_estilo)
+        lbl_cantidad.setStyleSheet(LABEL_STYLE)
         grid_layout.addWidget(lbl_cantidad, 0, 1)
         
         lbl_descripcion = QLabel("Descripción")
-        lbl_descripcion.setStyleSheet(label_estilo)
+        lbl_descripcion.setStyleSheet(LABEL_STYLE)
         grid_layout.addWidget(lbl_descripcion, 0, 2)
         
         lbl_precio = QLabel("Precio Unitario")
-        lbl_precio.setStyleSheet(label_estilo)
+        lbl_precio.setStyleSheet(LABEL_STYLE)
         grid_layout.addWidget(lbl_precio, 0, 3)
         
         lbl_importe = QLabel("Importe")
-        lbl_importe.setStyleSheet(label_estilo)
+        lbl_importe.setStyleSheet(LABEL_STYLE)
         grid_layout.addWidget(lbl_importe, 0, 4)
         
         # ---- Fila 2: Campos ----
         self.cmb_producto = QComboBox()
         self.cmb_producto.addItems(["Seleccione...", "Producto", "Servicio"])
-        self.cmb_producto.setStyleSheet(input_estilo)
+        self.cmb_producto.setStyleSheet(INPUT_STYLE)
         grid_layout.addWidget(self.cmb_producto, 1, 0)
         
         self.txt_cantidad = QLineEdit()
-        self.txt_cantidad.setStyleSheet(input_estilo)
+        self.txt_cantidad.setStyleSheet(INPUT_STYLE)
         self.txt_cantidad.setPlaceholderText("Cantidad")
-        # Validador para permitir solo números
         self.txt_cantidad.setValidator(QDoubleValidator())
         grid_layout.addWidget(self.txt_cantidad, 1, 1)
         
         self.txt_descripcion = QLineEdit()
-        self.txt_descripcion.setStyleSheet(input_estilo)
+        self.txt_descripcion.setStyleSheet(INPUT_STYLE)
         self.txt_descripcion.setPlaceholderText("Ingrese descripción")
         grid_layout.addWidget(self.txt_descripcion, 1, 2)
         
         self.txt_precio = QLineEdit()
-        self.txt_precio.setStyleSheet(input_estilo)
+        self.txt_precio.setStyleSheet(INPUT_STYLE)
         self.txt_precio.setPlaceholderText("$0.00")
-        # Validador para permitir solo números con decimales
         self.txt_precio.setValidator(QDoubleValidator(0.00, 9999999.99, 2))
         grid_layout.addWidget(self.txt_precio, 1, 3)
         
@@ -210,16 +142,12 @@ class NotasWindow(QDialog):
         self.txt_importe.setRange(0, 9999999.99)
         self.txt_importe.setDecimals(2)
         self.txt_importe.setPrefix("$ ")
-        self.txt_importe.setStyleSheet(input_estilo)
+        self.txt_importe.setStyleSheet(INPUT_STYLE)
         grid_layout.addWidget(self.txt_importe, 1, 4)
         
         # Botón para agregar a la tabla
-        estilo_boton = BUTTON_STYLE_2.replace("QToolButton", "QPushButton")
-        # Reducir tamaño de fuente para el botón
-        estilo_boton = estilo_boton.replace("font-size: 20px", "font-size: 14px")
-        
         self.btn_agregar = QPushButton("Agregar")
-        self.btn_agregar.setStyleSheet(estilo_boton)
+        self.btn_agregar.setStyleSheet(FORM_BUTTON_STYLE)
         self.btn_agregar.setCursor(Qt.PointingHandCursor)
         grid_layout.addWidget(self.btn_agregar, 1, 5)
         
@@ -241,32 +169,13 @@ class NotasWindow(QDialog):
         self.tabla_items.horizontalHeader().setVisible(True)
         self.tabla_items.verticalHeader().setVisible(False)
         
-        # Estilo para la tabla
-        self.tabla_items.setStyleSheet("""
-            QTableView {
-                background-color: white;
-                border: 1px solid #DDDDDD;
-                gridline-color: #DDDDDD;
-                border-radius: 5px;
-            }
-            QHeaderView::section {
-                background-color: #00788E;
-                color: white;
-                padding: 10px;
-                border: 1px solid #005D6E;
-                font-weight: bold;
-                font-size: 14px;
-                min-height: 30px;
-            }
-            QTableView::item:selected {
-                background-color: #BBDEFB;
-            }
-        """)
+        # Aplicar estilo para la tabla
+        self.tabla_items.setStyleSheet(TABLE_STYLE)
         
         # Configurar ancho de columnas
         header = self.tabla_items.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Cantidad
-        header.setSectionResizeMode(1, QHeaderView.Stretch)  # Descripción se expande
+        header.setSectionResizeMode(1, QHeaderView.Stretch)           # Descripción se expande
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Precio Unitario
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Importe
         
@@ -377,25 +286,37 @@ class NotasWindow(QDialog):
         # Limpiar el formulario para un nuevo ingreso
         self.limpiar_formulario()
     
+    def mostrar_advertencia(self, mensaje):
+        msg_box = QMessageBox(QMessageBox.Warning, "Advertencia", mensaje, QMessageBox.Ok, self)
+        #msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
+        
+        # También se puede personalizar cada botón individualmente
+        ok_button = msg_box.button(QMessageBox.Ok)
+        if ok_button:
+            ok_button.setText("OK")
+            ok_button.setCursor(Qt.PointingHandCursor)
+    
+        msg_box.exec_()
+
     def validar_datos(self):
         """Valida que los datos del formulario sean correctos"""
         tipo = self.cmb_producto.currentText()
         
         if tipo == "Seleccione...":
-            QMessageBox.warning(self, "Advertencia", "Seleccione el tipo de ítem (Producto o Servicio).")
+            self.mostrar_advertencia("Seleccione el tipo de ítem (Producto o Servicio).")
             return False
             
         if tipo == "Producto" and (not self.txt_cantidad.text() or self.txt_cantidad.text() == "0"):
-            QMessageBox.warning(self, "Advertencia", "Ingrese una cantidad válida.")
+            self.mostrar_advertencia("Ingrese una cantidad válida.")
             return False
             
         if not self.txt_descripcion.text():
-            QMessageBox.warning(self, "Advertencia", "Ingrese una descripción.")
+            self.mostrar_advertencia("Ingrese una descripción.")
             return False
             
         precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
         if not precio_texto or float(precio_texto) <= 0:
-            QMessageBox.warning(self, "Advertencia", "Ingrese un precio válido.")
+            self.mostrar_advertencia("Ingrese un precio válido.")
             return False
             
         return True
