@@ -179,12 +179,20 @@ class NotasWindow(QDialog):
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Precio Unitario
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Importe
         
+        # Fijar altura del encabezado
+        header.setFixedHeight(40)
+        
+        # Fijar altura de cada fila a 30px
+        self.tabla_items.verticalHeader().setDefaultSectionSize(30)
+        
         # Configurar comportamiento de selección
         self.tabla_items.setSelectionBehavior(QTableView.SelectRows)
         self.tabla_items.setSelectionMode(QTableView.SingleSelection)
         
-        # Establecer altura mínima y agregar al layout
-        self.tabla_items.setMinimumHeight(200)
+        # Establecer altura para mostrar 20 filas (20 filas * 30px + 40px para el encabezado)
+        self.tabla_items.setMinimumHeight(10 * 30 + 40)
+        
+        # Agregar al layout
         parent_layout.addWidget(self.tabla_items)
     
     def conectar_senales(self):
