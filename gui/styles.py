@@ -21,6 +21,16 @@ WINDOW_GRADIENT = f"""
     }}
 """
 
+# Agregado nuevo estilo para QMainWindow
+MAIN_WINDOW_GRADIENT = f"""
+    QMainWindow {{
+        background: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 {main_color}, stop: 1 {secondary_color}
+        );
+    }}
+"""
+
 # Gradiente para ventanas secundarias
 SECONDARY_WINDOW_GRADIENT = f"""
     QDialog {{
@@ -51,7 +61,7 @@ BUTTON_STYLE = f"""
         background-color: {secondary_color};
     }}
     QPushButton:pressed {{
-        background-color: #005D6E;
+        background-color: {third_color};
     }}
 """
 
@@ -76,13 +86,13 @@ BUTTON_STYLE_2 = f"""
 # GroupBox para formularios
 GROUP_BOX_STYLE = f"""
     QGroupBox {{
-        border: 2px solid rgba(255, 255, 255, 100);
+        border: 2px solid {main_color};
         border-radius: 8px;
         margin-top: 5px;
         padding-top: 5px;
         background: qlineargradient(
             x1: 0, y1: 0, x2: 1, y2: 1,
-            stop: 0 rgba(44, 213, 196, 150), stop: 1 rgba(0, 120, 142, 150)
+            stop: 0 {secondary_color}, stop: 1 {main_color}
         );
     }}
 """
@@ -103,9 +113,9 @@ LABEL_STYLE = """
 INPUT_STYLE = f"""
     QLineEdit, QComboBox, QDoubleSpinBox {{
         padding: 8px;
-        border: 2px solid rgba(255, 255, 255, 150);
+        border: 2px solid {third_color};
         border-radius: 6px;
-        background-color: rgba(255, 255, 255, 200);
+        background-color: {third_color};
         min-height: 25px;
         font-size: 16px;
         margin-top: 0px;
@@ -141,21 +151,26 @@ INPUT_STYLE = f"""
 TABLE_STYLE = f"""
     QTableView {{
         background-color: white;
-        border: 1px solid #DDDDDD;
-        gridline-color: #DDDDDD;
-        border-radius: 5px;
+        border: 1px solid {main_color};
+        gridline-color: {main_color};
     }}
     QHeaderView::section {{
-        background-color: {main_color};
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 1, y2: 1,
+            stop: 0 {secondary_color}, stop: 1 {main_color}
+        );
         color: white;
         padding: 10px;
-        border: 1px solid #005D6E;
+        border: qlineargradient(
+            x1: 0, y1: 0, x2: 1, y2: 1,
+            stop: 0 {main_color}, stop: 1 {secondary_color}
+        );
         font-weight: bold;
         font-size: 14px;
         min-height: 30px;
     }}
     QTableView::item:selected {{
-        background-color: #BBDEFB;
+        background-color: {third_color};
     }}
 """
 

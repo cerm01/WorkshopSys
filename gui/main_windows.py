@@ -13,7 +13,7 @@ from configuracion_windows import ConfiguracionWindow
 from utils import recolor_icon
 
 # Importar los estilos desde styles.py
-from styles import WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
+from styles import MAIN_WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
 
 class MainWindow(QMainWindow):
     # Definición de las ventanas y sus configuraciones como constante de clase
@@ -86,7 +86,8 @@ class MainWindow(QMainWindow):
         self.showMaximized()  # Mostrar maximizada
 
         # Fondo degradado - Usamos el estilo importado
-        self.setStyleSheet(WINDOW_GRADIENT)
+        # Aplicamos el estilo específico para QMainWindow
+        self.setStyleSheet(MAIN_WINDOW_GRADIENT)
         
         # Inicializar diccionario para las instancias de ventanas
         self.window_instances = {key: None for key in self.WINDOW_CONFIG.keys()}
