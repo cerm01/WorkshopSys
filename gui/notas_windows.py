@@ -3,15 +3,18 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, 
     QPushButton, QSizePolicy, QApplication,
     QLabel, QLineEdit, QComboBox, QGridLayout, QGroupBox,
-    QDoubleSpinBox, QMessageBox, QTableView, QHeaderView
+    QDoubleSpinBox, QMessageBox, QTableView, QHeaderView,
+    QMenu, QAction
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem
+from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QIcon
 # Import styles
 from styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2,
     GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )
+
+
 
 class NotasWindow(QDialog):
     def __init__(self, parent=None):
@@ -26,6 +29,9 @@ class NotasWindow(QDialog):
 
         # Aplicar estilos
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
+
+        # Variable para seguimiento de edición
+        self.fila_en_edicion = -1
 
         # Crear la interfaz
         self.setup_ui()
@@ -168,6 +174,9 @@ class NotasWindow(QDialog):
         self.tabla_items.setModel(self.tabla_model)
         self.tabla_items.horizontalHeader().setVisible(True)
         self.tabla_items.verticalHeader().setVisible(False)
+
+        # Bloquear edición de celdas
+        self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
         
         # Aplicar estilo para la tabla
         self.tabla_items.setStyleSheet(TABLE_STYLE)
@@ -189,7 +198,11 @@ class NotasWindow(QDialog):
         self.tabla_items.setSelectionBehavior(QTableView.SelectRows)
         self.tabla_items.setSelectionMode(QTableView.SingleSelection)
         
-        # Establecer altura para mostrar 20 filas (20 filas * 30px + 40px para el encabezado)
+        # Habilitar menú contextual
+        self.tabla_items.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tabla_items.customContextMenuRequested.connect(self.mostrar_menu_contextual)
+        
+        # Establecer altura para mostrar 10 filas (10 filas * 30px + 40px para el encabezado)
         self.tabla_items.setMinimumHeight(10 * 30 + 40)
         
         # Agregar al layout
@@ -206,6 +219,196 @@ class NotasWindow(QDialog):
         
         # Conectar botón agregar
         self.btn_agregar.clicked.connect(self.agregar_a_tabla)
+        
+        # Conectar doble clic en tabla para editar
+        self.tabla_items.doubleClicked.connect(self.cargar_item_para_editar)
+    
+    def mostrar_menu_contextual(self, position):
+        """Muestra un menú contextual al hacer clic derecho en una fila de la tabla"""
+        # Obtener el índice del elemento seleccionado
+        indexes = self.tabla_items.selectedIndexes()
+        if not indexes:
+            return
+            
+        # Obtener la fila seleccionada
+        fila = indexes[0].row()
+        
+        # Crear menú contextual
+        menu = QMenu(self)
+        
+        # Determinar restricciones
+        es_primera_fila = (fila == 0)
+        es_ultima_fila = (fila == self.tabla_model.rowCount() - 1)
+        es_servicio = self.tabla_model.index(fila, 0).data() == "-"
+        
+        # Contar servicios para determinar límites
+        servicios_count = 0
+        for i in range(self.tabla_model.rowCount()):
+            if self.tabla_model.index(i, 0).data() == "-":
+                servicios_count += 1
+                
+        # Restricciones adicionales basadas en tipos de ítem
+        no_puede_subir_producto = not es_servicio and fila == servicios_count and fila > 0
+        no_puede_bajar_servicio = es_servicio and fila == servicios_count - 1 and fila < self.tabla_model.rowCount() - 1
+        
+        # Acción para mover arriba
+        action_subir = QAction("Mover Arriba", self)
+        action_subir.setEnabled(not es_primera_fila and not no_puede_subir_producto)
+        action_subir.triggered.connect(lambda: self.mover_fila_arriba(fila))
+        menu.addAction(action_subir)
+        
+        # Acción para mover abajo
+        action_bajar = QAction("Mover Abajo", self)
+        action_bajar.setEnabled(not es_ultima_fila and not no_puede_bajar_servicio)
+        action_bajar.triggered.connect(lambda: self.mover_fila_abajo(fila))
+        menu.addAction(action_bajar)
+        
+        # Separador
+        menu.addSeparator()
+        
+        # Acción para eliminar
+        action_eliminar = QAction("Eliminar", self)
+        action_eliminar.triggered.connect(lambda: self.eliminar_fila(fila))
+        menu.addAction(action_eliminar)
+        
+        # Mostrar el menú
+        menu.exec_(self.tabla_items.viewport().mapToGlobal(position))
+    
+    def mover_fila_arriba(self, fila):
+        """Mueve una fila hacia arriba"""
+        if fila <= 0:
+            return  # No se puede mover más arriba
+        
+        # Verificar restricciones de servicios y productos
+        es_servicio = self.tabla_model.index(fila, 0).data() == "-"
+        es_servicio_arriba = self.tabla_model.index(fila-1, 0).data() == "-"
+        
+        # Contar servicios para determinar límites
+        servicios_count = 0
+        for i in range(self.tabla_model.rowCount()):
+            if self.tabla_model.index(i, 0).data() == "-":
+                servicios_count += 1
+        
+        # Restricción: un producto no puede moverse a la sección de servicios
+        if not es_servicio and es_servicio_arriba and fila == servicios_count:
+            self.mostrar_advertencia("No se puede mover un producto a la sección de servicios.")
+            return
+        
+        # Guardar datos de la fila a mover
+        datos_fila = []
+        for col in range(self.tabla_model.columnCount() - 1):  # Excluimos la columna de botones
+            datos_fila.append(self.tabla_model.index(fila, col).data())
+        
+        # Guardar alineaciones
+        alineaciones = []
+        for col in range(self.tabla_model.columnCount() - 1):
+            item = self.tabla_model.item(fila, col)
+            if item:
+                alineaciones.append(item.textAlignment())
+            else:
+                alineaciones.append(Qt.AlignLeft | Qt.AlignVCenter)
+        
+        # Eliminar la fila original
+        self.tabla_model.removeRow(fila)
+        
+        # Insertar en nueva posición
+        self.tabla_model.insertRow(fila - 1)
+        
+        # Copiar datos a nueva fila
+        for col in range(len(datos_fila)):
+            item = QStandardItem(str(datos_fila[col]))
+            item.setTextAlignment(alineaciones[col])
+            self.tabla_model.setItem(fila - 1, col, item)
+        
+        # Añadir celda vacía para botones
+        self.tabla_model.setItem(fila - 1, len(datos_fila), QStandardItem(""))
+        
+        # Seleccionar la fila movida
+        self.tabla_items.selectRow(fila - 1)
+    
+    def mover_fila_abajo(self, fila):
+        """Mueve una fila hacia abajo"""
+        if fila >= self.tabla_model.rowCount() - 1:
+            return  # No se puede mover más abajo
+        
+        # Verificar restricciones de servicios y productos
+        es_servicio = self.tabla_model.index(fila, 0).data() == "-"
+        es_servicio_abajo = self.tabla_model.index(fila+1, 0).data() == "-"
+        
+        # Contar servicios para determinar límites
+        servicios_count = 0
+        for i in range(self.tabla_model.rowCount()):
+            if self.tabla_model.index(i, 0).data() == "-":
+                servicios_count += 1
+        
+        # Restricción: un servicio no puede moverse a la sección de productos
+        if es_servicio and not es_servicio_abajo and fila == servicios_count - 1:
+            self.mostrar_advertencia("No se puede mover un servicio a la sección de productos.")
+            return
+        
+        # Guardar datos de la fila a mover
+        datos_fila = []
+        for col in range(self.tabla_model.columnCount() - 1):  # Excluimos la columna de botones
+            datos_fila.append(self.tabla_model.index(fila, col).data())
+        
+        # Guardar alineaciones
+        alineaciones = []
+        for col in range(self.tabla_model.columnCount() - 1):
+            item = self.tabla_model.item(fila, col)
+            if item:
+                alineaciones.append(item.textAlignment())
+            else:
+                alineaciones.append(Qt.AlignLeft | Qt.AlignVCenter)
+        
+        # Eliminar la fila original
+        self.tabla_model.removeRow(fila)
+        
+        # Insertar en nueva posición
+        self.tabla_model.insertRow(fila + 1)
+        
+        # Copiar datos a nueva fila
+        for col in range(len(datos_fila)):
+            item = QStandardItem(str(datos_fila[col]))
+            item.setTextAlignment(alineaciones[col])
+            self.tabla_model.setItem(fila + 1, col, item)
+        
+        # Añadir celda vacía para botones
+        self.tabla_model.setItem(fila + 1, len(datos_fila), QStandardItem(""))
+        
+        # Seleccionar la fila movida
+        self.tabla_items.selectRow(fila + 1)
+    
+    def eliminar_fila(self, fila):
+        """Elimina una fila de la tabla"""
+        # Confirmar eliminación
+        msg_box = QMessageBox(QMessageBox.Question, 
+                            "Confirmar eliminación", 
+                            "¿Está seguro de eliminar este elemento?", 
+                            QMessageBox.Yes | QMessageBox.No, 
+                            self)
+        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
+        
+        yes_button = msg_box.button(QMessageBox.Yes)
+        no_button = msg_box.button(QMessageBox.No)
+        
+        if yes_button:
+            yes_button.setText("Sí")
+            yes_button.setCursor(Qt.PointingHandCursor)
+        
+        if no_button:
+            no_button.setText("No")
+            no_button.setCursor(Qt.PointingHandCursor)
+        
+        result = msg_box.exec_()
+        
+        if result == QMessageBox.Yes:
+            self.tabla_model.removeRow(fila)
+            
+            # Si la fila estaba en edición, limpiar el formulario
+            if fila == self.fila_en_edicion:
+                self.limpiar_formulario()
+    
+
     
     def manejar_cambio_tipo(self):
         """Maneja el cambio en el combo de producto/servicio"""
@@ -251,14 +454,10 @@ class NotasWindow(QDialog):
         if not self.validar_datos():
             return
             
-        # Obtener los datos
-        if self.cmb_producto.currentText() == "Servicio":
-            cantidad = "-"  # Para mostrar
-            cantidad_calculo = 1  # Para el cálculo
-        else:
-            cantidad = self.txt_cantidad.text()
-            cantidad_calculo = float(cantidad)
-            
+        # Determinar tipo (producto o servicio)
+        tipo = self.cmb_producto.currentText()
+        
+        # Obtener los datos comunes
         descripcion = self.txt_descripcion.text()
         
         # Formatear precio unitario
@@ -266,6 +465,14 @@ class NotasWindow(QDialog):
         precio_texto = precio_texto.replace("$", "").replace(",", "").strip()
         precio = float(precio_texto)
         precio_formateado = f"${precio:.2f}"
+        
+        # Procesar según tipo
+        if tipo == "Servicio":
+            cantidad = "-"
+            cantidad_calculo = 1
+        else:  # Producto
+            cantidad = self.txt_cantidad.text()
+            cantidad_calculo = float(cantidad)
         
         # Calcular importe
         importe = cantidad_calculo * precio
@@ -284,8 +491,25 @@ class NotasWindow(QDialog):
         item_importe = QStandardItem(importe_formateado)
         item_importe.setTextAlignment(Qt.AlignCenter)
         
-        # Añadir fila al modelo
-        fila = self.tabla_model.rowCount()
+        # Añadir en la sección correspondiente de la tabla
+        fila = None
+        
+        if tipo == "Servicio":
+            # Buscar la última fila de servicios o añadir al inicio
+            servicios_count = 0
+            for i in range(self.tabla_model.rowCount()):
+                if self.tabla_model.index(i, 0).data() == "-":
+                    servicios_count += 1
+            
+            # Insertar después del último servicio
+            fila = servicios_count
+            self.tabla_model.insertRow(fila)
+        else:  # Producto
+            # Añadir después de la última fila (al final)
+            fila = self.tabla_model.rowCount()
+            self.tabla_model.insertRow(fila)
+        
+        # Establecer los datos en la fila
         self.tabla_model.setItem(fila, 0, item_cantidad)
         self.tabla_model.setItem(fila, 1, item_descripcion)
         self.tabla_model.setItem(fila, 2, item_precio)
@@ -293,7 +517,104 @@ class NotasWindow(QDialog):
         
         # Limpiar el formulario para un nuevo ingreso
         self.limpiar_formulario()
+        
+        # Seleccionar la fila recién agregada
+        self.tabla_items.selectRow(fila)
 
+    def cargar_item_para_editar(self, index):
+        """Carga los datos de la fila seleccionada en los campos de edición"""
+        # Ignorar si se hace clic en la columna de botones
+        if index.column() == 4:
+            return
+            
+        fila = index.row()
+        
+        # Obtener valores de la fila seleccionada
+        cantidad = self.tabla_model.index(fila, 0).data()
+        descripcion = self.tabla_model.index(fila, 1).data()
+        precio = self.tabla_model.index(fila, 2).data()
+        
+        # Limpiar formato de precio (quitar $ y ,)
+        precio = precio.replace("$", "").replace(",", "").strip()
+        
+        # Determinar si es producto o servicio
+        if cantidad == "-":
+            self.cmb_producto.setCurrentText("Servicio")
+            self.txt_cantidad.setText("-")
+            self.txt_cantidad.setReadOnly(True)
+        else:
+            self.cmb_producto.setCurrentText("Producto")
+            self.txt_cantidad.setText(cantidad)
+            self.txt_cantidad.setReadOnly(False)
+        
+        self.txt_descripcion.setText(descripcion)
+        self.txt_precio.setText(precio)
+        
+        # Guardar el índice de la fila para poder eliminarla después
+        self.fila_en_edicion = fila
+        
+        # Opcional: Cambiar el botón "Agregar" a "Actualizar"
+        self.btn_agregar.setText("Actualizar")
+        
+        # Desconectar la señal actual y conectar una nueva para actualizar en vez de agregar
+        try:
+            self.btn_agregar.clicked.disconnect()
+        except TypeError:
+            pass  # Si no hay conexión, ignorar el error
+        
+        self.btn_agregar.clicked.connect(self.actualizar_item)
+
+    def actualizar_item(self):
+        """Actualiza la fila seleccionada con los nuevos datos"""
+        # Verificar datos obligatorios
+        if not self.validar_datos():
+            return
+        
+        # Obtener tipo y datos del formulario
+        tipo_nuevo = self.cmb_producto.currentText()
+        tipo_anterior = "Servicio" if self.tabla_model.index(self.fila_en_edicion, 0).data() == "-" else "Producto"
+        
+        # Si cambió el tipo, eliminar la fila actual y agregar en la sección correcta
+        if tipo_nuevo != tipo_anterior:
+            self.tabla_model.removeRow(self.fila_en_edicion)
+            self.agregar_a_tabla()
+            return
+        
+        # Si no cambió el tipo, actualizar en la misma posición
+        if tipo_nuevo == "Servicio":
+            cantidad = "-"
+            cantidad_calculo = 1
+        else:
+            cantidad = self.txt_cantidad.text()
+            cantidad_calculo = float(cantidad)
+        
+        descripcion = self.txt_descripcion.text()
+        
+        # Formatear precio unitario
+        precio_texto = self.txt_precio.text()
+        precio_texto = precio_texto.replace("$", "").replace(",", "").strip()
+        precio = float(precio_texto)
+        precio_formateado = f"${precio:.2f}"
+        
+        # Calcular importe
+        importe = cantidad_calculo * precio
+        importe_formateado = f"${importe:.2f}"
+        
+        # Actualizar fila en el modelo
+        self.tabla_model.setItem(self.fila_en_edicion, 0, QStandardItem(cantidad))
+        self.tabla_model.setItem(self.fila_en_edicion, 1, QStandardItem(descripcion))
+        self.tabla_model.setItem(self.fila_en_edicion, 2, QStandardItem(precio_formateado))
+        self.tabla_model.setItem(self.fila_en_edicion, 3, QStandardItem(importe_formateado))
+        
+        # Establecer alineación
+        self.tabla_model.item(self.fila_en_edicion, 0).setTextAlignment(Qt.AlignCenter)
+        self.tabla_model.item(self.fila_en_edicion, 1).setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.tabla_model.item(self.fila_en_edicion, 2).setTextAlignment(Qt.AlignCenter)
+        self.tabla_model.item(self.fila_en_edicion, 3).setTextAlignment(Qt.AlignCenter)
+        
+        # Limpiar formulario y restaurar botón
+        self.limpiar_formulario()
+        
     def mostrar_advertencia(self, mensaje):
         msg_box = QMessageBox(QMessageBox.Warning, "Advertencia", mensaje, QMessageBox.Ok, self)
         msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
@@ -337,6 +658,19 @@ class NotasWindow(QDialog):
         self.txt_precio.setText("")
         self.txt_importe.setValue(0)
         self.cmb_producto.setFocus()
+        
+        # Asegurar que el botón tenga el texto correcto
+        self.btn_agregar.setText("Agregar")
+        
+        # Asegurar que esté conectado a la función correcta
+        try:
+            self.btn_agregar.clicked.disconnect()
+        except TypeError:
+            pass
+        self.btn_agregar.clicked.connect(self.agregar_a_tabla)
+        
+        # Resetear fila en edición
+        self.fila_en_edicion = -1
     
     def closeEvent(self, event):
         """Evento que se dispara al cerrar la ventana"""
