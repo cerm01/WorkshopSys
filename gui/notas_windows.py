@@ -296,35 +296,46 @@ class NotasWindow(QDialog):
         
         # Guardar datos de la fila a mover
         datos_fila = []
-        for col in range(self.tabla_model.columnCount() - 1):  # Excluimos la columna de botones
+        for col in range(self.tabla_model.columnCount()):
             datos_fila.append(self.tabla_model.index(fila, col).data())
         
         # Guardar alineaciones
         alineaciones = []
-        for col in range(self.tabla_model.columnCount() - 1):
+        for col in range(self.tabla_model.columnCount()):
             item = self.tabla_model.item(fila, col)
             if item:
                 alineaciones.append(item.textAlignment())
             else:
                 alineaciones.append(Qt.AlignLeft | Qt.AlignVCenter)
         
-        # Eliminar la fila original
-        self.tabla_model.removeRow(fila)
+        # Guardar datos de la fila destino
+        datos_fila_destino = []
+        for col in range(self.tabla_model.columnCount()):
+            datos_fila_destino.append(self.tabla_model.index(fila-1, col).data())
         
-        # Insertar en nueva posición
-        self.tabla_model.insertRow(fila - 1)
+        # Guardar alineaciones de fila destino
+        alineaciones_destino = []
+        for col in range(self.tabla_model.columnCount()):
+            item = self.tabla_model.item(fila-1, col)
+            if item:
+                alineaciones_destino.append(item.textAlignment())
+            else:
+                alineaciones_destino.append(Qt.AlignLeft | Qt.AlignVCenter)
         
-        # Copiar datos a nueva fila
-        for col in range(len(datos_fila)):
-            item = QStandardItem(str(datos_fila[col]))
-            item.setTextAlignment(alineaciones[col])
-            self.tabla_model.setItem(fila - 1, col, item)
-        
-        # Añadir celda vacía para botones
-        self.tabla_model.setItem(fila - 1, len(datos_fila), QStandardItem(""))
+        # Intercambiar filas directamente
+        for col in range(self.tabla_model.columnCount()):
+            # Actualizar fila original con datos del destino
+            item1 = QStandardItem(datos_fila_destino[col])
+            item1.setTextAlignment(alineaciones_destino[col])
+            self.tabla_model.setItem(fila, col, item1)
+            
+            # Actualizar fila destino con datos originales
+            item2 = QStandardItem(datos_fila[col])
+            item2.setTextAlignment(alineaciones[col])
+            self.tabla_model.setItem(fila-1, col, item2)
         
         # Seleccionar la fila movida
-        self.tabla_items.selectRow(fila - 1)
+        self.tabla_items.selectRow(fila-1)
     
     def mover_fila_abajo(self, fila):
         """Mueve una fila hacia abajo"""
@@ -348,35 +359,46 @@ class NotasWindow(QDialog):
         
         # Guardar datos de la fila a mover
         datos_fila = []
-        for col in range(self.tabla_model.columnCount() - 1):  # Excluimos la columna de botones
+        for col in range(self.tabla_model.columnCount()):
             datos_fila.append(self.tabla_model.index(fila, col).data())
         
         # Guardar alineaciones
         alineaciones = []
-        for col in range(self.tabla_model.columnCount() - 1):
+        for col in range(self.tabla_model.columnCount()):
             item = self.tabla_model.item(fila, col)
             if item:
                 alineaciones.append(item.textAlignment())
             else:
                 alineaciones.append(Qt.AlignLeft | Qt.AlignVCenter)
         
-        # Eliminar la fila original
-        self.tabla_model.removeRow(fila)
+        # Guardar datos de la fila destino
+        datos_fila_destino = []
+        for col in range(self.tabla_model.columnCount()):
+            datos_fila_destino.append(self.tabla_model.index(fila+1, col).data())
         
-        # Insertar en nueva posición
-        self.tabla_model.insertRow(fila + 1)
+        # Guardar alineaciones de fila destino
+        alineaciones_destino = []
+        for col in range(self.tabla_model.columnCount()):
+            item = self.tabla_model.item(fila+1, col)
+            if item:
+                alineaciones_destino.append(item.textAlignment())
+            else:
+                alineaciones_destino.append(Qt.AlignLeft | Qt.AlignVCenter)
         
-        # Copiar datos a nueva fila
-        for col in range(len(datos_fila)):
-            item = QStandardItem(str(datos_fila[col]))
-            item.setTextAlignment(alineaciones[col])
-            self.tabla_model.setItem(fila + 1, col, item)
-        
-        # Añadir celda vacía para botones
-        self.tabla_model.setItem(fila + 1, len(datos_fila), QStandardItem(""))
+        # Intercambiar filas directamente
+        for col in range(self.tabla_model.columnCount()):
+            # Actualizar fila original con datos del destino
+            item1 = QStandardItem(str(datos_fila_destino[col]))
+            item1.setTextAlignment(alineaciones_destino[col])
+            self.tabla_model.setItem(fila, col, item1)
+            
+            # Actualizar fila destino con datos originales
+            item2 = QStandardItem(str(datos_fila[col]))
+            item2.setTextAlignment(alineaciones[col])
+            self.tabla_model.setItem(fila+1, col, item2)
         
         # Seleccionar la fila movida
-        self.tabla_items.selectRow(fila + 1)
+        self.tabla_items.selectRow(fila+1)
     
     def eliminar_fila(self, fila):
         """Elimina una fila de la tabla"""

@@ -170,7 +170,8 @@ TABLE_STYLE = f"""
         min-height: 30px;
     }}
     QTableView::item:selected {{
-        background-color: {third_color};
+        background-color: white;
+        color: black;
     }}
 """
 
