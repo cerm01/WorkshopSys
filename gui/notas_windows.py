@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QSizePolicy, QApplication,
     QLabel, QLineEdit, QComboBox, QGridLayout, QGroupBox,
     QDoubleSpinBox, QMessageBox, QTableView, QHeaderView,
-    QMenu, QAction
+    QMenu, QAction, QFrame, QWidget
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QIcon
@@ -33,6 +33,9 @@ class NotasWindow(QDialog):
         # Variable para seguimiento de edición
         self.fila_en_edicion = -1
 
+        # Diccionario para almacenar el IVA de cada fila
+        self.iva_por_fila = {}        
+
         # Crear la interfaz
         self.setup_ui()
     
@@ -47,6 +50,9 @@ class NotasWindow(QDialog):
         
         # Crear tabla para mostrar los items agregados
         self.crear_tabla_items(main_layout)
+
+        # Crear panel de totales
+        self.crear_panel_totales(main_layout)
         
         # Añadir espacio flexible para empujar los botones hacia abajo
         main_layout.addStretch(1)
@@ -182,7 +188,7 @@ class NotasWindow(QDialog):
         """Crear tabla para mostrar los items agregados usando QTableView"""
         # Crear modelo de datos
         self.tabla_model = QStandardItemModel()
-        self.tabla_model.setHorizontalHeaderLabels(["Cantidad", "Descripción", "Precio Unitario", "Importe"])
+        self.tabla_model.setHorizontalHeaderLabels(["Cantidad", "Descripción", "Precio Unitario", "Impuestos", "Importe"])
         
         # Crear vista de tabla
         self.tabla_items = QTableView()
@@ -201,7 +207,8 @@ class NotasWindow(QDialog):
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Cantidad
         header.setSectionResizeMode(1, QHeaderView.Stretch)           # Descripción se expande
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Precio Unitario
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Importe
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Importe
         
         # Fijar altura del encabezado
         header.setFixedHeight(40)
@@ -351,6 +358,14 @@ class NotasWindow(QDialog):
         
         # Seleccionar la fila movida
         self.tabla_items.selectRow(fila-1)
+
+        # Intercambiar los valores de IVA
+        temp_iva = self.iva_por_fila.get(fila, 16.0)  # Valor por defecto si no existe
+        self.iva_por_fila[fila] = self.iva_por_fila.get(fila-1, 16.0)
+        self.iva_por_fila[fila-1] = temp_iva
+
+        # Recalcular totales
+        self.calcular_totales()
     
     def mover_fila_abajo(self, fila):
         """Mueve una fila hacia abajo"""
@@ -414,6 +429,14 @@ class NotasWindow(QDialog):
         
         # Seleccionar la fila movida
         self.tabla_items.selectRow(fila+1)
+
+        # Intercambiar los valores de IVA
+        temp_iva = self.iva_por_fila.get(fila, 16.0)  # Valor por defecto si no existe
+        self.iva_por_fila[fila] = self.iva_por_fila.get(fila+1, 16.0)
+        self.iva_por_fila[fila+1] = temp_iva
+        
+        # Recalcular totales
+        self.calcular_totales()
     
     def eliminar_fila(self, fila):
         """Elimina una fila de la tabla"""
@@ -440,6 +463,22 @@ class NotasWindow(QDialog):
         
         if result == QMessageBox.Yes:
             self.tabla_model.removeRow(fila)
+
+            # Eliminar el IVA y reorganizar los índices
+            if fila in self.iva_por_fila:
+                del self.iva_por_fila[fila]
+
+            # Reorganizar los índices del diccionario
+            nuevo_iva = {}
+            for key in self.iva_por_fila:
+                if key > fila:
+                    nuevo_iva[key - 1] = self.iva_por_fila[key]
+                else:
+                    nuevo_iva[key] = self.iva_por_fila[key]
+            self.iva_por_fila = nuevo_iva
+
+            # Recalcular totales
+            self.calcular_totales()
             
             # Si la fila estaba en edición, limpiar el formulario
             if fila == self.fila_en_edicion:
@@ -484,6 +523,160 @@ class NotasWindow(QDialog):
         except ValueError:
             # Si hay un error en la conversión, mostrar 0
             self.txt_importe.setValue(0)
+
+    def calcular_totales(self):
+        """Calcula y actualiza los totales mostrados"""
+        subtotal = 0.0
+        total_impuestos = 0.0
+        
+        # Recorrer todas las filas de la tabla
+        for fila in range(self.tabla_model.rowCount()):
+            # Obtener el importe de la columna 4 (ahora es la 4 por la nueva columna IVA)
+            importe_texto = self.tabla_model.index(fila, 4).data()
+            importe = float(importe_texto.replace("$", "").replace(",", "").strip())
+            
+            # Obtener el porcentaje de IVA almacenado para esta fila
+            iva_porcentaje = self.iva_por_fila.get(fila, 16.0)
+            iva_monto = importe * (iva_porcentaje / 100)
+            
+            subtotal += importe
+            total_impuestos += iva_monto
+        
+        total = subtotal + total_impuestos
+        
+        # Actualizar las etiquetas con formato de moneda
+        self.lbl_subtotal_valor.setText(f"$ {subtotal:,.2f}")
+        self.lbl_impuestos_valor.setText(f"$ {total_impuestos:,.2f}")
+        self.lbl_total_valor.setText(f"$ {total:,.2f}")
+
+    def crear_panel_totales(self, parent_layout):
+        """Crear panel para mostrar subtotal, impuestos y total"""
+        # Crear un contenedor principal que ocupe todo el ancho
+        contenedor_principal = QWidget()
+        layout_principal = QHBoxLayout()
+        layout_principal.setContentsMargins(0, 0, 0, 0)
+        
+        # Agregar espacio a la izquierda
+        layout_principal.addStretch(6)
+        
+        # Crear un widget contenedor para el frame
+        contenedor_frame = QWidget()
+        contenedor_frame.setMaximumWidth(9999)  # Sin límite máximo
+        frame_layout = QVBoxLayout()
+        frame_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Crear el frame de totales
+        totales_frame = QFrame()
+        totales_frame.setFrameStyle(QFrame.StyledPanel)
+        totales_frame.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 0, y2: 1,
+                    stop: 0 rgba(255, 255, 255, 250),
+                    stop: 1 rgba(245, 245, 245, 250)
+                );
+                border: 1px solid rgba(0, 120, 142, 0.2);
+                border-radius: 8px;
+                padding: 12px;
+                margin-top: 10px;
+            }
+        """)
+        
+        # Layout horizontal dentro del frame para alinear contenido a la derecha
+        main_totales_layout = QHBoxLayout()
+        main_totales_layout.addStretch()  # Empuja el contenido a la derecha dentro del frame
+        
+        # ... resto del código del grid layout (sin cambios) ...
+        
+        # Layout grid para mejor alineación
+        totales_grid = QGridLayout()
+        totales_grid.setSpacing(5)
+        totales_grid.setContentsMargins(0, 0, 0, 0)
+        
+        # Estilo para las etiquetas
+        label_style = """
+            QLabel {
+                font-size: 18px;
+                color: #333333;
+                background: transparent;
+                padding: 2px;
+            }
+        """
+        
+        label_bold_style = label_style + "font-weight: bold;"
+        
+        # Crear las etiquetas y valores
+        lbl_subtotal_text = QLabel("Subtotal:")
+        lbl_subtotal_text.setStyleSheet(label_style)
+        lbl_subtotal_text.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        
+        self.lbl_subtotal_valor = QLabel("$ 0.00")
+        self.lbl_subtotal_valor.setStyleSheet(label_bold_style)
+        self.lbl_subtotal_valor.setAlignment(Qt.AlignRight)
+        
+        lbl_impuestos_text = QLabel("Impuestos:")
+        lbl_impuestos_text.setStyleSheet(label_style)
+        lbl_impuestos_text.setAlignment(Qt.AlignLeft| Qt.AlignVCenter)
+        
+        self.lbl_impuestos_valor = QLabel("$ 0.00")
+        self.lbl_impuestos_valor.setStyleSheet(label_bold_style)
+        self.lbl_impuestos_valor.setAlignment(Qt.AlignRight)
+        
+        # Línea separadora
+        linea = QFrame()
+        linea.setFrameShape(QFrame.HLine)
+        linea.setStyleSheet("background-color: rgba(0, 120, 142, 0.3); max-height: 1px;")
+        
+        lbl_total_text = QLabel("Total:")
+        lbl_total_text.setStyleSheet(label_style + "font-size: 18px; font-weight: bold;")
+        lbl_total_text.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+        
+        self.lbl_total_valor = QLabel("$ 0.00")
+        self.lbl_total_valor.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                font-weight: bold;
+                color: #00788E;
+                background: transparent;
+                padding: 2px;
+            }
+        """)
+        self.lbl_total_valor.setAlignment(Qt.AlignRight)
+        
+        # Agregar al grid layout
+        totales_grid.addWidget(lbl_subtotal_text, 0, 0)
+        totales_grid.addWidget(self.lbl_subtotal_valor, 0, 1)
+        totales_grid.addWidget(lbl_impuestos_text, 1, 0)
+        totales_grid.addWidget(self.lbl_impuestos_valor, 1, 1)
+        totales_grid.addWidget(linea, 2, 0, 1, 2)
+        totales_grid.addWidget(lbl_total_text, 3, 0)
+        totales_grid.addWidget(self.lbl_total_valor, 3, 1)
+        
+        # Establecer ancho de columnas
+        totales_grid.setColumnMinimumWidth(0, 80)
+        totales_grid.setColumnMinimumWidth(1, 120)
+        
+        # Contenedor para el grid
+        totales_container = QWidget()
+        totales_container.setLayout(totales_grid)
+        totales_container.setFixedWidth(220)
+        
+        main_totales_layout.addWidget(totales_container)
+        totales_frame.setLayout(main_totales_layout)
+        
+        # Agregar el frame al contenedor
+        frame_layout.addWidget(totales_frame)
+        contenedor_frame.setLayout(frame_layout)
+        
+        # Agregar el contenedor del frame al layout principal con proporción 1
+        layout_principal.addWidget(contenedor_frame, 1)
+        
+        # Establecer el layout al contenedor principal
+        contenedor_principal.setLayout(layout_principal)
+        
+        # Agregar el contenedor principal al layout padre
+        parent_layout.addWidget(contenedor_principal)
+        
     
     def agregar_a_tabla(self):
         """Agrega los datos del formulario a la tabla"""
@@ -514,6 +707,10 @@ class NotasWindow(QDialog):
         # Calcular importe
         importe = cantidad_calculo * precio
         importe_formateado = f"${importe:.2f}"
+
+        # Obtener el porcentaje de IVA
+        iva_porcentaje = self.txt_impuestos.value()
+        iva_texto = f"{iva_porcentaje:.1f} %"
         
         # Crear items para añadir al modelo
         item_cantidad = QStandardItem(cantidad)
@@ -524,6 +721,9 @@ class NotasWindow(QDialog):
         
         item_precio = QStandardItem(precio_formateado)
         item_precio.setTextAlignment(Qt.AlignCenter)
+        
+        item_iva = QStandardItem(iva_texto)
+        item_iva.setTextAlignment(Qt.AlignCenter)
         
         item_importe = QStandardItem(importe_formateado)
         item_importe.setTextAlignment(Qt.AlignCenter)
@@ -550,7 +750,14 @@ class NotasWindow(QDialog):
         self.tabla_model.setItem(fila, 0, item_cantidad)
         self.tabla_model.setItem(fila, 1, item_descripcion)
         self.tabla_model.setItem(fila, 2, item_precio)
-        self.tabla_model.setItem(fila, 3, item_importe)
+        self.tabla_model.setItem(fila, 3, item_iva)
+        self.tabla_model.setItem(fila, 4, item_importe)
+
+        # Almacenar el porcentaje de IVA para esta fila
+        self.iva_por_fila[fila] = self.txt_impuestos.value()
+
+        # Actualizar totales
+        self.calcular_totales()
         
         # Limpiar el formulario para un nuevo ingreso
         self.limpiar_formulario()
@@ -570,6 +777,7 @@ class NotasWindow(QDialog):
         cantidad = self.tabla_model.index(fila, 0).data()
         descripcion = self.tabla_model.index(fila, 1).data()
         precio = self.tabla_model.index(fila, 2).data()
+        iva_texto = self.tabla_model.index(fila, 3).data()
         
         # Limpiar formato de precio (quitar $ y ,)
         precio = precio.replace("$", "").replace(",", "").strip()
@@ -586,6 +794,12 @@ class NotasWindow(QDialog):
         
         self.txt_descripcion.setText(descripcion)
         self.txt_precio.setText(precio)
+
+        # Cargar el IVA almacenado para esta fila
+        if fila in self.iva_por_fila:
+            self.txt_impuestos.setValue(self.iva_por_fila[fila])
+        else:
+            self.txt_impuestos.setValue(16.0)  # Valor por defecto si no existe
         
         # Guardar el índice de la fila para poder eliminarla después
         self.fila_en_edicion = fila
@@ -633,6 +847,9 @@ class NotasWindow(QDialog):
         precio = float(precio_texto)
         precio_formateado = f"${precio:.2f}"
         
+        # Obtener el porcentaje de IVA
+        iva_texto = f"{self.txt_impuestos.value():.1f} %"
+
         # Calcular importe
         importe = cantidad_calculo * precio
         importe_formateado = f"${importe:.2f}"
@@ -641,13 +858,21 @@ class NotasWindow(QDialog):
         self.tabla_model.setItem(self.fila_en_edicion, 0, QStandardItem(cantidad))
         self.tabla_model.setItem(self.fila_en_edicion, 1, QStandardItem(descripcion))
         self.tabla_model.setItem(self.fila_en_edicion, 2, QStandardItem(precio_formateado))
-        self.tabla_model.setItem(self.fila_en_edicion, 3, QStandardItem(importe_formateado))
+        self.tabla_model.setItem(self.fila_en_edicion, 3, QStandardItem(iva_texto))
+        self.tabla_model.setItem(self.fila_en_edicion, 4, QStandardItem(importe_formateado))
+
+        # Actualizar el IVA almacenado 
+        self.iva_por_fila[self.fila_en_edicion] = self.txt_impuestos.value()
+
+        # Recalcular totales
+        self.calcular_totales()
         
         # Establecer alineación
         self.tabla_model.item(self.fila_en_edicion, 0).setTextAlignment(Qt.AlignCenter)
         self.tabla_model.item(self.fila_en_edicion, 1).setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.tabla_model.item(self.fila_en_edicion, 2).setTextAlignment(Qt.AlignCenter)
         self.tabla_model.item(self.fila_en_edicion, 3).setTextAlignment(Qt.AlignCenter)
+        self.tabla_model.item(self.fila_en_edicion, 4).setTextAlignment(Qt.AlignCenter)
         
         # Limpiar formulario y restaurar botón
         self.limpiar_formulario()
