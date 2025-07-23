@@ -90,13 +90,14 @@ class NotasWindow(QDialog):
         grid_layout.setHorizontalSpacing(15)
         grid_layout.setContentsMargins(10, 10, 10, 10)
         
-        # Definir proporciones de columnas
+        # Definir proporciones de columnas (ajustadas para incluir impuestos)
         grid_layout.setColumnStretch(0, 2)    # Producto
         grid_layout.setColumnStretch(1, 1)    # Cantidad
-        grid_layout.setColumnStretch(2, 6)    # Descripción
+        grid_layout.setColumnStretch(2, 5)    # Descripción (reducido de 6 a 5)
         grid_layout.setColumnStretch(3, 2)    # Precio
         grid_layout.setColumnStretch(4, 2)    # Importe
-        grid_layout.setColumnStretch(5, 1)    # Botón Agregar
+        grid_layout.setColumnStretch(5, 1)    # Impuestos (nuevo)
+        grid_layout.setColumnStretch(6, 1)    # Botón Agregar
         
         # ---- Fila 1: Labels ----
         lbl_producto = QLabel("Producto o Servicio")
@@ -118,6 +119,11 @@ class NotasWindow(QDialog):
         lbl_importe = QLabel("Importe")
         lbl_importe.setStyleSheet(LABEL_STYLE)
         grid_layout.addWidget(lbl_importe, 0, 4)
+        
+        # NUEVO: Label para impuestos
+        lbl_impuestos = QLabel("IVA %")
+        lbl_impuestos.setStyleSheet(LABEL_STYLE)
+        grid_layout.addWidget(lbl_impuestos, 0, 5)
         
         # ---- Fila 2: Campos ----
         self.cmb_producto = QComboBox()
@@ -151,11 +157,20 @@ class NotasWindow(QDialog):
         self.txt_importe.setStyleSheet(INPUT_STYLE)
         grid_layout.addWidget(self.txt_importe, 1, 4)
         
+        # NUEVO: Campo para impuestos
+        self.txt_impuestos = QDoubleSpinBox()
+        self.txt_impuestos.setRange(0, 100)
+        self.txt_impuestos.setDecimals(2)
+        self.txt_impuestos.setSuffix(" %")
+        self.txt_impuestos.setValue(16.00)  # IVA por defecto
+        self.txt_impuestos.setStyleSheet(INPUT_STYLE)
+        grid_layout.addWidget(self.txt_impuestos, 1, 5)
+        
         # Botón para agregar a la tabla
         self.btn_agregar = QPushButton("Agregar")
         self.btn_agregar.setStyleSheet(FORM_BUTTON_STYLE)
         self.btn_agregar.setCursor(Qt.PointingHandCursor)
-        grid_layout.addWidget(self.btn_agregar, 1, 5)
+        grid_layout.addWidget(self.btn_agregar, 1, 6)  # Cambió de columna 5 a 6
         
         # Establecer el layout del grupo
         grupo.setLayout(grid_layout)
@@ -680,6 +695,7 @@ class NotasWindow(QDialog):
         self.txt_precio.setText("")
         self.txt_importe.setValue(0)
         self.cmb_producto.setFocus()
+        self.txt_impuestos.setValue(16.00)
         
         # Asegurar que el botón tenga el texto correcto
         self.btn_agregar.setText("Agregar")
