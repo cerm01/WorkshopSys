@@ -4,16 +4,16 @@ from PyQt5.QtWidgets import (
     QPushButton, QSizePolicy, QApplication,
     QLabel, QLineEdit, QComboBox, QGridLayout, QGroupBox,
     QDoubleSpinBox, QMessageBox, QTableView, QHeaderView,
-    QMenu, QAction, QFrame, QWidget
+    QMenu, QAction, QFrame, QWidget, QDateEdit
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QIcon
 # Import styles
 from styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2,
     GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )
-
+from datetime import datetime
 
 
 class NotasWindow(QDialog):
@@ -44,6 +44,9 @@ class NotasWindow(QDialog):
         # Layout principal 
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # NUEVO: Crear grupo de datos del cliente
+        self.crear_grupo_cliente(main_layout)
         
         # Crear el contenedor para los datos de producto/servicio
         self.crear_grupo_producto_servicio(main_layout)
@@ -83,6 +86,137 @@ class NotasWindow(QDialog):
         
         # Conectar señales
         self.conectar_senales()
+
+    def crear_grupo_cliente(self, parent_layout):
+        """Crear grupo de campos para datos del cliente"""
+        # Crear GroupBox para cliente
+        grupo_cliente = QGroupBox("")
+        grupo_cliente.setStyleSheet(GROUP_BOX_STYLE)
+        
+        # Layout horizontal para los campos
+        layout = QHBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Campo Cliente
+        lbl_cliente = QLabel("Cliente")
+        lbl_cliente.setStyleSheet(LABEL_STYLE)
+        self.txt_cliente = QLineEdit()
+        self.txt_cliente.setStyleSheet(INPUT_STYLE)
+        self.txt_cliente.setPlaceholderText("Nombre del cliente")
+        
+        # Campo Fecha con QDateEdit
+        lbl_fecha = QLabel("Fecha")
+        lbl_fecha.setStyleSheet(LABEL_STYLE)
+        self.date_fecha = QDateEdit()
+        self.date_fecha.setCalendarPopup(True)  # Mostrar calendario al hacer clic
+        self.date_fecha.setDate(QDate.currentDate())  # Fecha actual por defecto
+        self.date_fecha.setDisplayFormat("dd/MM/yyyy")  # Formato de fecha
+        
+        # Aplicar estilo personalizado al QDateEdit
+        self.date_fecha.setStyleSheet("""
+            QDateEdit {
+                padding: 8px;
+                border: 2px solid #F5F5F5;
+                border-radius: 6px;
+                background-color: #F5F5F5;
+                min-height: 25px;
+                font-size: 16px;
+                margin-top: 0px;
+            }
+            
+            QDateEdit:focus {
+                border: 2px solid #2CD5C4;
+                background-color: white;
+            }
+            
+            QDateEdit::drop-down {
+                border: 0px;
+                background: transparent;
+                subcontrol-position: right center;
+                width: 30px;
+            }
+            
+            QDateEdit::down-arrow {
+                image: url(assets/icons/calendario.png);
+                width: 16px;
+                height: 16px;
+            }
+            
+            /* Estilo para el calendario popup */
+            QCalendarWidget {
+                background-color: white;
+                border: 2px solid #00788E;
+                border-radius: 8px;
+            }
+            
+            QCalendarWidget QToolButton {
+                color: white;
+                background-color: #00788E;
+                border: none;
+                border-radius: 4px;
+                margin: 2px;
+                padding: 4px;
+            }
+            
+            QCalendarWidget QToolButton:hover {
+                background-color: #2CD5C4;
+            }
+            
+            QCalendarWidget QMenu {
+                background-color: white;
+                border: 1px solid #00788E;
+            }
+            
+            QCalendarWidget QSpinBox {
+                background-color: white;
+                border: 1px solid #00788E;
+                border-radius: 4px;
+                padding: 2px;
+            }
+            
+            QCalendarWidget QAbstractItemView:enabled {
+                background-color: white;
+                color: #333333;
+                selection-background-color: #2CD5C4;
+                selection-color: white;
+            }
+            
+            QCalendarWidget QAbstractItemView:disabled {
+                color: #999999;
+            }
+            
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background-color: #00788E;
+                border-radius: 4px;
+            }
+        """)
+        
+        # Campo Referencia del vehículo/cliente
+        lbl_referencia = QLabel("Referencia")
+        lbl_referencia.setStyleSheet(LABEL_STYLE)
+        self.txt_referencia = QLineEdit()
+        self.txt_referencia.setStyleSheet(INPUT_STYLE)
+        self.txt_referencia.setPlaceholderText("Ref. vehículo/cliente")
+        
+        # Agregar widgets al layout
+        layout.addWidget(lbl_cliente)
+        layout.addWidget(self.txt_cliente, 2)  # Más espacio para cliente
+        layout.addWidget(lbl_fecha)
+        layout.addWidget(self.date_fecha, 1)
+        layout.addWidget(lbl_referencia)
+        layout.addWidget(self.txt_referencia, 1)
+        
+        grupo_cliente.setLayout(layout)
+        parent_layout.addWidget(grupo_cliente)
+
+    def obtener_datos_cliente(self):
+        """Obtiene los datos del cliente del formulario"""
+        return {
+            'cliente': self.txt_cliente.text(),
+            'fecha': self.date_fecha.date().toString("dd/MM/yyyy"),
+            'referencia': self.txt_referencia.text()
+        }
     
     def crear_grupo_producto_servicio(self, parent_layout):
         """Crear grupo de campos para producto/servicio"""
