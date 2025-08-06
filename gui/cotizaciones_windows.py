@@ -131,13 +131,15 @@ class CotizacionesWindow(QDialog):
         self.date_fecha.setDate(QDate.currentDate())
         self.date_fecha.setDisplayFormat("dd/MM/yyyy")
         
-        # Campo Vigencia (días)
-        lbl_vigencia = QLabel("Vigencia")
+        # NUEVO: Campo Vigencia con calendario (en lugar de ComboBox)
+        lbl_vigencia = QLabel("Vigencia Hasta")
         lbl_vigencia.setStyleSheet(LABEL_STYLE)
-        self.combo_vigencia = QComboBox()
-        self.combo_vigencia.setStyleSheet(INPUT_STYLE)
-        self.combo_vigencia.addItems(["15 días", "30 días", "45 días", "60 días", "90 días"])
-        self.combo_vigencia.setCurrentIndex(1)  # 30 días por defecto
+        self.date_vigencia = QDateEdit()
+        self.date_vigencia.setCalendarPopup(True)
+        # Configurar fecha de vigencia por defecto (30 días después de hoy)
+        fecha_vigencia = QDate.currentDate().addDays(30)
+        self.date_vigencia.setDate(fecha_vigencia)
+        self.date_vigencia.setDisplayFormat("dd/MM/yyyy")
         
         # Campo Proyecto/Referencia
         lbl_proyecto = QLabel("Proyecto")
@@ -146,8 +148,29 @@ class CotizacionesWindow(QDialog):
         self.txt_proyecto.setStyleSheet(INPUT_STYLE)
         self.txt_proyecto.setPlaceholderText("Nombre del proyecto")
         
-        # Aplicar estilo personalizado al QDateEdit
-        self.date_fecha.setStyleSheet("""
+        # Aplicar estilo común a ambos calendarios
+        estilo_calendario = self._obtener_estilo_calendario()
+        self.date_fecha.setStyleSheet(estilo_calendario)
+        self.date_vigencia.setStyleSheet(estilo_calendario)
+        
+        # Agregar widgets al layout
+        layout.addWidget(lbl_folio)
+        layout.addWidget(self.txt_folio, 1)
+        layout.addWidget(lbl_cliente)
+        layout.addWidget(self.txt_cliente, 2)
+        layout.addWidget(lbl_fecha)
+        layout.addWidget(self.date_fecha, 1)
+        layout.addWidget(lbl_vigencia)
+        layout.addWidget(self.date_vigencia, 1)  # Cambio aquí
+        layout.addWidget(lbl_proyecto)
+        layout.addWidget(self.txt_proyecto, 2)
+        
+        grupo_cotizacion.setLayout(layout)
+        parent_layout.addWidget(grupo_cotizacion)
+
+    def _obtener_estilo_calendario(self):
+        """Retorna el estilo CSS común para los calendarios"""
+        return """
             QDateEdit {
                 padding: 8px;
                 border: 2px solid #F5F5F5;
@@ -222,22 +245,7 @@ class CotizacionesWindow(QDialog):
                 background-color: #00788E;
                 border-radius: 4px;
             }
-        """)
-        
-        # Agregar widgets al layout
-        layout.addWidget(lbl_folio)
-        layout.addWidget(self.txt_folio, 1)
-        layout.addWidget(lbl_cliente)
-        layout.addWidget(self.txt_cliente, 2)
-        layout.addWidget(lbl_fecha)
-        layout.addWidget(self.date_fecha, 1)
-        layout.addWidget(lbl_vigencia)
-        layout.addWidget(self.combo_vigencia, 1)
-        layout.addWidget(lbl_proyecto)
-        layout.addWidget(self.txt_proyecto, 2)
-        
-        grupo_cotizacion.setLayout(layout)
-        parent_layout.addWidget(grupo_cotizacion)
+        """
 
     def obtener_datos_cotizacion(self):
         """Obtiene los datos de la cotización del formulario"""
@@ -245,9 +253,34 @@ class CotizacionesWindow(QDialog):
             'folio': self.txt_folio.text(),
             'cliente': self.txt_cliente.text(),
             'fecha': self.date_fecha.date().toString("dd/MM/yyyy"),
-            'vigencia': self.combo_vigencia.currentText(),
+            'vigencia': self.date_vigencia.date().toString("dd/MM/yyyy"),  # Cambio aquí
             'proyecto': self.txt_proyecto.text()
         }
+
+    # ADICIONAL: Función para validar que la vigencia sea posterior a la fecha
+    def conectar_senales(self):
+        """Conectar las señales de los controles"""
+        # Calcular importe cuando cambia cantidad o precio unitario
+        self.txt_cantidad.textChanged.connect(self.calcular_importe)
+        self.txt_precio.textChanged.connect(self.calcular_importe)
+        self.btn_agregar.clicked.connect(self.agregar_a_tabla)
+        
+        # Conectar doble clic en tabla para editar
+        self.tabla_items.doubleClicked.connect(self.cargar_item_para_editar)
+        
+        # NUEVO: Validar fechas cuando cambian
+        self.date_fecha.dateChanged.connect(self.validar_fechas)
+        self.date_vigencia.dateChanged.connect(self.validar_fechas)
+
+    def validar_fechas(self):
+        """Valida que la fecha de vigencia sea posterior a la fecha de cotización"""
+        fecha_cot = self.date_fecha.date()
+        fecha_vig = self.date_vigencia.date()
+        
+        if fecha_vig <= fecha_cot:
+            # Ajustar automáticamente la vigencia a 30 días después
+            nueva_vigencia = fecha_cot.addDays(30)
+            self.date_vigencia.setDate(nueva_vigencia)
     
     def crear_grupo_producto_servicio(self, parent_layout):
         grupo = QGroupBox("")
