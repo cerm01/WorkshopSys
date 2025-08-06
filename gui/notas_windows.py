@@ -2,7 +2,7 @@ import sys
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, 
     QPushButton, QSizePolicy, QApplication,
-    QLabel, QLineEdit, QComboBox, QGridLayout, QGroupBox,
+    QLabel, QLineEdit, QGridLayout, QGroupBox,
     QDoubleSpinBox, QMessageBox, QTableView, QHeaderView,
     QMenu, QAction, QFrame, QWidget, QDateEdit
 )
@@ -70,6 +70,7 @@ class NotasWindow(QDialog):
         
         # Crear los botones y añadirlos al layout
         self.botones = []
+        
         for texto in textos_botones:
             boton = QPushButton(texto)
             boton.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
@@ -219,8 +220,6 @@ class NotasWindow(QDialog):
         }
     
     def crear_grupo_producto_servicio(self, parent_layout):
-        """Crear grupo de campos para producto/servicio"""
-        # Crear un groupbox para agrupar los elementos - sin título
         grupo = QGroupBox("")
         grupo.setStyleSheet(GROUP_BOX_STYLE)
         
@@ -230,63 +229,52 @@ class NotasWindow(QDialog):
         grid_layout.setHorizontalSpacing(15)
         grid_layout.setContentsMargins(10, 10, 10, 10)
         
-        # Definir proporciones de columnas (ajustadas para incluir impuestos)
-        grid_layout.setColumnStretch(0, 2)    # Producto
-        grid_layout.setColumnStretch(1, 1)    # Cantidad
-        grid_layout.setColumnStretch(2, 5)    # Descripción (reducido de 6 a 5)
-        grid_layout.setColumnStretch(3, 2)    # Precio
-        grid_layout.setColumnStretch(4, 2)    # Importe
-        grid_layout.setColumnStretch(5, 1)    # Impuestos (nuevo)
-        grid_layout.setColumnStretch(6, 1)    # Botón Agregar
+        # Ajuste de columnas sin la columna de tipo
+        grid_layout.setColumnStretch(0, 1)    # Cantidad
+        grid_layout.setColumnStretch(1, 6)    # Descripción
+        grid_layout.setColumnStretch(2, 2)    # Precio
+        grid_layout.setColumnStretch(3, 2)    # Importe
+        grid_layout.setColumnStretch(4, 1)    # IVA
+        grid_layout.setColumnStretch(5, 1)    # Botón
         
-        # ---- Fila 1: Labels ----
-        lbl_producto = QLabel("Producto o Servicio")
-        lbl_producto.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_producto, 0, 0)
-        
+        # Labels
         lbl_cantidad = QLabel("Cantidad")
         lbl_cantidad.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_cantidad, 0, 1)
+        grid_layout.addWidget(lbl_cantidad, 0, 0)
         
         lbl_descripcion = QLabel("Descripción")
         lbl_descripcion.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_descripcion, 0, 2)
+        grid_layout.addWidget(lbl_descripcion, 0, 1)
         
         lbl_precio = QLabel("Precio Unitario")
         lbl_precio.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_precio, 0, 3)
+        grid_layout.addWidget(lbl_precio, 0, 2)
         
         lbl_importe = QLabel("Importe")
         lbl_importe.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_importe, 0, 4)
+        grid_layout.addWidget(lbl_importe, 0, 3)
         
-        # NUEVO: Label para impuestos
         lbl_impuestos = QLabel("IVA %")
         lbl_impuestos.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_impuestos, 0, 5)
+        grid_layout.addWidget(lbl_impuestos, 0, 4)
         
-        # ---- Fila 2: Campos ----
-        self.cmb_producto = QComboBox()
-        self.cmb_producto.addItems(["Seleccione...", "Producto", "Servicio"])
-        self.cmb_producto.setStyleSheet(INPUT_STYLE)
-        grid_layout.addWidget(self.cmb_producto, 1, 0)
-        
+        # Campos de entrada
         self.txt_cantidad = QLineEdit()
         self.txt_cantidad.setStyleSheet(INPUT_STYLE)
-        self.txt_cantidad.setPlaceholderText("Cantidad")
+        self.txt_cantidad.setPlaceholderText("Cant.")
         self.txt_cantidad.setValidator(QDoubleValidator())
-        grid_layout.addWidget(self.txt_cantidad, 1, 1)
+        grid_layout.addWidget(self.txt_cantidad, 1, 0)
         
         self.txt_descripcion = QLineEdit()
         self.txt_descripcion.setStyleSheet(INPUT_STYLE)
-        self.txt_descripcion.setPlaceholderText("Ingrese descripción")
-        grid_layout.addWidget(self.txt_descripcion, 1, 2)
+        self.txt_descripcion.setPlaceholderText("Ingrese descripción del producto o servicio")
+        grid_layout.addWidget(self.txt_descripcion, 1, 1)
         
         self.txt_precio = QLineEdit()
         self.txt_precio.setStyleSheet(INPUT_STYLE)
         self.txt_precio.setPlaceholderText("$0.00")
         self.txt_precio.setValidator(QDoubleValidator(0.00, 9999999.99, 2))
-        grid_layout.addWidget(self.txt_precio, 1, 3)
+        grid_layout.addWidget(self.txt_precio, 1, 2)
         
         self.txt_importe = QDoubleSpinBox()
         self.txt_importe.setReadOnly(True)
@@ -295,22 +283,20 @@ class NotasWindow(QDialog):
         self.txt_importe.setDecimals(2)
         self.txt_importe.setPrefix("$ ")
         self.txt_importe.setStyleSheet(INPUT_STYLE)
-        grid_layout.addWidget(self.txt_importe, 1, 4)
+        grid_layout.addWidget(self.txt_importe, 1, 3)
         
-        # NUEVO: Campo para impuestos
         self.txt_impuestos = QDoubleSpinBox()
         self.txt_impuestos.setRange(0, 100)
         self.txt_impuestos.setDecimals(2)
         self.txt_impuestos.setSuffix(" %")
-        self.txt_impuestos.setValue(16.00)  # IVA por defecto
+        self.txt_impuestos.setValue(16.00)
         self.txt_impuestos.setStyleSheet(INPUT_STYLE)
-        grid_layout.addWidget(self.txt_impuestos, 1, 5)
+        grid_layout.addWidget(self.txt_impuestos, 1, 4)
         
-        # Botón para agregar a la tabla
         self.btn_agregar = QPushButton("Agregar")
         self.btn_agregar.setStyleSheet(FORM_BUTTON_STYLE)
         self.btn_agregar.setCursor(Qt.PointingHandCursor)
-        grid_layout.addWidget(self.btn_agregar, 1, 6)  # Cambió de columna 5 a 6
+        grid_layout.addWidget(self.btn_agregar, 1, 5)
         
         # Establecer el layout del grupo
         grupo.setLayout(grid_layout)
@@ -322,7 +308,7 @@ class NotasWindow(QDialog):
         """Crear tabla para mostrar los items agregados usando QTableView"""
         # Crear modelo de datos
         self.tabla_model = QStandardItemModel()
-        self.tabla_model.setHorizontalHeaderLabels(["Cantidad", "Descripción", "Precio Unitario", "Impuestos", "Importe"])
+        self.tabla_model.setHorizontalHeaderLabels(["Cantidad", "Descripción", "Precio Unitario", "IVA", "Importe"])
         
         # Crear vista de tabla
         self.tabla_items = QTableView()
@@ -338,11 +324,11 @@ class NotasWindow(QDialog):
         
         # Configurar ancho de columnas
         header = self.tabla_items.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Cantidad
-        header.setSectionResizeMode(1, QHeaderView.Stretch)           # Descripción se expande
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Precio Unitario
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Importe
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         
         # Fijar altura del encabezado
         header.setFixedHeight(40)
@@ -369,11 +355,6 @@ class NotasWindow(QDialog):
         # Calcular importe cuando cambia cantidad o precio unitario
         self.txt_cantidad.textChanged.connect(self.calcular_importe)
         self.txt_precio.textChanged.connect(self.calcular_importe)
-        
-        # Manejar cambio en el combo de producto/servicio
-        self.cmb_producto.currentIndexChanged.connect(self.manejar_cambio_tipo)
-        
-        # Conectar botón agregar
         self.btn_agregar.clicked.connect(self.agregar_a_tabla)
         
         # Conectar doble clic en tabla para editar
@@ -395,27 +376,14 @@ class NotasWindow(QDialog):
         # Determinar restricciones
         es_primera_fila = (fila == 0)
         es_ultima_fila = (fila == self.tabla_model.rowCount() - 1)
-        es_servicio = self.tabla_model.index(fila, 0).data() == "-"
         
-        # Contar servicios para determinar límites
-        servicios_count = 0
-        for i in range(self.tabla_model.rowCount()):
-            if self.tabla_model.index(i, 0).data() == "-":
-                servicios_count += 1
-                
-        # Restricciones adicionales basadas en tipos de ítem
-        no_puede_subir_producto = not es_servicio and fila == servicios_count and fila > 0
-        no_puede_bajar_servicio = es_servicio and fila == servicios_count - 1 and fila < self.tabla_model.rowCount() - 1
-        
-        # Acción para mover arriba
         action_subir = QAction("Mover Arriba", self)
-        action_subir.setEnabled(not es_primera_fila and not no_puede_subir_producto)
+        action_subir.setEnabled(not es_primera_fila)
         action_subir.triggered.connect(lambda: self.mover_fila_arriba(fila))
         menu.addAction(action_subir)
         
-        # Acción para mover abajo
         action_bajar = QAction("Mover Abajo", self)
-        action_bajar.setEnabled(not es_ultima_fila and not no_puede_bajar_servicio)
+        action_bajar.setEnabled(not es_ultima_fila)
         action_bajar.triggered.connect(lambda: self.mover_fila_abajo(fila))
         menu.addAction(action_bajar)
         
@@ -431,146 +399,35 @@ class NotasWindow(QDialog):
         menu.exec_(self.tabla_items.viewport().mapToGlobal(position))
     
     def mover_fila_arriba(self, fila):
-        """Mueve una fila hacia arriba"""
         if fila <= 0:
-            return  # No se puede mover más arriba
-        
-        # Verificar restricciones de servicios y productos
-        es_servicio = self.tabla_model.index(fila, 0).data() == "-"
-        es_servicio_arriba = self.tabla_model.index(fila-1, 0).data() == "-"
-        
-        # Contar servicios para determinar límites
-        servicios_count = 0
-        for i in range(self.tabla_model.rowCount()):
-            if self.tabla_model.index(i, 0).data() == "-":
-                servicios_count += 1
-        
-        # Restricción: un producto no puede moverse a la sección de servicios
-        if not es_servicio and es_servicio_arriba and fila == servicios_count:
-            self.mostrar_advertencia("No se puede mover un producto a la sección de servicios.")
             return
         
-        # Guardar datos de la fila a mover
-        datos_fila = []
-        for col in range(self.tabla_model.columnCount()):
-            datos_fila.append(self.tabla_model.index(fila, col).data())
-        
-        # Guardar alineaciones
-        alineaciones = []
-        for col in range(self.tabla_model.columnCount()):
-            item = self.tabla_model.item(fila, col)
-            if item:
-                alineaciones.append(item.textAlignment())
-            else:
-                alineaciones.append(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        # Guardar datos de la fila destino
-        datos_fila_destino = []
-        for col in range(self.tabla_model.columnCount()):
-            datos_fila_destino.append(self.tabla_model.index(fila-1, col).data())
-        
-        # Guardar alineaciones de fila destino
-        alineaciones_destino = []
-        for col in range(self.tabla_model.columnCount()):
-            item = self.tabla_model.item(fila-1, col)
-            if item:
-                alineaciones_destino.append(item.textAlignment())
-            else:
-                alineaciones_destino.append(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        # Intercambiar filas directamente
-        for col in range(self.tabla_model.columnCount()):
-            # Actualizar fila original con datos del destino
-            item1 = QStandardItem(datos_fila_destino[col])
-            item1.setTextAlignment(alineaciones_destino[col])
-            self.tabla_model.setItem(fila, col, item1)
-            
-            # Actualizar fila destino con datos originales
-            item2 = QStandardItem(datos_fila[col])
-            item2.setTextAlignment(alineaciones[col])
-            self.tabla_model.setItem(fila-1, col, item2)
-        
-        # Seleccionar la fila movida
-        self.tabla_items.selectRow(fila-1)
-
-        # Intercambiar los valores de IVA
-        temp_iva = self.iva_por_fila.get(fila, 16.0)  # Valor por defecto si no existe
-        self.iva_por_fila[fila] = self.iva_por_fila.get(fila-1, 16.0)
-        self.iva_por_fila[fila-1] = temp_iva
-
-        # Recalcular totales
+        # Intercambiar filas
+        self._intercambiar_filas(fila, fila - 1)
+        self.tabla_items.selectRow(fila - 1)
         self.calcular_totales()
     
     def mover_fila_abajo(self, fila):
-        """Mueve una fila hacia abajo"""
         if fila >= self.tabla_model.rowCount() - 1:
-            return  # No se puede mover más abajo
-        
-        # Verificar restricciones de servicios y productos
-        es_servicio = self.tabla_model.index(fila, 0).data() == "-"
-        es_servicio_abajo = self.tabla_model.index(fila+1, 0).data() == "-"
-        
-        # Contar servicios para determinar límites
-        servicios_count = 0
-        for i in range(self.tabla_model.rowCount()):
-            if self.tabla_model.index(i, 0).data() == "-":
-                servicios_count += 1
-        
-        # Restricción: un servicio no puede moverse a la sección de productos
-        if es_servicio and not es_servicio_abajo and fila == servicios_count - 1:
-            self.mostrar_advertencia("No se puede mover un servicio a la sección de productos.")
             return
         
-        # Guardar datos de la fila a mover
-        datos_fila = []
-        for col in range(self.tabla_model.columnCount()):
-            datos_fila.append(self.tabla_model.index(fila, col).data())
-        
-        # Guardar alineaciones
-        alineaciones = []
-        for col in range(self.tabla_model.columnCount()):
-            item = self.tabla_model.item(fila, col)
-            if item:
-                alineaciones.append(item.textAlignment())
-            else:
-                alineaciones.append(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        # Guardar datos de la fila destino
-        datos_fila_destino = []
-        for col in range(self.tabla_model.columnCount()):
-            datos_fila_destino.append(self.tabla_model.index(fila+1, col).data())
-        
-        # Guardar alineaciones de fila destino
-        alineaciones_destino = []
-        for col in range(self.tabla_model.columnCount()):
-            item = self.tabla_model.item(fila+1, col)
-            if item:
-                alineaciones_destino.append(item.textAlignment())
-            else:
-                alineaciones_destino.append(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        # Intercambiar filas directamente
-        for col in range(self.tabla_model.columnCount()):
-            # Actualizar fila original con datos del destino
-            item1 = QStandardItem(str(datos_fila_destino[col]))
-            item1.setTextAlignment(alineaciones_destino[col])
-            self.tabla_model.setItem(fila, col, item1)
-            
-            # Actualizar fila destino con datos originales
-            item2 = QStandardItem(str(datos_fila[col]))
-            item2.setTextAlignment(alineaciones[col])
-            self.tabla_model.setItem(fila+1, col, item2)
-        
-        # Seleccionar la fila movida
-        self.tabla_items.selectRow(fila+1)
-
-        # Intercambiar los valores de IVA
-        temp_iva = self.iva_por_fila.get(fila, 16.0)  # Valor por defecto si no existe
-        self.iva_por_fila[fila] = self.iva_por_fila.get(fila+1, 16.0)
-        self.iva_por_fila[fila+1] = temp_iva
-        
-        # Recalcular totales
+        # Intercambiar filas
+        self._intercambiar_filas(fila, fila + 1)
+        self.tabla_items.selectRow(fila + 1)
         self.calcular_totales()
+    
+    def _intercambiar_filas(self, fila1, fila2):
+        # Guardar datos y alineaciones de ambas filas
+        for col in range(self.tabla_model.columnCount()):
+            item1 = self.tabla_model.takeItem(fila1, col)
+            item2 = self.tabla_model.takeItem(fila2, col)
+            self.tabla_model.setItem(fila1, col, item2)
+            self.tabla_model.setItem(fila2, col, item1)
+        
+        # Intercambiar IVA
+        temp_iva = self.iva_por_fila.get(fila1, 16.0)
+        self.iva_por_fila[fila1] = self.iva_por_fila.get(fila2, 16.0)
+        self.iva_por_fila[fila2] = temp_iva
     
     def eliminar_fila(self, fila):
         """Elimina una fila de la tabla"""
@@ -582,32 +439,15 @@ class NotasWindow(QDialog):
                             self)
         msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         
-        yes_button = msg_box.button(QMessageBox.Yes)
-        no_button = msg_box.button(QMessageBox.No)
-        
-        if yes_button:
-            yes_button.setText("Sí")
-            yes_button.setCursor(Qt.PointingHandCursor)
-        
-        if no_button:
-            no_button.setText("No")
-            no_button.setCursor(Qt.PointingHandCursor)
-        
-        result = msg_box.exec_()
-        
-        if result == QMessageBox.Yes:
+        if msg_box.exec_() == QMessageBox.Yes:
             self.tabla_model.removeRow(fila)
-
-            # Eliminar el IVA y reorganizar los índices
-            if fila in self.iva_por_fila:
-                del self.iva_por_fila[fila]
-
-            # Reorganizar los índices del diccionario
+            
+            # Reorganizar índices del diccionario IVA
             nuevo_iva = {}
             for key in self.iva_por_fila:
                 if key > fila:
                     nuevo_iva[key - 1] = self.iva_por_fila[key]
-                else:
+                elif key < fila:
                     nuevo_iva[key] = self.iva_por_fila[key]
             self.iva_por_fila = nuevo_iva
 
@@ -618,34 +458,11 @@ class NotasWindow(QDialog):
             if fila == self.fila_en_edicion:
                 self.limpiar_formulario()
     
-
-    
-    def manejar_cambio_tipo(self):
-        """Maneja el cambio en el combo de producto/servicio"""
-        seleccion = self.cmb_producto.currentText()
-        
-        if seleccion == "Servicio":
-            # Si es servicio, poner "-" en cantidad y deshabilitar el campo
-            self.txt_cantidad.setText("-")
-            self.txt_cantidad.setReadOnly(True)
-        else:
-            # Si no es servicio, habilitar el campo de cantidad y dejarlo vacío si tiene "-"
-            if self.txt_cantidad.text() == "-":
-                self.txt_cantidad.setText("")
-            self.txt_cantidad.setReadOnly(False)
-    
     def calcular_importe(self):
         """Calcular el importe basado en cantidad y precio unitario"""
         try:
-            # Determinar cantidad según el tipo de producto/servicio
-            if self.cmb_producto.currentText() == "Servicio" and self.txt_cantidad.text() == "-":
-                cantidad = 1.0  # Si es servicio, considerar como 1 para el cálculo
-            else:
-                cantidad = float(self.txt_cantidad.text()) if self.txt_cantidad.text() else 0
-            
-            # Limpiar el texto del precio para manejar posibles formatos como "$1,234.56"
-            precio_texto = self.txt_precio.text()
-            precio_texto = precio_texto.replace("$", "").replace(",", "").strip()
+            cantidad = float(self.txt_cantidad.text()) if self.txt_cantidad.text() else 0
+            precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
             precio = float(precio_texto) if precio_texto else 0
             
             importe = cantidad * precio
@@ -657,7 +474,7 @@ class NotasWindow(QDialog):
         except ValueError:
             # Si hay un error en la conversión, mostrar 0
             self.txt_importe.setValue(0)
-
+    
     def calcular_totales(self):
         """Calcula y actualiza los totales mostrados"""
         subtotal = 0.0
@@ -682,7 +499,7 @@ class NotasWindow(QDialog):
         self.lbl_subtotal_valor.setText(f"$ {subtotal:,.2f}")
         self.lbl_impuestos_valor.setText(f"$ {total_impuestos:,.2f}")
         self.lbl_total_valor.setText(f"$ {total:,.2f}")
-
+    
     def crear_panel_totales(self, parent_layout):
         """Crear panel para mostrar subtotal, impuestos y total"""
         # Crear un contenedor principal que ocupe todo el ancho
@@ -695,7 +512,7 @@ class NotasWindow(QDialog):
         
         # Crear un widget contenedor para el frame
         contenedor_frame = QWidget()
-        contenedor_frame.setMaximumWidth(9999)  # Sin límite máximo
+        contenedor_frame.setMaximumWidth(9999)
         frame_layout = QVBoxLayout()
         frame_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -718,16 +535,12 @@ class NotasWindow(QDialog):
         
         # Layout horizontal dentro del frame para alinear contenido a la derecha
         main_totales_layout = QHBoxLayout()
-        main_totales_layout.addStretch()  # Empuja el contenido a la derecha dentro del frame
+        main_totales_layout.addStretch()
         
-        # ... resto del código del grid layout (sin cambios) ...
-        
-        # Layout grid para mejor alineación
         totales_grid = QGridLayout()
         totales_grid.setSpacing(5)
         totales_grid.setContentsMargins(0, 0, 0, 0)
         
-        # Estilo para las etiquetas
         label_style = """
             QLabel {
                 font-size: 18px;
@@ -736,10 +549,9 @@ class NotasWindow(QDialog):
                 padding: 2px;
             }
         """
-        
         label_bold_style = label_style + "font-weight: bold;"
         
-        # Crear las etiquetas y valores
+        # Crear etiquetas
         lbl_subtotal_text = QLabel("Subtotal:")
         lbl_subtotal_text.setStyleSheet(label_style)
         lbl_subtotal_text.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -750,7 +562,7 @@ class NotasWindow(QDialog):
         
         lbl_impuestos_text = QLabel("Impuestos:")
         lbl_impuestos_text.setStyleSheet(label_style)
-        lbl_impuestos_text.setAlignment(Qt.AlignLeft| Qt.AlignVCenter)
+        lbl_impuestos_text.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         self.lbl_impuestos_valor = QLabel("$ 0.00")
         self.lbl_impuestos_valor.setStyleSheet(label_bold_style)
@@ -810,35 +622,21 @@ class NotasWindow(QDialog):
         
         # Agregar el contenedor principal al layout padre
         parent_layout.addWidget(contenedor_principal)
-        
     
     def agregar_a_tabla(self):
         """Agrega los datos del formulario a la tabla"""
         # Verificar datos obligatorios
         if not self.validar_datos():
             return
-            
-        # Determinar tipo (producto o servicio)
-        tipo = self.cmb_producto.currentText()
         
-        # Obtener los datos comunes
+        cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
         
-        # Formatear precio unitario
-        precio_texto = self.txt_precio.text()
-        precio_texto = precio_texto.replace("$", "").replace(",", "").strip()
+        precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
         precio = float(precio_texto)
         precio_formateado = f"${precio:.2f}"
         
-        # Procesar según tipo
-        if tipo == "Servicio":
-            cantidad = "-"
-            cantidad_calculo = 1
-        else:  # Producto
-            cantidad = self.txt_cantidad.text()
-            cantidad_calculo = float(cantidad)
-        
-        # Calcular importe
+        cantidad_calculo = float(cantidad) if cantidad else 1
         importe = cantidad_calculo * precio
         importe_formateado = f"${importe:.2f}"
 
@@ -862,23 +660,9 @@ class NotasWindow(QDialog):
         item_importe = QStandardItem(importe_formateado)
         item_importe.setTextAlignment(Qt.AlignCenter)
         
-        # Añadir en la sección correspondiente de la tabla
-        fila = None
-        
-        if tipo == "Servicio":
-            # Buscar la última fila de servicios o añadir al inicio
-            servicios_count = 0
-            for i in range(self.tabla_model.rowCount()):
-                if self.tabla_model.index(i, 0).data() == "-":
-                    servicios_count += 1
-            
-            # Insertar después del último servicio
-            fila = servicios_count
-            self.tabla_model.insertRow(fila)
-        else:  # Producto
-            # Añadir después de la última fila (al final)
-            fila = self.tabla_model.rowCount()
-            self.tabla_model.insertRow(fila)
+        # Añadir fila
+        fila = self.tabla_model.rowCount()
+        self.tabla_model.insertRow(fila)
         
         # Establecer los datos en la fila
         self.tabla_model.setItem(fila, 0, item_cantidad)
@@ -886,11 +670,9 @@ class NotasWindow(QDialog):
         self.tabla_model.setItem(fila, 2, item_precio)
         self.tabla_model.setItem(fila, 3, item_iva)
         self.tabla_model.setItem(fila, 4, item_importe)
-
-        # Almacenar el porcentaje de IVA para esta fila
-        self.iva_por_fila[fila] = self.txt_impuestos.value()
-
-        # Actualizar totales
+        
+        self.iva_por_fila[fila] = iva_porcentaje
+        
         self.calcular_totales()
         
         # Limpiar el formulario para un nuevo ingreso
@@ -898,34 +680,24 @@ class NotasWindow(QDialog):
         
         # Seleccionar la fila recién agregada
         self.tabla_items.selectRow(fila)
-
+    
     def cargar_item_para_editar(self, index):
         """Carga los datos de la fila seleccionada en los campos de edición"""
         # Ignorar si se hace clic en la columna de botones
         if index.column() == 4:
             return
-            
+        
         fila = index.row()
         
         # Obtener valores de la fila seleccionada
         cantidad = self.tabla_model.index(fila, 0).data()
         descripcion = self.tabla_model.index(fila, 1).data()
         precio = self.tabla_model.index(fila, 2).data()
-        iva_texto = self.tabla_model.index(fila, 3).data()
         
         # Limpiar formato de precio (quitar $ y ,)
         precio = precio.replace("$", "").replace(",", "").strip()
         
-        # Determinar si es producto o servicio
-        if cantidad == "-":
-            self.cmb_producto.setCurrentText("Servicio")
-            self.txt_cantidad.setText("-")
-            self.txt_cantidad.setReadOnly(True)
-        else:
-            self.cmb_producto.setCurrentText("Producto")
-            self.txt_cantidad.setText(cantidad)
-            self.txt_cantidad.setReadOnly(False)
-        
+        self.txt_cantidad.setText(cantidad)
         self.txt_descripcion.setText(descripcion)
         self.txt_precio.setText(precio)
 
@@ -933,7 +705,7 @@ class NotasWindow(QDialog):
         if fila in self.iva_por_fila:
             self.txt_impuestos.setValue(self.iva_por_fila[fila])
         else:
-            self.txt_impuestos.setValue(16.0)  # Valor por defecto si no existe
+            self.txt_impuestos.setValue(16.0)
         
         # Guardar el índice de la fila para poder eliminarla después
         self.fila_en_edicion = fila
@@ -945,50 +717,27 @@ class NotasWindow(QDialog):
         try:
             self.btn_agregar.clicked.disconnect()
         except TypeError:
-            pass  # Si no hay conexión, ignorar el error
+            pass
         
         self.btn_agregar.clicked.connect(self.actualizar_item)
-
+    
     def actualizar_item(self):
-        """Actualiza la fila seleccionada con los nuevos datos"""
-        # Verificar datos obligatorios
         if not self.validar_datos():
             return
         
-        # Obtener tipo y datos del formulario
-        tipo_nuevo = self.cmb_producto.currentText()
-        tipo_anterior = "Servicio" if self.tabla_model.index(self.fila_en_edicion, 0).data() == "-" else "Producto"
-        
-        # Si cambió el tipo, eliminar la fila actual y agregar en la sección correcta
-        if tipo_nuevo != tipo_anterior:
-            self.tabla_model.removeRow(self.fila_en_edicion)
-            self.agregar_a_tabla()
-            return
-        
-        # Si no cambió el tipo, actualizar en la misma posición
-        if tipo_nuevo == "Servicio":
-            cantidad = "-"
-            cantidad_calculo = 1
-        else:
-            cantidad = self.txt_cantidad.text()
-            cantidad_calculo = float(cantidad)
-        
+        cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
         
-        # Formatear precio unitario
-        precio_texto = self.txt_precio.text()
-        precio_texto = precio_texto.replace("$", "").replace(",", "").strip()
+        precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
         precio = float(precio_texto)
         precio_formateado = f"${precio:.2f}"
         
-        # Obtener el porcentaje de IVA
-        iva_texto = f"{self.txt_impuestos.value():.1f} %"
-
-        # Calcular importe
+        cantidad_calculo = float(cantidad) if cantidad else 1
         importe = cantidad_calculo * precio
         importe_formateado = f"${importe:.2f}"
         
-        # Actualizar fila en el modelo
+        iva_texto = f"{self.txt_impuestos.value():.1f} %"
+        
         self.tabla_model.setItem(self.fila_en_edicion, 0, QStandardItem(cantidad))
         self.tabla_model.setItem(self.fila_en_edicion, 1, QStandardItem(descripcion))
         self.tabla_model.setItem(self.fila_en_edicion, 2, QStandardItem(precio_formateado))
@@ -997,11 +746,7 @@ class NotasWindow(QDialog):
 
         # Actualizar el IVA almacenado 
         self.iva_por_fila[self.fila_en_edicion] = self.txt_impuestos.value()
-
-        # Recalcular totales
-        self.calcular_totales()
         
-        # Establecer alineación
         self.tabla_model.item(self.fila_en_edicion, 0).setTextAlignment(Qt.AlignCenter)
         self.tabla_model.item(self.fila_en_edicion, 1).setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.tabla_model.item(self.fila_en_edicion, 2).setTextAlignment(Qt.AlignCenter)
@@ -1010,51 +755,35 @@ class NotasWindow(QDialog):
         
         # Limpiar formulario y restaurar botón
         self.limpiar_formulario()
-        
+    
     def mostrar_advertencia(self, mensaje):
         msg_box = QMessageBox(QMessageBox.Warning, "Advertencia", mensaje, QMessageBox.Ok, self)
         msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
-        
-        ok_button = msg_box.button(QMessageBox.Ok)
-        if ok_button:
-            ok_button.setText("OK")
-            ok_button.setCursor(Qt.PointingHandCursor)
-        
         msg_box.exec_()
-
+    
     def validar_datos(self):
-        """Valida que los datos del formulario sean correctos"""
-        tipo = self.cmb_producto.currentText()
-        
-        if tipo == "Seleccione...":
-            self.mostrar_advertencia("Seleccione el tipo de ítem (Producto o Servicio).")
-            return False
-            
-        if tipo == "Producto" and (not self.txt_cantidad.text() or self.txt_cantidad.text() == "0"):
+        if not self.txt_cantidad.text() or self.txt_cantidad.text() == "0":
             self.mostrar_advertencia("Ingrese una cantidad válida.")
             return False
-            
+        
         if not self.txt_descripcion.text():
             self.mostrar_advertencia("Ingrese una descripción.")
             return False
-            
+        
         precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
         if not precio_texto or float(precio_texto) <= 0:
             self.mostrar_advertencia("Ingrese un precio válido.")
             return False
-            
+        
         return True
     
     def limpiar_formulario(self):
-        """Limpia el formulario para un nuevo ingreso"""
-        self.cmb_producto.setCurrentIndex(0)  # Seleccione...
-        self.txt_cantidad.setReadOnly(False)
         self.txt_cantidad.setText("")
         self.txt_descripcion.setText("")
         self.txt_precio.setText("")
         self.txt_importe.setValue(0)
-        self.cmb_producto.setFocus()
         self.txt_impuestos.setValue(16.00)
+        self.txt_cantidad.setFocus()
         
         # Asegurar que el botón tenga el texto correcto
         self.btn_agregar.setText("Agregar")
