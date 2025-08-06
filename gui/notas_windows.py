@@ -358,8 +358,8 @@ class NotasWindow(QDialog):
         self.tabla_items.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tabla_items.customContextMenuRequested.connect(self.mostrar_menu_contextual)
         
-        # Establecer altura para mostrar 10 filas (10 filas * 30px + 40px para el encabezado)
-        self.tabla_items.setMinimumHeight(10 * 30 + 40)
+        # Establecer altura para mostrar 20 filas (20 filas * 30px + 40px para el encabezado)
+        self.tabla_items.setMinimumHeight(15 * 30 + 40)
         
         # Agregar al layout
         parent_layout.addWidget(self.tabla_items)
