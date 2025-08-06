@@ -103,6 +103,19 @@ class NotasWindow(QDialog):
         layout.setSpacing(15)
         layout.setContentsMargins(10, 10, 10, 10)
         
+        # Campo Folio (no editable)
+        lbl_folio = QLabel("Folio")
+        lbl_folio.setStyleSheet(LABEL_STYLE)
+        self.txt_folio = QLineEdit()
+        self.txt_folio.setStyleSheet(INPUT_STYLE + """
+            QLineEdit {
+                background-color: #E8E8E8;
+                color: #666666;
+            }
+        """)
+        self.txt_folio.setReadOnly(True)
+        self.txt_folio.setPlaceholderText("Folio del sistema")
+        
         # Campo Cliente
         lbl_cliente = QLabel("Cliente")
         lbl_cliente.setStyleSheet(LABEL_STYLE)
@@ -114,11 +127,11 @@ class NotasWindow(QDialog):
         lbl_fecha = QLabel("Fecha")
         lbl_fecha.setStyleSheet(LABEL_STYLE)
         self.date_fecha = QDateEdit()
-        self.date_fecha.setCalendarPopup(True)  # Mostrar calendario al hacer clic
-        self.date_fecha.setDate(QDate.currentDate())  # Fecha actual por defecto
-        self.date_fecha.setDisplayFormat("dd/MM/yyyy")  # Formato de fecha
+        self.date_fecha.setCalendarPopup(True)
+        self.date_fecha.setDate(QDate.currentDate())
+        self.date_fecha.setDisplayFormat("dd/MM/yyyy")
         
-        # Aplicar estilo personalizado al QDateEdit
+        # Aplicar estilo personalizado al QDateEdit (código existente del calendario...)
         self.date_fecha.setStyleSheet("""
             QDateEdit {
                 padding: 8px;
@@ -148,7 +161,6 @@ class NotasWindow(QDialog):
                 height: 16px;
             }
             
-            /* Estilo para el calendario popup */
             QCalendarWidget {
                 background-color: white;
                 border: 2px solid #00788E;
@@ -205,6 +217,8 @@ class NotasWindow(QDialog):
         self.txt_referencia.setPlaceholderText("Ref. vehículo/cliente")
         
         # Agregar widgets al layout
+        layout.addWidget(lbl_folio)
+        layout.addWidget(self.txt_folio, 1)  # Menos espacio para folio
         layout.addWidget(lbl_cliente)
         layout.addWidget(self.txt_cliente, 2)  # Más espacio para cliente
         layout.addWidget(lbl_fecha)
