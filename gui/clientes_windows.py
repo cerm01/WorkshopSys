@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSizePolicy, 
     QLabel, QLineEdit, QGridLayout, QGroupBox, QMessageBox, 
     QTableView, QHeaderView, QFrame, QWidget, QDateEdit, 
-    QComboBox, QSpacerItem, QInputDialog
+    QComboBox, QSpacerItem, QInputDialog, QScrollArea
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
@@ -22,7 +22,7 @@ class ClientesWindow(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
 
         # Configuración inicial
-        self.setMinimumSize(1000, 700)
+        self.setMinimumSize(1200, 700)
         self.setWindowState(Qt.WindowMaximized)
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
 
@@ -51,8 +51,17 @@ class ClientesWindow(QDialog):
         # Botones de acción del formulario
         self.crear_botones_accion(main_layout)
         
-        # Tabla de clientes (sin etiqueta, ocupa todo el espacio)
-        self.crear_tabla_clientes(main_layout)
+        # Layout horizontal: Tabla + Panel de detalles
+        contenedor_horizontal = QHBoxLayout()
+        contenedor_horizontal.setSpacing(10)
+        
+        # Tabla (lado izquierdo - 70%)
+        self.crear_tabla_clientes_compacta(contenedor_horizontal)
+        
+        # Panel de detalles (lado derecho - 30%)
+        self.crear_panel_detalle(contenedor_horizontal)
+        
+        main_layout.addLayout(contenedor_horizontal, 1)
         
         # Botones principales
         self.crear_botones_principales(main_layout)
@@ -67,8 +76,6 @@ class ClientesWindow(QDialog):
         grid = QGridLayout()
         grid.setSpacing(10)
         grid.setContentsMargins(15, 15, 15, 15)
-        
-        # Sistema de 4 columnas: cada celda tiene label arriba y campo abajo
         
         # FILA 1: Nombre | Tipo | Email | Teléfono
         grid.addWidget(QLabel("Nombre Completo"), 0, 0)
@@ -121,7 +128,7 @@ class ClientesWindow(QDialog):
         self.txt_ciudad.setPlaceholderText("Ciudad")
         grid.addWidget(self.txt_ciudad, 3, 3)
         
-        # FILA 3: Estado | País | RFC | (ID - oculto para mostrar)
+        # FILA 3: Estado | País | RFC | ID
         grid.addWidget(QLabel("Estado"), 4, 0)
         self.cmb_estado = QComboBox()
         self.cmb_estado.setStyleSheet(INPUT_STYLE)
@@ -149,7 +156,7 @@ class ClientesWindow(QDialog):
         self.txt_rfc.setPlaceholderText("RFC (opcional)")
         grid.addWidget(self.txt_rfc, 5, 2)
         
-        # ID (solo lectura, informativo)
+        # ID (solo lectura)
         grid.addWidget(QLabel("ID Cliente"), 4, 3)
         self.txt_id = QLineEdit()
         self.txt_id.setReadOnly(True)
@@ -157,11 +164,11 @@ class ClientesWindow(QDialog):
         self.txt_id.setPlaceholderText("Autogenerado")
         grid.addWidget(self.txt_id, 5, 3)
         
-        # Configurar todas las columnas con el mismo ancho
+        # Configurar columnas con el mismo ancho
         for col in range(4):
             grid.setColumnStretch(col, 1)
         
-        # Configurar estilos de labels
+        # Aplicar estilos a labels
         for i in range(grid.rowCount()):
             for j in range(grid.columnCount()):
                 item = grid.itemAtPosition(i, j)
@@ -172,24 +179,42 @@ class ClientesWindow(QDialog):
         parent_layout.addWidget(grupo_form)
 
     def crear_botones_accion(self, parent_layout):
-        """Botones de acción del formulario (solo para control interno)"""
-        # Crear botones ocultos para funcionalidad interna
+        """Botones ocultos para funcionalidad interna"""
         self.btn_agregar = QPushButton()
         self.btn_actualizar = QPushButton()
         self.btn_cancelar = QPushButton()
         self.btn_limpiar = QPushButton()
-        
-        # No agregar al layout - se controlarán desde botones principales
 
-    def crear_tabla_clientes(self, parent_layout):
-        """Crear tabla para mostrar clientes - ocupa todo el espacio disponible"""
-        # Modelo de tabla
+    def crear_tabla_clientes_compacta(self, parent_layout):
+        """Tabla con campos principales solamente"""
+        widget_tabla = QWidget()
+        layout_tabla = QVBoxLayout()
+        layout_tabla.setContentsMargins(0, 0, 0, 0)
+        
+        # Etiqueta de la tabla
+        lbl_titulo = QLabel("📋 Lista de Clientes")
+        lbl_titulo.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: bold;
+                color: white;
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 #2CD5C4, stop: 1 #00788E
+                );
+                padding: 8px;
+                border-radius: 5px;
+                margin-bottom: 5px;
+            }
+        """)
+        layout_tabla.addWidget(lbl_titulo)
+        
+        # Modelo compacto
         self.tabla_model = QStandardItemModel()
         self.tabla_model.setHorizontalHeaderLabels([
-            "ID", "Nombre", "Tipo", "Email", "Teléfono", "Ciudad", "Estado"
+            "ID", "Nombre", "Tipo", "Email", "Teléfono"
         ])
         
-        # Vista de tabla
         self.tabla_clientes = QTableView()
         self.tabla_clientes.setModel(self.tabla_model)
         self.tabla_clientes.setSelectionBehavior(QTableView.SelectRows)
@@ -197,24 +222,123 @@ class ClientesWindow(QDialog):
         self.tabla_clientes.setEditTriggers(QTableView.NoEditTriggers)
         self.tabla_clientes.setStyleSheet(TABLE_STYLE)
         
-        # Configurar columnas para ocupar todo el espacio
         header = self.tabla_clientes.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID
-        header.setSectionResizeMode(1, QHeaderView.Stretch)           # Nombre
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Tipo
-        header.setSectionResizeMode(3, QHeaderView.Stretch)           # Email
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Teléfono
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Ciudad
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # Estado
-        header.setStretchLastSection(True)
-        
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header.setFixedHeight(40)
-        self.tabla_clientes.verticalHeader().setDefaultSectionSize(35)
         
-        # La tabla crece para ocupar todo el espacio disponible
+        self.tabla_clientes.verticalHeader().setDefaultSectionSize(35)
         self.tabla_clientes.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        parent_layout.addWidget(self.tabla_clientes, 1)
+        layout_tabla.addWidget(self.tabla_clientes)
+        widget_tabla.setLayout(layout_tabla)
+        parent_layout.addWidget(widget_tabla, 7)  # 70% del espacio
+
+    def crear_panel_detalle(self, parent_layout):
+        """Panel lateral con detalles completos del cliente seleccionado"""
+        panel = QFrame()
+        panel.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 200);
+                border-radius: 8px;
+                padding: 10px;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(5)
+        
+        # Título
+        titulo = QLabel("📄 Detalles del Cliente")
+        titulo.setStyleSheet("""
+            font-size: 16px;
+            font-weight: bold;
+            color: #00788E;
+            padding: 8px;
+            background: rgba(44, 213, 196, 0.2);
+            border-radius: 5px;
+        """)
+        layout.addWidget(titulo)
+        
+        # Scroll area para detalles
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        contenido = QWidget()
+        layout_contenido = QVBoxLayout()
+        layout_contenido.setSpacing(8)
+        
+        # Labels para información
+        self.lbl_detalle_id = self.crear_label_detalle("🆔 ID:", "---")
+        self.lbl_detalle_nombre = self.crear_label_detalle("👤 Nombre:", "---")
+        self.lbl_detalle_tipo = self.crear_label_detalle("📌 Tipo:", "---")
+        self.lbl_detalle_email = self.crear_label_detalle("📧 Email:", "---")
+        self.lbl_detalle_telefono = self.crear_label_detalle("📞 Teléfono:", "---")
+        
+        # Separador
+        separador = QFrame()
+        separador.setFrameShape(QFrame.HLine)
+        separador.setStyleSheet("background-color: rgba(0, 120, 142, 0.3); max-height: 2px;")
+        
+        self.lbl_detalle_direccion = self.crear_label_detalle("🏠 Dirección:", "---", multilinea=True)
+        self.lbl_detalle_ciudad = self.crear_label_detalle("🏙️ Ciudad:", "---")
+        self.lbl_detalle_estado = self.crear_label_detalle("📍 Estado:", "---")
+        self.lbl_detalle_cp = self.crear_label_detalle("📮 CP:", "---")
+        self.lbl_detalle_pais = self.crear_label_detalle("🌎 País:", "---")
+        self.lbl_detalle_rfc = self.crear_label_detalle("📋 RFC:", "---")
+        
+        # Agregar todos los labels
+        for lbl in [self.lbl_detalle_id, self.lbl_detalle_nombre, self.lbl_detalle_tipo, 
+                    self.lbl_detalle_email, self.lbl_detalle_telefono]:
+            layout_contenido.addWidget(lbl)
+        
+        layout_contenido.addWidget(separador)
+        
+        for lbl in [self.lbl_detalle_direccion, self.lbl_detalle_ciudad, 
+                    self.lbl_detalle_estado, self.lbl_detalle_cp, 
+                    self.lbl_detalle_pais, self.lbl_detalle_rfc]:
+            layout_contenido.addWidget(lbl)
+        
+        layout_contenido.addStretch()
+        contenido.setLayout(layout_contenido)
+        scroll.setWidget(contenido)
+        
+        layout.addWidget(scroll)
+        panel.setLayout(layout)
+        parent_layout.addWidget(panel, 3)  # 30% del espacio
+
+    def crear_label_detalle(self, titulo, valor, multilinea=False):
+        """Crear label para panel de detalles"""
+        frame = QFrame()
+        frame.setStyleSheet("""
+            QFrame {
+                background: white;
+                border-radius: 5px;
+                padding: 5px;
+            }
+        """)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(8, 5, 8, 5)
+        layout.setSpacing(3)
+        
+        lbl_titulo = QLabel(titulo)
+        lbl_titulo.setStyleSheet("font-weight: bold; color: #666; font-size: 11px;")
+        
+        lbl_valor = QLabel(valor)
+        lbl_valor.setStyleSheet("color: #333; font-size: 13px;")
+        lbl_valor.setWordWrap(multilinea)
+        lbl_valor.setObjectName("valor")  # Para identificarlo después
+        
+        layout.addWidget(lbl_titulo)
+        layout.addWidget(lbl_valor)
+        
+        frame.setLayout(layout)
+        return frame
 
     def crear_botones_principales(self, parent_layout):
         """Crear botones principales de la ventana"""
@@ -223,7 +347,7 @@ class ClientesWindow(QDialog):
         
         botones_info = [
             ("Nuevo", self.nuevo_cliente),
-            ("Guardar", self.guardar_cliente),  # Nuevo botón unificado
+            ("Guardar", self.guardar_cliente),
             ("Editar", self.editar_cliente),
             ("Eliminar", self.eliminar_cliente),
             ("Buscar", self.buscar_cliente),
@@ -245,8 +369,50 @@ class ClientesWindow(QDialog):
 
     def conectar_senales(self):
         """Conectar señales de los controles"""
-        # Ya no hay botones internos de formulario
         self.tabla_clientes.doubleClicked.connect(self.editar_cliente)
+        # Actualizar panel de detalles al seleccionar
+        self.tabla_clientes.selectionModel().currentChanged.connect(self.actualizar_panel_detalle)
+
+    def actualizar_panel_detalle(self, current, previous):
+        """Actualizar panel de detalles con cliente seleccionado"""
+        if not current.isValid():
+            return
+        
+        fila = current.row()
+        cliente_id = int(self.tabla_model.item(fila, 0).text())
+        cliente = next((c for c in self.clientes_data if c['id'] == cliente_id), None)
+        
+        if cliente:
+            self.actualizar_label_valor(self.lbl_detalle_id, str(cliente['id']))
+            self.actualizar_label_valor(self.lbl_detalle_nombre, cliente['nombre'])
+            self.actualizar_label_valor(self.lbl_detalle_tipo, cliente['tipo'])
+            self.actualizar_label_valor(self.lbl_detalle_email, cliente['email'])
+            self.actualizar_label_valor(self.lbl_detalle_telefono, cliente['telefono'])
+            
+            # Dirección completa
+            direccion_partes = []
+            if cliente.get('calle'):
+                direccion_partes.append(cliente['calle'])
+            if cliente.get('colonia'):
+                direccion_partes.append(cliente['colonia'])
+            direccion = '\n'.join(direccion_partes) if direccion_partes else '---'
+            self.actualizar_label_valor(self.lbl_detalle_direccion, direccion)
+            
+            self.actualizar_label_valor(self.lbl_detalle_ciudad, cliente['ciudad'])
+            self.actualizar_label_valor(self.lbl_detalle_estado, cliente['estado'])
+            self.actualizar_label_valor(self.lbl_detalle_cp, cliente['cp'])
+            self.actualizar_label_valor(self.lbl_detalle_pais, cliente.get('pais', 'México'))
+            self.actualizar_label_valor(self.lbl_detalle_rfc, cliente['rfc'] if cliente['rfc'] else '---')
+
+    def actualizar_label_valor(self, frame, valor):
+        """Actualizar valor en label de detalle"""
+        layout = frame.layout()
+        # Buscar el label con objectName "valor"
+        for i in range(layout.count()):
+            widget = layout.itemAt(i).widget()
+            if isinstance(widget, QLabel) and widget.objectName() == "valor":
+                widget.setText(valor if valor else "---")
+                break
 
     # OPERACIONES CRUD
     
@@ -331,6 +497,7 @@ class ClientesWindow(QDialog):
                 self.clientes_data.remove(cliente)
                 self.actualizar_tabla()
                 self.limpiar_formulario()
+                self.limpiar_panel_detalle()
                 self.mostrar_mensaje("Éxito", "Cliente eliminado correctamente.", QMessageBox.Information)
 
     # FUNCIONES AUXILIARES
@@ -354,7 +521,6 @@ class ClientesWindow(QDialog):
             self.cargar_cliente_en_formulario(cliente)
             self.modo_edicion = True
             self.cliente_en_edicion = cliente
-            self.mostrar_mensaje("Modo Edición", "Cliente cargado. Modifique los datos y presione 'Guardar'.", QMessageBox.Information)
 
     def cancelar_edicion(self):
         """Cancelar modo de edición"""
@@ -418,15 +584,25 @@ class ClientesWindow(QDialog):
         self.txt_colonia.setText("")
         self.txt_cp.setText("")
         self.txt_ciudad.setText("")
-        self.cmb_estado.setCurrentIndex(0)
+        self.cmb_estado.setCurrentIndex(12)  # Jalisco por defecto
         self.txt_pais.setText("México")
         self.txt_rfc.setText("")
+        self.modo_edicion = False
+        self.cliente_en_edicion = None
+
+    def limpiar_panel_detalle(self):
+        """Limpiar el panel de detalles"""
+        for lbl in [self.lbl_detalle_id, self.lbl_detalle_nombre, self.lbl_detalle_tipo,
+                    self.lbl_detalle_email, self.lbl_detalle_telefono, self.lbl_detalle_direccion,
+                    self.lbl_detalle_ciudad, self.lbl_detalle_estado, self.lbl_detalle_cp,
+                    self.lbl_detalle_pais, self.lbl_detalle_rfc]:
+            self.actualizar_label_valor(lbl, "---")
 
     def actualizar_tabla(self):
         """Actualizar datos mostrados en la tabla"""
         self.tabla_model.clear()
         self.tabla_model.setHorizontalHeaderLabels([
-            "ID", "Nombre", "Tipo", "Email", "Teléfono", "Ciudad", "Estado"
+            "ID", "Nombre", "Tipo", "Email", "Teléfono"
         ])
         
         for cliente in self.clientes_data:
@@ -435,9 +611,7 @@ class ClientesWindow(QDialog):
                 QStandardItem(cliente['nombre']),
                 QStandardItem(cliente['tipo']),
                 QStandardItem(cliente['email']),
-                QStandardItem(cliente['telefono']),
-                QStandardItem(cliente['ciudad']),
-                QStandardItem(cliente['estado'])
+                QStandardItem(cliente['telefono'])
             ]
             
             for item in fila:
@@ -477,11 +651,18 @@ class ClientesWindow(QDialog):
                 'calle': 'Calle Morelos 456', 'colonia': 'Americana',
                 'ciudad': 'Zapopan', 'estado': 'Jalisco', 'cp': '45100',
                 'pais': 'México', 'rfc': 'LOSM850315ABC'
+            },
+            {
+                'id': 3, 'nombre': 'Carlos Ramírez Torres', 'tipo': 'Particular',
+                'email': 'carlos.ramirez@correo.com', 'telefono': '(33) 5555-1234',
+                'calle': 'Av. Américas 789', 'colonia': 'Providencia',
+                'ciudad': 'Guadalajara', 'estado': 'Jalisco', 'cp': '44630',
+                'pais': 'México', 'rfc': ''
             }
         ]
         
         self.clientes_data.extend(ejemplos)
-        self.proximo_id = 3
+        self.proximo_id = 4
         self.actualizar_tabla()
 
     def mostrar_mensaje(self, titulo, mensaje, tipo):
@@ -489,3 +670,15 @@ class ClientesWindow(QDialog):
         msg_box = QMessageBox(tipo, titulo, mensaje, QMessageBox.Ok, self)
         msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         msg_box.exec_()
+
+    def closeEvent(self, event):
+        """Evento al cerrar la ventana"""
+        event.accept()
+
+
+if __name__ == "__main__":
+    from PyQt5.QtWidgets import QApplication
+    app = QApplication(sys.argv)
+    window = ClientesWindow()
+    window.show()
+    sys.exit(app.exec_())
