@@ -376,10 +376,10 @@ class ClientesWindow(QDialog):
         layout.setSpacing(2)
         
         lbl_titulo = QLabel(titulo)
-        lbl_titulo.setStyleSheet("font-weight: bold; color: #666; font-size: 11px;")
+        lbl_titulo.setStyleSheet("font-weight: bold; color: #666; font-size: 14px;")
         
         lbl_valor = QLabel(valor)
-        lbl_valor.setStyleSheet("color: #333; font-size: 13px;")
+        lbl_valor.setStyleSheet("color: #333; font-size: 16px;")
         lbl_valor.setWordWrap(True)
         lbl_valor.setObjectName("valor")
         
