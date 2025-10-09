@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QTableView, QHeaderView, QFrame, QWidget, 
     QComboBox, QInputDialog, QScrollArea
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 
 # Importar estilos
@@ -239,10 +239,11 @@ class ClientesWindow(QDialog):
         parent_layout.addWidget(grupo_form)
 
     def crear_tabla_clientes(self, parent_layout):
-        """Tabla con campos principales"""
+        """Tabla con campos principales que ocupa todo el ancho"""
         widget_tabla = QWidget()
         layout_tabla = QVBoxLayout()
         layout_tabla.setContentsMargins(0, 0, 0, 0)
+        layout_tabla.setSpacing(5)
         
         # Título de la tabla
         lbl_titulo = QLabel("📋 Lista de Clientes")
@@ -274,20 +275,50 @@ class ClientesWindow(QDialog):
         self.tabla_clientes.setEditTriggers(QTableView.NoEditTriggers)
         self.tabla_clientes.setStyleSheet(TABLE_STYLE)
         
-        # Configurar columnas
-        header = self.tabla_clientes.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        header.setFixedHeight(40)
-        
+        # ⭐ CLAVE: Hacer que la tabla ocupe todo el espacio horizontal
+        self.tabla_clientes.horizontalHeader().setStretchLastSection(True)
         self.tabla_clientes.verticalHeader().setDefaultSectionSize(35)
+        
+        # Configurar header
+        header = self.tabla_clientes.horizontalHeader()
+        header.setFixedHeight(40)
         
         layout_tabla.addWidget(self.tabla_clientes)
         widget_tabla.setLayout(layout_tabla)
         parent_layout.addWidget(widget_tabla, 7)  # 70% del espacio
+
+    def showEvent(self, event):
+        """Evento que se ejecuta cuando la ventana se muestra"""
+        super().showEvent(event)
+        
+        # Esperar a que la ventana esté completamente renderizada
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(50, self.ajustar_columnas_tabla)
+
+    def ajustar_columnas_tabla(self):
+        """Ajustar anchos de columnas con proporciones exactas"""
+        header = self.tabla_clientes.horizontalHeader()
+        
+        # Obtener el ancho total disponible
+        ancho_total = self.tabla_clientes.viewport().width()
+        
+        # Calcular anchos según proporciones: 10%, 35%, 10%, 35%, 10%
+        ancho_id = int(ancho_total * 0.10)
+        ancho_nombre = int(ancho_total * 0.35)
+        ancho_tipo = int(ancho_total * 0.10)
+        ancho_email = int(ancho_total * 0.35)
+        ancho_telefono = int(ancho_total * 0.10)
+        
+        # Aplicar anchos
+        header.resizeSection(0, ancho_id)
+        header.resizeSection(1, ancho_nombre)
+        header.resizeSection(2, ancho_tipo)
+        header.resizeSection(3, ancho_email)
+        header.resizeSection(4, ancho_telefono)
+        
+        # Bloquear redimensionamiento manual
+        for i in range(5):
+            header.setSectionResizeMode(i, QHeaderView.Fixed)
 
     def crear_panel_detalle(self, parent_layout):
         """Panel lateral con detalles del cliente seleccionado"""
