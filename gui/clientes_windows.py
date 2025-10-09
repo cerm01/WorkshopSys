@@ -1,4 +1,5 @@
 import sys
+import re
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
     QLabel, QLineEdit, QGridLayout, QGroupBox, QMessageBox, 
@@ -432,7 +433,6 @@ class ClientesWindow(QDialog):
             ("Eliminar", self.eliminar_cliente),
             ("Buscar", self.buscar_cliente),
             ("Limpiar", self.limpiar_formulario),
-            ("Exportar", self.exportar_clientes),
             ("Cerrar", self.close)
         ]
         
@@ -576,10 +576,6 @@ class ClientesWindow(QDialog):
         if ok and texto:
             self.filtrar_tabla(texto)
 
-    def exportar_clientes(self):
-        """Exportar lista de clientes"""
-        self.mostrar_mensaje("Info", "Función de exportación en desarrollo.", QMessageBox.Information)
-
     # === FUNCIONES AUXILIARES ===
 
     def obtener_datos_formulario(self):
@@ -619,21 +615,51 @@ class ClientesWindow(QDialog):
 
     def validar_formulario(self):
         """Validar datos del formulario"""
+        # Validación del nombre (obligatorio)
         if not self.txt_nombre.text().strip():
             self.mostrar_mensaje("Error", "El nombre es obligatorio.", QMessageBox.Critical)
             self.txt_nombre.setFocus()
             return False
         
+        # Validación del email (opcional pero si existe debe ser válido)
         email = self.txt_email.text().strip()
-        if not email:
-            self.mostrar_mensaje("Error", "El email es obligatorio.", QMessageBox.Critical)
-            self.txt_email.setFocus()
-            return False
+        if email:  # Solo validar si se ingresó un email
+            # Patrón de expresión regular para email
+            patron_email = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(patron_email, email):
+                self.mostrar_mensaje("Error", "Formato de email inválido.", QMessageBox.Critical)
+                self.txt_email.setFocus()
+                return False
         
-        if "@" not in email or "." not in email:
-            self.mostrar_mensaje("Error", "Formato de email inválido.", QMessageBox.Critical)
-            self.txt_email.setFocus()
-            return False
+        # Validación del teléfono (opcional pero si existe debe ser válido)
+        telefono = self.txt_telefono.text().strip()
+        if telefono:
+            # Patrón para teléfono mexicano (acepta varios formatos)
+            patron_telefono = r'^[\d\s\(\)\-\+]+$'
+            if not re.match(patron_telefono, telefono) or len(re.sub(r'\D', '', telefono)) < 10:
+                self.mostrar_mensaje("Error", "Formato de teléfono inválido. Debe contener al menos 10 dígitos.", QMessageBox.Critical)
+                self.txt_telefono.setFocus()
+                return False
+        
+        # Validación del RFC (opcional pero si existe debe ser válido)
+        rfc = self.txt_rfc.text().strip()
+        if rfc:
+            # Patrón para RFC mexicano (persona física o moral)
+            patron_rfc = r'^[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}$'
+            if not re.match(patron_rfc, rfc.upper()):
+                self.mostrar_mensaje("Error", "Formato de RFC inválido.", QMessageBox.Critical)
+                self.txt_rfc.setFocus()
+                return False
+        
+        # Validación del código postal (opcional pero si existe debe ser válido)
+        cp = self.txt_cp.text().strip()
+        if cp:
+            # Patrón para código postal de 5 dígitos
+            patron_cp = r'^\d{5}$'
+            if not re.match(patron_cp, cp):
+                self.mostrar_mensaje("Error", "El código postal debe contener exactamente 5 dígitos.", QMessageBox.Critical)
+                self.txt_cp.setFocus()
+                return False
         
         return True
 
