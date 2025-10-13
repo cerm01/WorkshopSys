@@ -127,6 +127,32 @@ class InventarioWindow(QDialog):
             }
         """
         
+        input_style_inventario = INPUT_STYLE + """
+            QSpinBox {
+                padding: 8px;
+                border: 2px solid #F5F5F5;
+                border-radius: 6px;
+                background-color: #F5F5F5;
+                min-height: 25px;
+                font-size: 16px;
+                margin-top: 0px;
+            }
+            
+            QSpinBox:focus {
+                border: 2px solid #2CD5C4;
+                background-color: white;
+            }
+            
+            QSpinBox {
+                padding-right: 15px;
+            }
+            
+            QSpinBox::up-button, QSpinBox::down-button {
+                width: 0px;
+                height: 0px;
+            }
+        """
+        
         # FILA 1: Código | Nombre | Categoría | Ubicación
         row = 0
         labels_campos = [
@@ -187,7 +213,7 @@ class InventarioWindow(QDialog):
             elif attr == "spin_stock_min":
                 campo = QSpinBox()
                 campo.setRange(0, 99999)
-                campo.setStyleSheet(INPUT_STYLE)
+                campo.setStyleSheet(input_style_inventario)
             else:
                 campo = QLineEdit()
                 campo.setStyleSheet(INPUT_STYLE)
@@ -196,7 +222,7 @@ class InventarioWindow(QDialog):
             setattr(self, attr, campo)
             grid.addWidget(campo, row, col_campo)
         
-        # FILA 3: Stock Actual | Descripción (ocupa 3 columnas) | ID
+        # FILA 3: Stock Actual | Descripción | ID
         row = 2
         
         # Stock Actual
@@ -207,7 +233,7 @@ class InventarioWindow(QDialog):
         
         self.spin_stock_actual = QSpinBox()
         self.spin_stock_actual.setRange(0, 99999)
-        self.spin_stock_actual.setStyleSheet(INPUT_STYLE)
+        self.spin_stock_actual.setStyleSheet(input_style_inventario)
         grid.addWidget(self.spin_stock_actual, row, 1)
         
         # Descripción
@@ -219,7 +245,7 @@ class InventarioWindow(QDialog):
         self.txt_descripcion = QLineEdit()
         self.txt_descripcion.setStyleSheet(INPUT_STYLE)
         self.txt_descripcion.setPlaceholderText("Descripción breve del producto")
-        grid.addWidget(self.txt_descripcion, row, 3, 1, 3)  # Ocupa 3 columnas
+        grid.addWidget(self.txt_descripcion, row, 3, 1, 3)
         
         # ID
         lbl = QLabel("ID:")
@@ -233,13 +259,7 @@ class InventarioWindow(QDialog):
         self.txt_id_prod.setPlaceholderText("Auto")
         grid.addWidget(self.txt_id_prod, row, 7)
         
-        # Configurar columnas
-        for col in range(0, 8, 2):
-            grid.setColumnStretch(col, 0)
-            grid.setColumnMinimumWidth(col, 80)
-        for col in range(1, 8, 2):
-            grid.setColumnStretch(col, 1)
-        
+        # Resto del código igual...
         grupo.setLayout(grid)
         parent_layout.addWidget(grupo)
     
