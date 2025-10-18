@@ -276,7 +276,7 @@ class ProveedoresWindow(QDialog):
         self.tabla_proveedores.setEditTriggers(QTableView.NoEditTriggers)
         self.tabla_proveedores.setStyleSheet(TABLE_STYLE)
         
-        # ⭐ CLAVE: Hacer que la tabla ocupe todo el espacio horizontal
+        # CLAVE: Hacer que la tabla ocupe todo el espacio horizontal
         self.tabla_proveedores.horizontalHeader().setStretchLastSection(True)
         self.tabla_proveedores.verticalHeader().setDefaultSectionSize(35)
         
