@@ -2,3 +2,4 @@ env/
 gui/__pycache__/
 gui/pruebas.py
 server/__pycache__/
+taller.db
