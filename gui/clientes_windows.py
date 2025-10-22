@@ -445,36 +445,49 @@ class ClientesWindow(QDialog):
         parent_layout.addLayout(layout)
 
     def conectar_senales(self):
-        """Conectar señales de los controles"""
-        self.tabla_clientes.doubleClicked.connect(self.editar_cliente)
-        self.tabla_clientes.selectionModel().currentChanged.connect(self.actualizar_panel_detalle)
+        """Conectar señales de botones"""
+        self.btn_guardar.clicked.connect(self.guardar_cliente)
+        self.btn_editar.clicked.connect(self.editar_cliente)
+        self.btn_eliminar.clicked.connect(self.eliminar_cliente)
+        self.btn_limpiar.clicked.connect(self.limpiar_formulario)
+        self.btn_buscar.clicked.connect(self.buscar_cliente)
+        
+        self.tabla_clientes.selectionModel().selectionChanged.connect(self.actualizar_panel_detalle)
 
-    def actualizar_panel_detalle(self, current, previous):
-        """Actualizar panel de detalles cuando se selecciona un cliente"""
-        if not current.isValid():
+    def actualizar_panel_detalle(self):
+        """Actualizar panel de detalles con cliente seleccionado"""
+        indice = self.tabla_clientes.currentIndex()
+        if not indice.isValid():
+            self.lbl_detalle.setText("Seleccione un cliente para ver detalles")
             return
         
-        fila = current.row()
+        fila = indice.row()
         cliente_id = int(self.tabla_model.item(fila, 0).text())
-        cliente = self.obtener_cliente_por_id(cliente_id)
         
-        if cliente:
-            # Actualizar cada campo del detalle
-            self.actualizar_label_valor(self.labels_detalle['id'], str(cliente['id']))
-            self.actualizar_label_valor(self.labels_detalle['nombre'], cliente['nombre'])
-            self.actualizar_label_valor(self.labels_detalle['tipo'], cliente['tipo'])
-            self.actualizar_label_valor(self.labels_detalle['email'], cliente['email'])
-            self.actualizar_label_valor(self.labels_detalle['telefono'], cliente['telefono'])
+        # OBTENER DESDE BASE DE DATOS
+        try:
+            clientes = db_helper.get_clientes()
+            cliente = next((c for c in clientes if c['id'] == cliente_id), None)
             
-            # Dirección completa
-            direccion = f"{cliente.get('calle', '')}\n{cliente.get('colonia', '')}"
-            self.actualizar_label_valor(self.labels_detalle['direccion'], direccion.strip())
-            
-            self.actualizar_label_valor(self.labels_detalle['ciudad'], cliente['ciudad'])
-            self.actualizar_label_valor(self.labels_detalle['estado'], cliente['estado'])
-            self.actualizar_label_valor(self.labels_detalle['cp'], cliente['cp'])
-            self.actualizar_label_valor(self.labels_detalle['pais'], cliente.get('pais', 'México'))
-            self.actualizar_label_valor(self.labels_detalle['rfc'], cliente['rfc'] or '---')
+            if cliente:
+                detalle_html = f"""
+                <h3>{cliente['nombre']}</h3>
+                <p><b>Tipo:</b> {cliente['tipo']}</p>
+                <p><b>Email:</b> {cliente['email']}</p>
+                <p><b>Teléfono:</b> {cliente['telefono']}</p>
+                <hr>
+                <p><b>Dirección:</b><br>
+                {cliente.get('calle', '')}<br>
+                {cliente.get('colonia', '')}<br>
+                {cliente.get('ciudad', '')}, {cliente.get('estado', '')}<br>
+                CP: {cliente.get('cp', '')}</p>
+                <p><b>RFC:</b> {cliente.get('rfc', 'N/A')}</p>
+                """
+                self.lbl_detalle.setText(detalle_html)
+            else:
+                self.lbl_detalle.setText("Cliente no encontrado")
+        except Exception as e:
+            self.lbl_detalle.setText(f"Error: {e}")
 
     def actualizar_label_valor(self, frame, valor):
         """Actualizar el valor en un label del panel de detalles"""
@@ -714,9 +727,8 @@ class ClientesWindow(QDialog):
         self.cliente_en_edicion = None
 
     def limpiar_panel_detalle(self):
-        """Limpiar el panel de detalles"""
-        for frame in self.labels_detalle.values():
-            self.actualizar_label_valor(frame, "---")
+        """Limpiar panel de detalles"""
+        self.lbl_detalle.setText("Seleccione un cliente para ver detalles")
 
     def filtrar_tabla(self, texto_busqueda):
         try:
