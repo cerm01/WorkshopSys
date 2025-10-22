@@ -642,10 +642,6 @@ class ClientesWindow(QDialog):
         self.txt_pais.setText(cliente.get('pais', 'México'))
         self.txt_rfc.setText(cliente['rfc'])
 
-    def obtener_cliente_por_id(self, cliente_id):
-        """Buscar cliente por ID"""
-        return next((c for c in self.clientes_data if c['id'] == cliente_id), None)
-
     def validar_formulario(self):
         """Validar datos del formulario"""
         # Validación del nombre (obligatorio)
@@ -721,27 +717,6 @@ class ClientesWindow(QDialog):
         """Limpiar el panel de detalles"""
         for frame in self.labels_detalle.values():
             self.actualizar_label_valor(frame, "---")
-
-    def actualizar_tabla_con_datos(self, clientes):
-
-        self.tabla_model.clear()
-        self.tabla_model.setHorizontalHeaderLabels([
-            "ID", "Nombre", "Tipo", "Email", "Teléfono"
-        ])
-        
-        for cliente in clientes:
-            fila = [
-                QStandardItem(str(cliente['id'])),
-                QStandardItem(cliente['nombre']),
-                QStandardItem(cliente['tipo']),
-                QStandardItem(cliente['email']),
-                QStandardItem(cliente['telefono'])
-            ]
-            
-            fila[0].setTextAlignment(Qt.AlignCenter)
-            fila[2].setTextAlignment(Qt.AlignCenter)
-            
-            self.tabla_model.appendRow(fila)
 
     def filtrar_tabla(self, texto_busqueda):
         try:
