@@ -15,6 +15,8 @@ from styles import (
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
 
+from db_helper import db_helper
+
 class ClientesWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -31,14 +33,10 @@ class ClientesWindow(QDialog):
         self.cliente_en_edicion = None
         self.modo_edicion = False
         
-        # Base de datos simulada
-        self.clientes_data = []
-        self.proximo_id = 1
-        
         # Configurar interfaz
         self.setup_ui()
         self.conectar_senales()
-        self.cargar_datos_ejemplo()
+        self.cargar_datos_desde_bd()
 
     def setup_ui(self):
         """Configurar la interfaz de usuario"""
@@ -493,11 +491,34 @@ class ClientesWindow(QDialog):
         self.txt_nombre.setFocus()
 
     def guardar_cliente(self):
-        """Guardar cliente (nuevo o actualización)"""
-        if self.modo_edicion:
-            self.actualizar_cliente()
-        else:
-            self.agregar_cliente()
+        if not self.validar_formulario():
+            return
+        
+        datos = self.obtener_datos_formulario()
+        
+        try:
+            if self.modo_edicion:
+                # Actualizar cliente existente
+                resultado = db_helper.actualizar_cliente(
+                    self.cliente_en_edicion['id'],
+                    datos
+                )
+                mensaje = "Cliente actualizado correctamente"
+            else:
+                # Crear nuevo cliente
+                resultado = db_helper.crear_cliente(datos)
+                mensaje = "Cliente creado correctamente"
+            
+            if resultado:
+                self.mostrar_mensaje("Éxito", mensaje, QMessageBox.Information)
+                self.cargar_datos_desde_bd()  # Recargar tabla
+                self.limpiar_formulario()
+            else:
+                self.mostrar_mensaje("Error", "No se pudo guardar el cliente", QMessageBox.Critical)
+                
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"Error al guardar: {e}", QMessageBox.Critical)
+
 
     def agregar_cliente(self):
         """Agregar nuevo cliente"""
@@ -532,49 +553,61 @@ class ClientesWindow(QDialog):
         self.mostrar_mensaje("Éxito", "Cliente actualizado correctamente.", QMessageBox.Information)
 
     def editar_cliente(self):
-        """Cargar cliente seleccionado para edición"""
-        fila = self.tabla_clientes.currentIndex().row()
-        if fila < 0:
-            self.mostrar_mensaje("Advertencia", "Seleccione un cliente para editar.", QMessageBox.Warning)
+        indice = self.tabla_clientes.currentIndex()
+        if not indice.isValid():
+            self.mostrar_mensaje("Advertencia", "Seleccione un cliente", QMessageBox.Warning)
             return
         
+        fila = indice.row()
         cliente_id = int(self.tabla_model.item(fila, 0).text())
-        cliente = self.obtener_cliente_por_id(cliente_id)
+        
+        # Obtener datos actuales de la tabla (o refrescar desde BD)
+        clientes = db_helper.get_clientes()
+        cliente = next((c for c in clientes if c['id'] == cliente_id), None)
         
         if cliente:
-            self.cargar_datos_formulario(cliente)
-            self.modo_edicion = True
             self.cliente_en_edicion = cliente
-            self.txt_nombre.setFocus()
+            self.modo_edicion = True
+            self.cargar_datos_formulario(cliente)
+            
+            # Cambiar texto del botón
+            self.btn_guardar.setText("Actualizar")
 
     def eliminar_cliente(self):
-        """Eliminar cliente seleccionado"""
-        fila = self.tabla_clientes.currentIndex().row()
-        if fila < 0:
-            self.mostrar_mensaje("Advertencia", "Seleccione un cliente para eliminar.", QMessageBox.Warning)
+        indice = self.tabla_clientes.currentIndex()
+        if not indice.isValid():
+            self.mostrar_mensaje("Advertencia", "Seleccione un cliente", QMessageBox.Warning)
             return
         
+        fila = indice.row()
         cliente_id = int(self.tabla_model.item(fila, 0).text())
-        cliente = self.obtener_cliente_por_id(cliente_id)
+        nombre = self.tabla_model.item(fila, 1).text()
         
-        if cliente:
-            respuesta = QMessageBox.question(
-                self, "Confirmar",
-                f"¿Eliminar cliente '{cliente['nombre']}'?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            
-            if respuesta == QMessageBox.Yes:
-                self.clientes_data.remove(cliente)
-                self.actualizar_tabla()
+        respuesta = QMessageBox.question(
+            self, "Confirmar",
+            f"¿Eliminar cliente '{nombre}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if respuesta == QMessageBox.Yes:
+            if db_helper.eliminar_cliente(cliente_id):
+                self.mostrar_mensaje("Éxito", "Cliente eliminado", QMessageBox.Information)
+                self.cargar_datos_desde_bd()
                 self.limpiar_formulario()
                 self.limpiar_panel_detalle()
+            else:
+                self.mostrar_mensaje("Error", "No se pudo eliminar", QMessageBox.Critical)
+
 
     def buscar_cliente(self):
-        """Buscar cliente por nombre"""
         texto, ok = QInputDialog.getText(self, "Buscar", "Nombre a buscar:")
         if ok and texto:
-            self.filtrar_tabla(texto)
+            try:
+                resultados = db_helper.buscar_clientes(texto)
+                self.actualizar_tabla_con_datos(resultados)
+            except Exception as e:
+                self.mostrar_mensaje("Error", f"Error en búsqueda: {e}", QMessageBox.Critical)
+
 
     # === FUNCIONES AUXILIARES ===
 
@@ -689,14 +722,14 @@ class ClientesWindow(QDialog):
         for frame in self.labels_detalle.values():
             self.actualizar_label_valor(frame, "---")
 
-    def actualizar_tabla(self):
-        """Actualizar datos de la tabla"""
+    def actualizar_tabla_con_datos(self, clientes):
+
         self.tabla_model.clear()
         self.tabla_model.setHorizontalHeaderLabels([
             "ID", "Nombre", "Tipo", "Email", "Teléfono"
         ])
         
-        for cliente in self.clientes_data:
+        for cliente in clientes:
             fila = [
                 QStandardItem(str(cliente['id'])),
                 QStandardItem(cliente['nombre']),
@@ -705,69 +738,29 @@ class ClientesWindow(QDialog):
                 QStandardItem(cliente['telefono'])
             ]
             
-            # Centrar ID y tipo
             fila[0].setTextAlignment(Qt.AlignCenter)
             fila[2].setTextAlignment(Qt.AlignCenter)
             
             self.tabla_model.appendRow(fila)
 
     def filtrar_tabla(self, texto_busqueda):
-        """Filtrar tabla por texto"""
-        texto = texto_busqueda.lower()
-        
-        # Limpiar tabla
-        self.tabla_model.clear()
-        self.tabla_model.setHorizontalHeaderLabels([
-            "ID", "Nombre", "Tipo", "Email", "Teléfono"
-        ])
-        
-        # Filtrar y mostrar
-        for cliente in self.clientes_data:
-            if (texto in cliente['nombre'].lower() or 
-                texto in cliente['email'].lower()):
-                
-                fila = [
-                    QStandardItem(str(cliente['id'])),
-                    QStandardItem(cliente['nombre']),
-                    QStandardItem(cliente['tipo']),
-                    QStandardItem(cliente['email']),
-                    QStandardItem(cliente['telefono'])
-                ]
-                
-                fila[0].setTextAlignment(Qt.AlignCenter)
-                fila[2].setTextAlignment(Qt.AlignCenter)
-                
-                self.tabla_model.appendRow(fila)
+        try:
+            if texto_busqueda.strip():
+                resultados = db_helper.buscar_clientes(texto_busqueda)
+            else:
+                resultados = db_helper.get_clientes()
+            
+            self.actualizar_tabla_con_datos(resultados)
+        except Exception as e:
+            print(f"Error al filtrar: {e}")
 
-    def cargar_datos_ejemplo(self):
-        """Cargar datos de ejemplo"""
-        ejemplos = [
-            {
-                'id': 1, 'nombre': 'Juan Pérez García', 'tipo': 'Particular',
-                'email': 'juan.perez@email.com', 'telefono': '(33) 1234-5678',
-                'calle': 'Av. Hidalgo 123', 'colonia': 'Centro',
-                'ciudad': 'Guadalajara', 'estado': 'Jalisco', 'cp': '44100',
-                'pais': 'México', 'rfc': ''
-            },
-            {
-                'id': 2, 'nombre': 'María López Sánchez', 'tipo': 'Empresa',
-                'email': 'maria.lopez@empresa.com', 'telefono': '(33) 9876-5432',
-                'calle': 'Calle Morelos 456', 'colonia': 'Americana',
-                'ciudad': 'Zapopan', 'estado': 'Jalisco', 'cp': '45100',
-                'pais': 'México', 'rfc': 'LOSM850315ABC'
-            },
-            {
-                'id': 3, 'nombre': 'Carlos Ramírez Torres', 'tipo': 'Particular',
-                'email': 'carlos.ramirez@correo.com', 'telefono': '(33) 5555-1234',
-                'calle': 'Av. Américas 789', 'colonia': 'Providencia',
-                'ciudad': 'Guadalajara', 'estado': 'Jalisco', 'cp': '44630',
-                'pais': 'México', 'rfc': ''
-            }
-        ]
-        
-        self.clientes_data.extend(ejemplos)
-        self.proximo_id = 4
-        self.actualizar_tabla()
+    def cargar_datos_desde_bd(self):
+        try:
+            clientes = db_helper.get_clientes()
+            self.actualizar_tabla_con_datos(clientes)
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"Error al cargar clientes: {e}", QMessageBox.Critical)
+
 
     def mostrar_mensaje(self, titulo, mensaje, tipo):
         """Mostrar mensaje al usuario"""

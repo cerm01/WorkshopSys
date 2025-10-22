@@ -6,6 +6,7 @@ Simplifica el uso del CRUD en las ventanas
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from server.database import get_db_sync
 from server import crud
