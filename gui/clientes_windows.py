@@ -530,17 +530,17 @@ class ClientesWindow(QDialog):
         
         try:
             if self.modo_edicion and self.cliente_en_edicion:
-                # Actualizar
-                datos['id'] = self.cliente_en_edicion['id']
-                if db_helper.actualizar_cliente(datos):
+                # ✅ CORRECCIÓN: Pasar cliente_id como primer argumento
+                if db_helper.actualizar_cliente(self.cliente_en_edicion['id'], datos):
                     self.mostrar_mensaje("Éxito", "Cliente actualizado", QMessageBox.Information)
                     self.cargar_datos_desde_bd()
                     self.limpiar_formulario()
                 else:
                     self.mostrar_mensaje("Error", "No se pudo actualizar", QMessageBox.Critical)
             else:
-                # Crear nuevo
-                if db_helper.agregar_cliente(datos):
+                # Crear nuevo - también hay error aquí
+                # ✅ CORRECCIÓN: El método se llama crear_cliente, no agregar_cliente
+                if db_helper.crear_cliente(datos):
                     self.mostrar_mensaje("Éxito", "Cliente guardado", QMessageBox.Information)
                     self.cargar_datos_desde_bd()
                     self.limpiar_formulario()
