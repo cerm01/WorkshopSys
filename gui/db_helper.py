@@ -113,6 +113,12 @@ class DatabaseHelper:
         except Exception as e:
             print(f"Error al eliminar proveedor: {e}")
             return False
+        
+    def buscar_proveedores(self, texto: str) -> List[Dict]:
+        """Buscar proveedores"""
+        db = self._get_session()
+        proveedores = crud.search_proveedores(db, texto)
+        return [self._proveedor_to_dict(p) for p in proveedores]
     
     # ==================== INVENTARIO ====================
     

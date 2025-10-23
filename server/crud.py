@@ -138,6 +138,16 @@ def delete_proveedor(db: Session, proveedor_id: int, soft_delete: bool = True) -
         return True
     return False
 
+def search_proveedores(db: Session, busqueda: str) -> List[Proveedor]:
+    """Buscar proveedores por nombre, email o teléfono"""
+    return db.query(Proveedor).filter(
+        or_(
+            Proveedor.nombre.ilike(f"%{busqueda}%"),
+            Proveedor.email.ilike(f"%{busqueda}%"),
+            Proveedor.telefono.ilike(f"%{busqueda}%")
+        )
+    ).all()
+
 
 # ==================== INVENTARIO ====================
 
