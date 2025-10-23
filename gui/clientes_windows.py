@@ -24,7 +24,7 @@ class ClientesWindow(QDialog):
         self.setWindowTitle("Gestión de Clientes")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
 
-        # Configuración inicial - SIEMPRE resetear geometría
+        # Configuración inicial
         self.setGeometry(100, 100, 1400, 800)
         self.setMinimumSize(1200, 700)
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
@@ -458,7 +458,7 @@ class ClientesWindow(QDialog):
             ("btn_eliminar", "Eliminar", self.eliminar_cliente),
             ("btn_buscar", "Buscar", self.buscar_cliente),
             ("btn_limpiar", "Limpiar", self.limpiar_formulario),
-            ("btn_cerrar", "Cerrar", self.cerrar_ventana)  # Cambiado
+            ("btn_cerrar", "Cerrar", self.cerrar_ventana) 
         ]
         
         # Crear cada botón y guardarlo como atributo de instancia
@@ -530,7 +530,6 @@ class ClientesWindow(QDialog):
         
         try:
             if self.modo_edicion and self.cliente_en_edicion:
-                # ✅ CORRECCIÓN: Pasar cliente_id como primer argumento
                 if db_helper.actualizar_cliente(self.cliente_en_edicion['id'], datos):
                     self.mostrar_mensaje("Éxito", "Cliente actualizado", QMessageBox.Information)
                     self.cargar_datos_desde_bd()
@@ -538,8 +537,6 @@ class ClientesWindow(QDialog):
                 else:
                     self.mostrar_mensaje("Error", "No se pudo actualizar", QMessageBox.Critical)
             else:
-                # Crear nuevo - también hay error aquí
-                # ✅ CORRECCIÓN: El método se llama crear_cliente, no agregar_cliente
                 if db_helper.crear_cliente(datos):
                     self.mostrar_mensaje("Éxito", "Cliente guardado", QMessageBox.Information)
                     self.cargar_datos_desde_bd()

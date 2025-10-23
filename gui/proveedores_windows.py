@@ -15,6 +15,8 @@ from styles import (
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
 
+from db_helper import db_helper
+
 class ProveedoresWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -23,27 +25,32 @@ class ProveedoresWindow(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
 
         # Configuración inicial
+
         self.setMinimumSize(1200, 700)
-        self.setWindowState(Qt.WindowMaximized)
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
 
         # Variables de control
         self.proveedor_en_edicion = None
         self.modo_edicion = False
         
-        # Base de datos simulada
-        self.proveedores_data = []
-        self.proximo_id = 1
-        
         # Configurar interfaz
         self.setup_ui()
-        self.conectar_senales()
-        self.cargar_datos_ejemplo()
+        self.cargar_datos_desde_bd()
+
+        #Forzar maximización
+        QTimer.singleShot(100, self.maximizar_ventana)
+
+    def maximizar_ventana(self):
+        """Maximizar la ventana forzando actualización completa"""
+        self.setWindowState(Qt.WindowMaximized)
+        # Forzar actualización del layout
+        QTimer.singleShot(50, self.forzar_resize_completo)
 
     def setup_ui(self):
         """Configurar la interfaz de usuario"""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
         
         # Formulario de proveedor con labels al lado
         self.crear_formulario_proveedor(main_layout)
@@ -58,7 +65,7 @@ class ProveedoresWindow(QDialog):
         # Panel de detalles (30% del espacio)
         self.crear_panel_detalle(contenedor_horizontal)
         
-        main_layout.addLayout(contenedor_horizontal, 1)
+        main_layout.addLayout(contenedor_horizontal, 10)
         
         # Botones principales
         self.crear_botones_principales(main_layout)
@@ -70,8 +77,7 @@ class ProveedoresWindow(QDialog):
         grupo_form = QGroupBox()
         grupo_form.setStyleSheet(GROUP_BOX_STYLE)
         grupo_form.setMaximumHeight(180)  # Altura más compacta
-        
-        # Usar QGridLayout para alineación perfecta
+
         grid = QGridLayout()
         grid.setSpacing(10)
         grid.setContentsMargins(15, 15, 15, 15)
@@ -275,12 +281,12 @@ class ProveedoresWindow(QDialog):
         self.tabla_proveedores.setSelectionMode(QTableView.SingleSelection)
         self.tabla_proveedores.setEditTriggers(QTableView.NoEditTriggers)
         self.tabla_proveedores.setStyleSheet(TABLE_STYLE)
-        
-        # CLAVE: Hacer que la tabla ocupe todo el espacio horizontal
         self.tabla_proveedores.horizontalHeader().setStretchLastSection(True)
         self.tabla_proveedores.verticalHeader().setDefaultSectionSize(35)
         
         # Configurar header
+        self.tabla_proveedores.selectionModel().selectionChanged.connect(self.actualizar_panel_detalle)
+        
         header = self.tabla_proveedores.horizontalHeader()
         header.setFixedHeight(40)
         
@@ -293,32 +299,47 @@ class ProveedoresWindow(QDialog):
         super().showEvent(event)
         
         # Esperar a que la ventana esté completamente renderizada
-        from PyQt5.QtCore import QTimer
+        self.layout().invalidate()
+        self.layout().activate()
+
+        # Ajustar columnas de la tabla
         QTimer.singleShot(50, self.ajustar_columnas_tabla)
+
+        # Forzar actualización completa después de un breve retraso
+        QTimer.singleShot(100, self.forzar_resize_completo)
+
+    def forzar_resize_completo(self):
+        """Forzar un resize completo para ajustar layouts y widgets"""
+        # Actualizar geometria
+        self.updateGeometry()
+
+        # Invalidar y activar el layout
+        if self.layout():
+            self.layout().invalidate()
+            self.layout().activate()
+
+        #Forzar actualizacion visual
+        self.update()
+
+        # Ajustar columnas nuevamente
+        self.ajustar_columnas_tabla()
 
     def ajustar_columnas_tabla(self):
         """Ajustar anchos de columnas con proporciones exactas"""
         header = self.tabla_proveedores.horizontalHeader()
-        
-        # Obtener el ancho total disponible
         ancho_total = self.tabla_proveedores.viewport().width()
         
-        # Calcular anchos según proporciones: 10%, 35%, 10%, 35%, 10%
-        ancho_id = int(ancho_total * 0.10)
-        ancho_nombre = int(ancho_total * 0.35)
-        ancho_tipo = int(ancho_total * 0.10)
-        ancho_email = int(ancho_total * 0.35)
-        ancho_telefono = int(ancho_total * 0.10)
+        # Proporciones: 10%, 35%, 10%, 35%, 10%
+        anchos = [
+            int(ancho_total * 0.10),  # ID
+            int(ancho_total * 0.35),  # Nombre
+            int(ancho_total * 0.10),  # Tipo
+            int(ancho_total * 0.35),  # Email
+            int(ancho_total * 0.10)   # Teléfono
+        ]
         
-        # Aplicar anchos
-        header.resizeSection(0, ancho_id)
-        header.resizeSection(1, ancho_nombre)
-        header.resizeSection(2, ancho_tipo)
-        header.resizeSection(3, ancho_email)
-        header.resizeSection(4, ancho_telefono)
-        
-        # Bloquear redimensionamiento manual
-        for i in range(5):
+        for i, ancho in enumerate(anchos):
+            header.resizeSection(i, ancho)
             header.setSectionResizeMode(i, QHeaderView.Fixed)
 
     def crear_panel_detalle(self, parent_layout):
@@ -426,57 +447,63 @@ class ProveedoresWindow(QDialog):
         layout = QHBoxLayout()
         layout.setSpacing(15)
         
-        botones = [
-            ("Nuevo", self.nuevo_proveedor),
-            ("Guardar", self.guardar_proveedor),
-            ("Editar", self.editar_proveedor),
-            ("Eliminar", self.eliminar_proveedor),
-            ("Buscar", self.buscar_proveedor),
-            ("Limpiar", self.limpiar_formulario),
-            ("Cerrar", self.close)
+
+        botones_config = [
+            ("btn_nuevo", "Nuevo", self.nuevo_proveedor),
+            ("btn_guardar", "Guardar", self.guardar_proveedor),
+            ("btn_editar", "Editar", self.editar_proveedor),
+            ("btn_eliminar", "Eliminar", self.eliminar_proveedor),
+            ("btn_buscar", "Buscar", self.buscar_proveedor),
+            ("btn_limpiar", "Limpiar", self.limpiar_formulario),
+            ("btn_cerrar", "Cerrar", self.cerrar_ventana) 
         ]
         
-        for texto, funcion in botones:
+
+        for nombre_attr, texto, funcion in botones_config:
             btn = QPushButton(texto)
             btn.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
             btn.setCursor(Qt.PointingHandCursor)
             btn.setFixedHeight(50)
             btn.clicked.connect(funcion)
+
+            # Guardar referencia al botón como atributo de instancia
+            setattr(self, nombre_attr, btn)
             layout.addWidget(btn)
-        
+
         parent_layout.addLayout(layout)
 
-    def conectar_senales(self):
-        """Conectar señales de los controles"""
-        self.tabla_proveedores.doubleClicked.connect(self.editar_proveedor)
-        self.tabla_proveedores.selectionModel().currentChanged.connect(self.actualizar_panel_detalle)
-
-    def actualizar_panel_detalle(self, current, previous):
+    
+    def actualizar_panel_detalle(self):
         """Actualizar panel de detalles cuando se selecciona un proveedor"""
-        if not current.isValid():
+        indice = self.tabla_proveedores.currentIndex()
+        if not indice.isValid():
             return
         
-        fila = current.row()
+        fila = indice.row()
         proveedor_id = int(self.tabla_model.item(fila, 0).text())
-        proveedor = self.obtener_proveedor_por_id(proveedor_id)
+
+        try: 
+            proveedores = db_helper.get_proveedores()
+            proveedor = next((p for p in proveedores if p['id'] == proveedor_id), None)
         
-        if proveedor:
-            # Actualizar cada campo del detalle
-            self.actualizar_label_valor(self.labels_detalle['id'], str(proveedor['id']))
-            self.actualizar_label_valor(self.labels_detalle['nombre'], proveedor['nombre'])
-            self.actualizar_label_valor(self.labels_detalle['tipo'], proveedor['tipo'])
-            self.actualizar_label_valor(self.labels_detalle['email'], proveedor['email'])
-            self.actualizar_label_valor(self.labels_detalle['telefono'], proveedor['telefono'])
-            
-            # Dirección completa
-            direccion = f"{proveedor.get('calle', '')}\n{proveedor.get('colonia', '')}"
-            self.actualizar_label_valor(self.labels_detalle['direccion'], direccion.strip())
-            
-            self.actualizar_label_valor(self.labels_detalle['ciudad'], proveedor['ciudad'])
-            self.actualizar_label_valor(self.labels_detalle['estado'], proveedor['estado'])
-            self.actualizar_label_valor(self.labels_detalle['cp'], proveedor['cp'])
-            self.actualizar_label_valor(self.labels_detalle['pais'], proveedor.get('pais', 'México'))
-            self.actualizar_label_valor(self.labels_detalle['rfc'], proveedor['rfc'] or '---')
+            if proveedor:
+                # Actualizar cada campo del detalle
+                self.actualizar_label_valor(self.labels_detalle['id'], str(proveedor['id']))
+                self.actualizar_label_valor(self.labels_detalle['nombre'], proveedor['nombre'])
+                self.actualizar_label_valor(self.labels_detalle['tipo'], proveedor['tipo'])
+                self.actualizar_label_valor(self.labels_detalle['email'], proveedor['email'])
+                self.actualizar_label_valor(self.labels_detalle['telefono'], proveedor['telefono'])
+                
+                # Dirección completa
+                direccion = f"{proveedor.get('calle', '')}\n{proveedor.get('colonia', '')}"
+                self.actualizar_label_valor(self.labels_detalle['direccion'], direccion.strip()) 
+                self.actualizar_label_valor(self.labels_detalle['ciudad'], proveedor['ciudad'])
+                self.actualizar_label_valor(self.labels_detalle['estado'], proveedor['estado'])
+                self.actualizar_label_valor(self.labels_detalle['cp'], proveedor['cp'])
+                self.actualizar_label_valor(self.labels_detalle['pais'], proveedor.get('pais', 'México'))
+                self.actualizar_label_valor(self.labels_detalle['rfc'], proveedor['rfc'] or '---')
+        except Exception as e:
+            print(f"Error al actualizar panel de detalles: {e}")
 
     def actualizar_label_valor(self, frame, valor):
         """Actualizar el valor en un label del panel de detalles"""
@@ -494,87 +521,83 @@ class ProveedoresWindow(QDialog):
 
     def guardar_proveedor(self):
         """Guardar proveedor (nuevo o actualización)"""
-        if self.modo_edicion:
-            self.actualizar_proveedor()
-        else:
-            self.agregar_proveedor()
-
-    def agregar_proveedor(self):
-        """Agregar nuevo proveedor"""
         if not self.validar_formulario():
             return
         
-        proveedor = self.obtener_datos_formulario()
-        proveedor['id'] = self.proximo_id
-        
-        self.proveedores_data.append(proveedor)
-        self.proximo_id += 1
-        
-        self.actualizar_tabla()
-        self.limpiar_formulario()
-        self.mostrar_mensaje("Éxito", "Proveedor agregado correctamente.", QMessageBox.Information)
-
-    def actualizar_proveedor(self):
-        """Actualizar proveedor existente"""
-        if not self.validar_formulario() or not self.proveedor_en_edicion:
-            return
-        
         datos = self.obtener_datos_formulario()
-        
-        # Actualizar en la lista
-        for i, proveedor in enumerate(self.proveedores_data):
-            if proveedor['id'] == self.proveedor_en_edicion['id']:
-                self.proveedores_data[i].update(datos)
-                break
-        
-        self.actualizar_tabla()
-        self.cancelar_edicion()
-        self.mostrar_mensaje("Éxito", "Proveedor actualizado correctamente.", QMessageBox.Information)
+
+        try:
+            if self.modo_edicion and self.proveedor_en_edicion:
+                if db_helper.actualizar_proveedor(self.proveedor_en_edicion['id'], datos):
+                    self.mostrar_mensaje("Éxito", "Proveedor actualizado correctamente.", QMessageBox.Information)
+                    self.cargar_datos_desde_bd()
+                    self.cancelar_edicion()
+                else:
+                    self.mostrar_mensaje("Error", "No se pudo actualizar el proveedor.", QMessageBox.Critical)
+            else:
+                if db_helper.crear_proveedor(datos):
+                    self.mostrar_mensaje("Éxito", "Proveedor agregado correctamente.", QMessageBox.Information)
+                    self.cargar_datos_desde_bd()
+                    self.limpiar_formulario()
+                else:
+                    self.mostrar_mensaje("Error", "No se pudo agregar el proveedor.", QMessageBox.Critical)
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"Ocurrió un error: {e}", QMessageBox.Critical)
 
     def editar_proveedor(self):
         """Cargar proveedor seleccionado para edición"""
-        fila = self.tabla_proveedores.currentIndex().row()
-        if fila < 0:
+        indice = self.tabla_proveedores.currentIndex()
+        if not indice.isValid():
             self.mostrar_mensaje("Advertencia", "Seleccione un proveedor para editar.", QMessageBox.Warning)
             return
         
+        fila = indice.row()
         proveedor_id = int(self.tabla_model.item(fila, 0).text())
-        proveedor = self.obtener_proveedor_por_id(proveedor_id)
-        
+
+        proveedor = db_helper.get_proveedores()
+        proveedor = next((p for p in proveedor if p['id'] == proveedor_id), None)
+
         if proveedor:
-            self.cargar_datos_formulario(proveedor)
-            self.modo_edicion = True
             self.proveedor_en_edicion = proveedor
-            self.txt_nombre.setFocus()
+            self.modo_edicion = True
+            self.cargar_datos_formulario(proveedor)
+            self.btn_guardar.setText("Actualizar")
 
     def eliminar_proveedor(self):
         """Eliminar proveedor seleccionado"""
-        fila = self.tabla_proveedores.currentIndex().row()
-        if fila < 0:
+        indice = self.tabla_proveedores.currentIndex()
+        if not indice.isValid():
             self.mostrar_mensaje("Advertencia", "Seleccione un proveedor para eliminar.", QMessageBox.Warning)
             return
         
+        fila = indice.row()
         proveedor_id = int(self.tabla_model.item(fila, 0).text())
-        proveedor = self.obtener_proveedor_por_id(proveedor_id)
-        
-        if proveedor:
-            respuesta = QMessageBox.question(
-                self, "Confirmar",
-                f"¿Eliminar proveedor '{proveedor['nombre']}'?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            
-            if respuesta == QMessageBox.Yes:
-                self.proveedors_data.remove(proveedor)
-                self.actualizar_tabla()
+        nombre = self.tabla_model.item(fila, 1).text()
+
+        respuesta = QMessageBox.question(
+            self, "Confirmar",
+            f"¿Eliminar proveedor '{nombre}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if respuesta == QMessageBox.Yes:
+    
+            if db_helper.eliminar_proveedor(proveedor_id):
+                self.mostrar_mensaje("Éxito", "Proveedor eliminado", QMessageBox.Information)
+                self.cargar_datos_desde_bd()
                 self.limpiar_formulario()
-                self.limpiar_panel_detalle()
+            else:
+                self.mostrar_mensaje("Error", "No se pudo eliminar", QMessageBox.Critical)
 
     def buscar_proveedor(self):
         """Buscar proveedor por nombre"""
         texto, ok = QInputDialog.getText(self, "Buscar", "Nombre a buscar:")
-        if ok and texto:
-            self.filtrar_tabla(texto)
+        if ok and texto: 
+            try:
+                resultados = db_helper.buscar_proveedores(texto)
+                self.actualizar_tabla(resultados)
+            except Exception as e:
+                self.mostrar_mensaje("Error", f"No se pudo buscar: {e}", QMessageBox.Critical)
 
     # === FUNCIONES AUXILIARES ===
 
@@ -608,10 +631,6 @@ class ProveedoresWindow(QDialog):
         self.cmb_estado.setCurrentText(proveedor['estado'])
         self.txt_pais.setText(proveedor.get('pais', 'México'))
         self.txt_rfc.setText(proveedor['rfc'])
-
-    def obtener_proveedor_por_id(self, proveedor_id):
-        """Buscar proveedor por ID"""
-        return next((c for c in self.proveedores_data if c['id'] == proveedor_id), None)
 
     def validar_formulario(self):
         """Validar datos del formulario"""
@@ -683,20 +702,21 @@ class ProveedoresWindow(QDialog):
         """Cancelar modo de edición"""
         self.modo_edicion = False
         self.proveedor_en_edicion = None
+        self.btn_guardar.setText("Guardar")
 
-    def limpiar_panel_detalle(self):
-        """Limpiar el panel de detalles"""
-        for frame in self.labels_detalle.values():
-            self.actualizar_label_valor(frame, "---")
+    def cargar_datos_desde_bd(self):
+        """Cargar datos de proveedores desde la base de datos"""
+        try:
+            proveedores = db_helper.get_proveedores()
+            self.actualizar_tabla(proveedores)
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"No se pudieron cargar los datos: {e}", QMessageBox.Critical)
 
-    def actualizar_tabla(self):
+    def actualizar_tabla(self, proveedores):
         """Actualizar datos de la tabla"""
-        self.tabla_model.clear()
-        self.tabla_model.setHorizontalHeaderLabels([
-            "ID", "Nombre", "Tipo", "Email", "Teléfono"
-        ])
+        self.tabla_model.setRowCount(0)
         
-        for proveedor in self.proveedores_data:
+        for proveedor in proveedores:
             fila = [
                 QStandardItem(str(proveedor['id'])),
                 QStandardItem(proveedor['nombre']),
@@ -705,69 +725,10 @@ class ProveedoresWindow(QDialog):
                 QStandardItem(proveedor['telefono'])
             ]
             
-            # Centrar ID y tipo
-            fila[0].setTextAlignment(Qt.AlignCenter)
-            fila[2].setTextAlignment(Qt.AlignCenter)
+            for item in fila:
+                item.setTextAlignment(Qt.AlignCenter)
             
             self.tabla_model.appendRow(fila)
-
-    def filtrar_tabla(self, texto_busqueda):
-        """Filtrar tabla por texto"""
-        texto = texto_busqueda.lower()
-        
-        # Limpiar tabla
-        self.tabla_model.clear()
-        self.tabla_model.setHorizontalHeaderLabels([
-            "ID", "Nombre", "Tipo", "Email", "Teléfono"
-        ])
-        
-        # Filtrar y mostrar
-        for proveedor in self.proveedores_data:
-            if (texto in proveedor['nombre'].lower() or 
-                texto in proveedor['email'].lower()):
-                
-                fila = [
-                    QStandardItem(str(proveedor['id'])),
-                    QStandardItem(proveedor['nombre']),
-                    QStandardItem(proveedor['tipo']),
-                    QStandardItem(proveedor['email']),
-                    QStandardItem(proveedor['telefono'])
-                ]
-                
-                fila[0].setTextAlignment(Qt.AlignCenter)
-                fila[2].setTextAlignment(Qt.AlignCenter)
-                
-                self.tabla_model.appendRow(fila)
-
-    def cargar_datos_ejemplo(self):
-        """Cargar datos de ejemplo"""
-        ejemplos = [
-            {
-                'id': 1, 'nombre': 'Juan Pérez García', 'tipo': 'Particular',
-                'email': 'juan.perez@email.com', 'telefono': '(33) 1234-5678',
-                'calle': 'Av. Hidalgo 123', 'colonia': 'Centro',
-                'ciudad': 'Guadalajara', 'estado': 'Jalisco', 'cp': '44100',
-                'pais': 'México', 'rfc': ''
-            },
-            {
-                'id': 2, 'nombre': 'María López Sánchez', 'tipo': 'Empresa',
-                'email': 'maria.lopez@empresa.com', 'telefono': '(33) 9876-5432',
-                'calle': 'Calle Morelos 456', 'colonia': 'Americana',
-                'ciudad': 'Zapopan', 'estado': 'Jalisco', 'cp': '45100',
-                'pais': 'México', 'rfc': 'LOSM850315ABC'
-            },
-            {
-                'id': 3, 'nombre': 'Carlos Ramírez Torres', 'tipo': 'Particular',
-                'email': 'carlos.ramirez@correo.com', 'telefono': '(33) 5555-1234',
-                'calle': 'Av. Américas 789', 'colonia': 'Providencia',
-                'ciudad': 'Guadalajara', 'estado': 'Jalisco', 'cp': '44630',
-                'pais': 'México', 'rfc': ''
-            }
-        ]
-        
-        self.proveedores_data.extend(ejemplos)
-        self.proximo_id = 4
-        self.actualizar_tabla()
 
     def mostrar_mensaje(self, titulo, mensaje, tipo):
         """Mostrar mensaje al usuario"""
@@ -777,7 +738,25 @@ class ProveedoresWindow(QDialog):
 
     def closeEvent(self, event):
         """Evento al cerrar la ventana"""
+        self.limpiar_formulario()
+
+        self.setGeometry(100, 100, 1400, 800)
         event.accept()
+
+    def cerrar_ventana(self):
+        """Cerrar la ventana"""
+        
+        self.setGeometry(100, 100, 1400, 800)
+
+        self.limpiar_formulario()
+
+        self.close()
+
+    def resizeEvent(self, event):
+        """Evento de resize para ajustar columnas de la tabla"""
+        super().resizeEvent(event)
+        if hasattr(self, 'tabla_proveedores'):
+            QTimer.singleShot(50, self.ajustar_columnas_tabla)
 
 
 if __name__ == "__main__":
