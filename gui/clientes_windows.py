@@ -695,6 +695,9 @@ class ClientesWindow(QDialog):
         self.txt_rfc.clear()
         self.cancelar_edicion()
 
+        # Volver a cargar todos los datos en la tabla
+        self.cargar_datos_desde_bd()
+
     def cancelar_edicion(self):
         """Cancelar modo de edición"""
         self.modo_edicion = False
