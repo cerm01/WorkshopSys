@@ -1,20 +1,24 @@
 import sys
+import os
+from datetime import datetime
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, 
-    QPushButton, QSizePolicy, QApplication,
-    QLabel, QLineEdit, QGridLayout, QGroupBox,
-    QDoubleSpinBox, QMessageBox, QTableView, QHeaderView,
-    QMenu, QAction, QFrame, QWidget, QDateEdit
+    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSizePolicy, QApplication,
+    QLabel, QLineEdit, QGridLayout, QGroupBox, QDoubleSpinBox, QMessageBox,
+    QTableView, QHeaderView, QMenu, QAction, QFrame, QWidget, QDateEdit, QCompleter
 )
-from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QIcon, QColor, QFont
+from PyQt5.QtCore import Qt, QDate, QStringListModel
+from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QColor, QFont
+
+# Importar componentes de base de datos
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from server.database import get_db_sync
+from server import crud
 
 # Import styles
 from styles import (
-    SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2,
-    GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
+    SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE, LABEL_STYLE,
+    INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )
-from datetime import datetime
 
 
 class NotasWindow(QDialog):
@@ -31,17 +35,22 @@ class NotasWindow(QDialog):
         # Aplicar estilos
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
 
-        # Variable para seguimiento de edición
+        # Variables de control
         self.fila_en_edicion = -1
-
-        # Diccionario para almacenar el IVA de cada fila
-        self.iva_por_fila = {}      
-
-        # Diccionario para almacenar el tipo de cada fila
-        self.tipo_por_fila = {}  # 'normal', 'nota', 'seccion'  
+        self.iva_por_fila = {}
+        self.tipo_por_fila = {}  # 'normal', 'nota', 'seccion'
+        
+        # Variables para BD
+        self.db = None
+        self.clientes = []
+        self.clientes_dict = {}  # Diccionario: nombre -> id
+        self.nota_actual_id = None
 
         # Crear la interfaz
         self.setup_ui()
+        
+        # Cargar datos de BD
+        self.cargar_clientes_bd()
     
     def setup_ui(self):
         """Configurar la interfaz de usuario"""
@@ -49,7 +58,7 @@ class NotasWindow(QDialog):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
         
-        # NUEVO: Crear grupo de datos del cliente
+        # Crear grupo de datos del cliente
         self.crear_grupo_cliente(main_layout)
         
         # Crear el contenedor para los datos de producto/servicio
@@ -114,113 +123,36 @@ class NotasWindow(QDialog):
             }
         """)
         self.txt_folio.setReadOnly(True)
-        self.txt_folio.setPlaceholderText("Folio del sistema")
+        self.txt_folio.setPlaceholderText("NV-Auto")
         
-        # Campo Cliente
+        # Campo Cliente - CON AUTOCOMPLETADO
         lbl_cliente = QLabel("Cliente")
         lbl_cliente.setStyleSheet(LABEL_STYLE)
         self.txt_cliente = QLineEdit()
         self.txt_cliente.setStyleSheet(INPUT_STYLE)
-        self.txt_cliente.setPlaceholderText("Nombre del cliente")
+        self.txt_cliente.setPlaceholderText("Escriba para buscar cliente...")
         
-        # Campo Fecha con QDateEdit
+        # Campo Fecha
         lbl_fecha = QLabel("Fecha")
         lbl_fecha.setStyleSheet(LABEL_STYLE)
         self.date_fecha = QDateEdit()
         self.date_fecha.setCalendarPopup(True)
         self.date_fecha.setDate(QDate.currentDate())
         self.date_fecha.setDisplayFormat("dd/MM/yyyy")
+        self.date_fecha.setStyleSheet(self._obtener_estilo_calendario())
         
-        # Aplicar estilo personalizado al QDateEdit (código existente del calendario...)
-        self.date_fecha.setStyleSheet("""
-            QDateEdit {
-                padding: 8px;
-                border: 2px solid #F5F5F5;
-                border-radius: 6px;
-                background-color: #F5F5F5;
-                min-height: 25px;
-                font-size: 16px;
-                margin-top: 0px;
-            }
-            
-            QDateEdit:focus {
-                border: 2px solid #2CD5C4;
-                background-color: white;
-            }
-            
-            QDateEdit::drop-down {
-                border: 0px;
-                background: transparent;
-                subcontrol-position: right center;
-                width: 30px;
-            }
-            
-            QDateEdit::down-arrow {
-                image: url(assets/icons/calendario.png);
-                width: 16px;
-                height: 16px;
-            }
-            
-            QCalendarWidget {
-                background-color: white;
-                border: 2px solid #00788E;
-                border-radius: 8px;
-            }
-            
-            QCalendarWidget QToolButton {
-                color: white;
-                background-color: #00788E;
-                border: none;
-                border-radius: 4px;
-                margin: 2px;
-                padding: 4px;
-            }
-            
-            QCalendarWidget QToolButton:hover {
-                background-color: #2CD5C4;
-            }
-            
-            QCalendarWidget QMenu {
-                background-color: white;
-                border: 1px solid #00788E;
-            }
-            
-            QCalendarWidget QSpinBox {
-                background-color: white;
-                border: 1px solid #00788E;
-                border-radius: 4px;
-                padding: 2px;
-            }
-            
-            QCalendarWidget QAbstractItemView:enabled {
-                background-color: white;
-                color: #333333;
-                selection-background-color: #2CD5C4;
-                selection-color: white;
-            }
-            
-            QCalendarWidget QAbstractItemView:disabled {
-                color: #999999;
-            }
-            
-            QCalendarWidget QWidget#qt_calendar_navigationbar {
-                background-color: #00788E;
-                border-radius: 4px;
-            }
-        """)
-        
-        # Campo Referencia del vehículo/cliente
+        # Campo Referencia
         lbl_referencia = QLabel("Referencia")
         lbl_referencia.setStyleSheet(LABEL_STYLE)
         self.txt_referencia = QLineEdit()
         self.txt_referencia.setStyleSheet(INPUT_STYLE)
-        self.txt_referencia.setPlaceholderText("Ref. vehículo/cliente")
+        self.txt_referencia.setPlaceholderText("Placa/ID de vehículo/cliente")
         
         # Agregar widgets al layout
         layout.addWidget(lbl_folio)
-        layout.addWidget(self.txt_folio, 1)  # Menos espacio para folio
+        layout.addWidget(self.txt_folio, 1)
         layout.addWidget(lbl_cliente)
-        layout.addWidget(self.txt_cliente, 2)  # Más espacio para cliente
+        layout.addWidget(self.txt_cliente, 2)
         layout.addWidget(lbl_fecha)
         layout.addWidget(self.date_fecha, 1)
         layout.addWidget(lbl_referencia)
@@ -231,13 +163,18 @@ class NotasWindow(QDialog):
 
     def obtener_datos_cliente(self):
         """Obtiene los datos del cliente del formulario"""
+        # Obtener el ID del cliente desde el diccionario
+        nombre_cliente = self.txt_cliente.text()
+        cliente_id = self.clientes_dict.get(nombre_cliente, None)
+        
         return {
-            'cliente': self.txt_cliente.text(),
-            'fecha': self.date_fecha.date().toString("dd/MM/yyyy"),
+            'cliente_id': cliente_id,
+            'fecha': self.date_fecha.date().toPyDate(),
             'referencia': self.txt_referencia.text()
         }
     
     def crear_grupo_producto_servicio(self, parent_layout):
+        """Crear grupo de campos para producto/servicio"""
         grupo = QGroupBox("")
         grupo.setStyleSheet(GROUP_BOX_STYLE)
         
@@ -362,336 +299,11 @@ class NotasWindow(QDialog):
         self.tabla_items.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tabla_items.customContextMenuRequested.connect(self.mostrar_menu_contextual)
         
-        # Establecer altura para mostrar 20 filas (20 filas * 30px + 40px para el encabezado)
+        # Establecer altura para mostrar 15 filas
         self.tabla_items.setMinimumHeight(15 * 30 + 40)
         
         # Agregar al layout
         parent_layout.addWidget(self.tabla_items)
-    
-    def conectar_senales(self):
-        """Conectar las señales de los controles"""
-        # Calcular importe cuando cambia cantidad o precio unitario
-        self.txt_cantidad.textChanged.connect(self.calcular_importe)
-        self.txt_precio.textChanged.connect(self.calcular_importe)
-        self.btn_agregar.clicked.connect(self.agregar_a_tabla)
-        
-        # Conectar doble clic en tabla para editar
-        self.tabla_items.doubleClicked.connect(self.cargar_item_para_editar)
-    
-    def mostrar_menu_contextual(self, position):
-        """Muestra un menú contextual al hacer clic derecho en una fila de la tabla"""
-        # Obtener el índice del elemento seleccionado
-        indexes = self.tabla_items.selectedIndexes()
-        
-        # Crear menú contextual
-        menu = QMenu(self)
-        
-        # Agregar opciones para insertar nota o sección
-        menu.addSection("Insertar")
-        
-        action_nota = QAction("➕ Agregar Nota", self)
-        action_nota.triggered.connect(self.insertar_nota)
-        menu.addAction(action_nota)
-        
-        action_seccion = QAction("📁 Agregar Sección", self)
-        action_seccion.triggered.connect(self.insertar_seccion)
-        menu.addAction(action_seccion)
-        
-        menu.addSeparator()
-        
-        # Solo mostrar opciones de mover/eliminar si hay una fila seleccionada
-        if indexes:
-            fila = indexes[0].row()
-            tipo_fila = self.tipo_por_fila.get(fila, 'normal')
-            
-            menu.addSection("Acciones")
-            
-            # Agregar opción de editar para notas y secciones
-            if tipo_fila in ['nota', 'seccion']:
-                action_editar = QAction("✏️ Editar", self)
-                action_editar.triggered.connect(lambda: self.editar_nota_o_seccion(fila))
-                menu.addAction(action_editar)
-                menu.addSeparator()
-            
-            es_primera_fila = (fila == 0)
-            es_ultima_fila = (fila == self.tabla_model.rowCount() - 1)
-            
-            action_subir = QAction("Mover Arriba", self)
-            action_subir.setEnabled(not es_primera_fila)
-            action_subir.triggered.connect(lambda: self.mover_fila_arriba(fila))
-            menu.addAction(action_subir)
-            
-            action_bajar = QAction("Mover Abajo", self)
-            action_bajar.setEnabled(not es_ultima_fila)
-            action_bajar.triggered.connect(lambda: self.mover_fila_abajo(fila))
-            menu.addAction(action_bajar)
-            
-            menu.addSeparator()
-            
-            action_eliminar = QAction("Eliminar", self)
-            action_eliminar.triggered.connect(lambda: self.eliminar_fila(fila))
-            menu.addAction(action_eliminar)
-        
-        # Mostrar el menú
-        menu.exec_(self.tabla_items.viewport().mapToGlobal(position))
-
-    def insertar_nota(self):
-        """Inserta una fila de tipo nota"""
-        from PyQt5.QtWidgets import QInputDialog
-        
-        texto, ok = QInputDialog.getText(
-            self, 
-            "Agregar Nota", 
-            "Ingrese el texto de la nota:",
-            QLineEdit.Normal,
-            ""
-        )
-        
-        if ok and texto:
-            fila = self.tabla_model.rowCount()
-            self.tabla_model.insertRow(fila)
-            
-            # Crear un item que ocupe toda la fila visualmente
-            item_nota = QStandardItem(f"📝 {texto}")
-            item_nota.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            item_nota.setBackground(QColor(245, 245, 245))  # Fondo gris claro
-            item_nota.setForeground(QColor(100, 100, 100))  # Texto gris oscuro
-            
-            # Establecer el item en la primera columna
-            self.tabla_model.setItem(fila, 0, item_nota)
-            
-            # Hacer que ocupe todas las columnas visualmente
-            self.tabla_items.setSpan(fila, 0, 1, 5)
-            
-            # Marcar el tipo de fila
-            self.tipo_por_fila[fila] = 'nota'
-            
-            # Las notas no afectan los totales
-            self.calcular_totales()
-
-    def insertar_seccion(self):
-        """Inserta una fila de tipo sección"""
-        from PyQt5.QtWidgets import QInputDialog
-        
-        texto, ok = QInputDialog.getText(
-            self, 
-            "Agregar Sección", 
-            "Nombre de la sección:",
-            QLineEdit.Normal,
-            ""
-        )
-        
-        if ok and texto:
-            fila = self.tabla_model.rowCount()
-            self.tabla_model.insertRow(fila)
-            
-            # Crear un item de sección con estilo distintivo
-            item_seccion = QStandardItem(texto.upper())
-            item_seccion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            item_seccion.setBackground(QColor(0, 120, 142, 30))  # Fondo con color principal semi-transparente
-            item_seccion.setForeground(QColor(0, 120, 142))  # Texto color principal
-            
-            # Hacer el texto en negrita
-            font = item_seccion.font()
-            font.setBold(True)
-            font.setPointSize(10)
-            item_seccion.setFont(font)
-            
-            # Establecer el item en la primera columna
-            self.tabla_model.setItem(fila, 0, item_seccion)
-            
-            # Hacer que ocupe todas las columnas visualmente
-            self.tabla_items.setSpan(fila, 0, 1, 5)
-            
-            # Marcar el tipo de fila
-            self.tipo_por_fila[fila] = 'seccion'
-            
-            # Las secciones no afectan los totales
-            self.calcular_totales()
-
-    def editar_nota_o_seccion(self, fila):
-        """Edita una nota o sección existente"""
-        from PyQt5.QtWidgets import QInputDialog
-        
-        tipo = self.tipo_por_fila.get(fila, 'normal')
-        if tipo == 'normal':
-            return
-        
-        # Obtener el texto actual
-        item_actual = self.tabla_model.item(fila, 0)
-        if not item_actual:
-            return
-        
-        texto_actual = item_actual.text()
-        
-        # Limpiar el texto para edición
-        if tipo == 'nota':
-            # Quitar el emoji de nota
-            texto_actual = texto_actual.replace("📝 ", "")
-            titulo = "Editar Nota"
-            mensaje = "Modifique el texto de la nota:"
-        else:  # sección
-            titulo = "Editar Sección"
-            mensaje = "Modifique el nombre de la sección:"
-        
-        # Mostrar diálogo de edición
-        texto_nuevo, ok = QInputDialog.getText(
-            self,
-            titulo,
-            mensaje,
-            QLineEdit.Normal,
-            texto_actual
-        )
-        
-        if ok and texto_nuevo:
-            if tipo == 'nota':
-                # Actualizar nota
-                item_actual.setText(f"📝 {texto_nuevo}")
-                item_actual.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                item_actual.setBackground(QColor(245, 245, 245))
-                item_actual.setForeground(QColor(100, 100, 100))
-            else:  # sección
-                # Actualizar sección
-                item_actual.setText(texto_nuevo.upper())
-                item_actual.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                item_actual.setBackground(QColor(0, 120, 142, 30))
-                item_actual.setForeground(QColor(0, 120, 142))
-                
-                # Mantener el formato de negrita
-                font = item_actual.font()
-                font.setBold(True)
-                font.setPointSize(10)
-                item_actual.setFont(font)
-    
-    def mover_fila_arriba(self, fila):
-        if fila <= 0:
-            return
-        
-        # Intercambiar filas
-        self._intercambiar_filas(fila, fila - 1)
-        self.tabla_items.selectRow(fila - 1)
-        self.calcular_totales()
-    
-    def mover_fila_abajo(self, fila):
-        if fila >= self.tabla_model.rowCount() - 1:
-            return
-        
-        # Intercambiar filas
-        self._intercambiar_filas(fila, fila + 1)
-        self.tabla_items.selectRow(fila + 1)
-        self.calcular_totales()
-    
-    def _intercambiar_filas(self, fila1, fila2):
-        # Guardar datos y alineaciones de ambas filas
-        for col in range(self.tabla_model.columnCount()):
-            item1 = self.tabla_model.takeItem(fila1, col)
-            item2 = self.tabla_model.takeItem(fila2, col)
-            self.tabla_model.setItem(fila1, col, item2)
-            self.tabla_model.setItem(fila2, col, item1)
-        
-        # Intercambiar IVA
-        temp_iva = self.iva_por_fila.get(fila1, 16.0)
-        self.iva_por_fila[fila1] = self.iva_por_fila.get(fila2, 16.0)
-        self.iva_por_fila[fila2] = temp_iva
-        
-        # Intercambiar tipos de fila
-        temp_tipo = self.tipo_por_fila.get(fila1, 'normal')
-        self.tipo_por_fila[fila1] = self.tipo_por_fila.get(fila2, 'normal')
-        self.tipo_por_fila[fila2] = temp_tipo
-        
-        # Restaurar los spans para notas y secciones
-        if self.tipo_por_fila.get(fila1, 'normal') in ['nota', 'seccion']:
-            self.tabla_items.setSpan(fila1, 0, 1, 5)
-        else:
-            self.tabla_items.setSpan(fila1, 0, 1, 1)
-        
-        if self.tipo_por_fila.get(fila2, 'normal') in ['nota', 'seccion']:
-            self.tabla_items.setSpan(fila2, 0, 1, 5)
-        else:
-            self.tabla_items.setSpan(fila2, 0, 1, 1)
-    
-    def eliminar_fila(self, fila):
-        """Elimina una fila de la tabla"""
-        # Confirmar eliminación
-        msg_box = QMessageBox(QMessageBox.Question, 
-                            "Confirmar eliminación", 
-                            "¿Está seguro de eliminar este elemento?", 
-                            QMessageBox.Yes | QMessageBox.No, 
-                            self)
-        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
-        
-        if msg_box.exec_() == QMessageBox.Yes:
-            self.tabla_model.removeRow(fila)
-            
-            # Reorganizar índices del diccionario IVA
-            nuevo_iva = {}
-            nuevo_tipo = {}  # Nuevo diccionario para tipos
-            
-            for key in range(self.tabla_model.rowCount()):
-                if key < fila:
-                    nuevo_iva[key] = self.iva_por_fila.get(key, 16.0)
-                    nuevo_tipo[key] = self.tipo_por_fila.get(key, 'normal')
-                else:
-                    nuevo_iva[key] = self.iva_por_fila.get(key + 1, 16.0)
-                    nuevo_tipo[key] = self.tipo_por_fila.get(key + 1, 'normal')
-            
-            self.iva_por_fila = nuevo_iva
-            self.tipo_por_fila = nuevo_tipo  # Actualizar tipos
-            
-            # Recalcular totales
-            self.calcular_totales()
-            
-            # Si la fila estaba en edición, limpiar el formulario
-            if fila == self.fila_en_edicion:
-                self.limpiar_formulario()
-    
-    def calcular_importe(self):
-        """Calcular el importe basado en cantidad y precio unitario"""
-        try:
-            cantidad = float(self.txt_cantidad.text()) if self.txt_cantidad.text() else 0
-            precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
-            precio = float(precio_texto) if precio_texto else 0
-            
-            importe = cantidad * precio
-            self.txt_importe.setValue(importe)
-            
-            # Formatear el precio con formato de moneda
-            if precio > 0 and not self.txt_precio.hasFocus():
-                self.txt_precio.setText(f"${precio:.2f}")
-        except ValueError:
-            # Si hay un error en la conversión, mostrar 0
-            self.txt_importe.setValue(0)
-    
-    def calcular_totales(self):
-        """Calcula y actualiza los totales mostrados"""
-        subtotal = 0.0
-        total_impuestos = 0.0
-        
-        # Recorrer todas las filas de la tabla
-        for fila in range(self.tabla_model.rowCount()):
-            # Saltar filas que no son normales
-            if self.tipo_por_fila.get(fila, 'normal') != 'normal':
-                continue
-                
-            # Obtener el importe de la columna 4
-            importe_item = self.tabla_model.item(fila, 4)
-            if importe_item:  # Verificar que existe
-                importe_texto = importe_item.text()
-                importe = float(importe_texto.replace("$", "").replace(",", "").strip())
-                
-                # Obtener el porcentaje de IVA almacenado para esta fila
-                iva_porcentaje = self.iva_por_fila.get(fila, 16.0)
-                iva_monto = importe * (iva_porcentaje / 100)
-                
-                subtotal += importe
-                total_impuestos += iva_monto
-        
-        total = subtotal + total_impuestos
-        
-        # Actualizar las etiquetas con formato de moneda
-        self.lbl_subtotal_valor.setText(f"$ {subtotal:,.2f}")
-        self.lbl_impuestos_valor.setText(f"$ {total_impuestos:,.2f}")
-        self.lbl_total_valor.setText(f"$ {total:,.2f}")
     
     def crear_panel_totales(self, parent_layout):
         """Crear panel para mostrar subtotal, impuestos y total"""
@@ -816,6 +428,176 @@ class NotasWindow(QDialog):
         # Agregar el contenedor principal al layout padre
         parent_layout.addWidget(contenedor_principal)
     
+    def conectar_senales(self):
+        """Conectar las señales de los controles"""
+        # Calcular importe cuando cambia cantidad o precio unitario
+        self.txt_cantidad.textChanged.connect(self.calcular_importe)
+        self.txt_precio.textChanged.connect(self.calcular_importe)
+        self.btn_agregar.clicked.connect(self.agregar_a_tabla)
+        
+        # Conectar doble clic en tabla para editar
+        self.tabla_items.doubleClicked.connect(self.cargar_item_para_editar)
+        
+        # Conectar botones
+        self.botones[0].clicked.connect(self.nueva_nota)  # Nuevo
+        self.botones[1].clicked.connect(self.guardar_nota)  # Guardar
+        self.botones[5].clicked.connect(self.limpiar_formulario)  # Limpiar
+    
+    # ==================== FUNCIONES DE BASE DE DATOS ====================
+    
+    def cargar_clientes_bd(self):
+        """Cargar lista de clientes desde la base de datos y configurar autocompletado"""
+        try:
+            self.db = get_db_sync()
+            self.clientes = crud.get_all_clientes(self.db)
+            
+            # Limpiar diccionario
+            self.clientes_dict.clear()
+            
+            # Crear lista de nombres para el autocompletado
+            nombres_clientes = []
+            for cliente in self.clientes:
+                nombre_completo = f"{cliente.nombre} - {cliente.tipo}"
+                nombres_clientes.append(nombre_completo)
+                self.clientes_dict[nombre_completo] = cliente.id
+            
+            # Configurar QCompleter
+            completer = QCompleter(nombres_clientes)
+            completer.setCaseSensitivity(Qt.CaseInsensitive)  # No distinguir mayúsculas/minúsculas
+            completer.setFilterMode(Qt.MatchContains)  # Buscar coincidencias en cualquier parte
+            completer.setMaxVisibleItems(9)  # Mostrar hasta 9 items (8 + 1 línea extra)
+            
+            # Estilo para el popup del completer con altura mínima para 1 item extra
+            completer.popup().setStyleSheet("""
+                QListView {
+                    background-color: white;
+                    border: 2px solid #2CD5C4;
+                    border-radius: 4px;
+                    padding: 5px;
+                    font-size: 16px;
+                    min-height: 60px;
+                }
+                QListView::item {
+                    padding: 10px;
+                    border-radius: 3px;
+                    min-height: 30px;
+                }
+                QListView::item:hover {
+                    background-color: #E0F7FA;
+                }
+                QListView::item:selected {
+                    background-color: #2CD5C4;
+                    color: white;
+                }
+            """)
+            
+            # Asignar completer al campo de texto
+            self.txt_cliente.setCompleter(completer)
+            
+        except Exception as e:
+            self.mostrar_error(f"Error al cargar clientes: {e}")
+    
+    def guardar_nota(self):
+        """Guardar nota de venta en la base de datos"""
+        # Validar cliente
+        nombre_cliente = self.txt_cliente.text()
+        cliente_id = self.clientes_dict.get(nombre_cliente, None)
+        
+        if not cliente_id:
+            self.mostrar_advertencia("Seleccione un cliente válido de la lista")
+            return
+        
+        # Validar que hay items
+        if self.tabla_model.rowCount() == 0:
+            self.mostrar_advertencia("Agregue al menos un item")
+            return
+        
+        try:
+            # Preparar datos de la nota
+            nota_data = {
+                'cliente_id': cliente_id,
+                'estado': 'Pagada',
+                'metodo_pago': 'Efectivo',
+                'fecha': self.date_fecha.date().toPyDate(),
+                'observaciones': self.txt_referencia.text()
+            }
+            
+            # Si hay folio, lo incluimos (para edición)
+            if self.txt_folio.text() and self.txt_folio.text() != "NV-Auto":
+                nota_data['folio'] = self.txt_folio.text()
+            
+            # Preparar items (solo filas normales, no notas ni secciones)
+            items = []
+            for fila in range(self.tabla_model.rowCount()):
+                tipo = self.tipo_por_fila.get(fila, 'normal')
+                if tipo != 'normal':
+                    continue
+                
+                cantidad = int(self.tabla_model.item(fila, 0).text())
+                descripcion = self.tabla_model.item(fila, 1).text()
+                precio_texto = self.tabla_model.item(fila, 2).text().replace('$', '').replace(',', '')
+                precio_unitario = float(precio_texto)
+                importe_texto = self.tabla_model.item(fila, 4).text().replace('$', '').replace(',', '')
+                importe = float(importe_texto)
+                iva_porcentaje = self.iva_por_fila.get(fila, 16.0)
+                
+                item_data = {
+                    'cantidad': cantidad,
+                    'descripcion': descripcion,
+                    'precio_unitario': precio_unitario,
+                    'importe': importe,
+                    'impuesto': iva_porcentaje
+                }
+                items.append(item_data)
+            
+            # Guardar en BD
+            if self.nota_actual_id:
+                # Si estamos editando, eliminar la anterior
+                crud.delete_nota(self.db, self.nota_actual_id)
+            
+            nota = crud.create_nota_venta(self.db, nota_data, items)
+            
+            self.mostrar_exito(f"Nota guardada: {nota.folio}")
+            self.txt_folio.setText(nota.folio)
+            self.nota_actual_id = nota.id
+            
+        except Exception as e:
+            self.mostrar_error(f"Error al guardar: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def nueva_nota(self):
+        """Limpiar todo para nueva nota"""
+        self.nota_actual_id = None
+        self.txt_folio.clear()
+        self.txt_folio.setPlaceholderText("NV-Auto")
+        self.date_fecha.setDate(QDate.currentDate())
+        self.txt_cliente.clear()
+        self.txt_referencia.clear()
+        self.tabla_model.setRowCount(0)
+        self.iva_por_fila.clear()
+        self.tipo_por_fila.clear()
+        self.limpiar_formulario()
+        self.calcular_totales()
+    
+    # ==================== MANEJO DE ITEMS ====================
+    
+    def calcular_importe(self):
+        """Calcular el importe basado en cantidad y precio"""
+        try:
+            cantidad_texto = self.txt_cantidad.text()
+            precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
+            
+            if cantidad_texto and precio_texto:
+                cantidad = float(cantidad_texto)
+                precio = float(precio_texto)
+                importe = cantidad * precio
+                self.txt_importe.setValue(importe)
+            else:
+                self.txt_importe.setValue(0)
+        except ValueError:
+            self.txt_importe.setValue(0)
+    
     def agregar_a_tabla(self):
         """Agrega los datos del formulario a la tabla"""
         # Verificar datos obligatorios
@@ -864,8 +646,11 @@ class NotasWindow(QDialog):
         self.tabla_model.setItem(fila, 3, item_iva)
         self.tabla_model.setItem(fila, 4, item_importe)
         
+        # Guardar el IVA para esta fila
         self.iva_por_fila[fila] = iva_porcentaje
+        self.tipo_por_fila[fila] = 'normal'
         
+        # Recalcular totales
         self.calcular_totales()
         
         # Limpiar el formulario para un nuevo ingreso
@@ -879,7 +664,7 @@ class NotasWindow(QDialog):
         fila = index.row()
         tipo_fila = self.tipo_por_fila.get(fila, 'normal')
         
-        # Si es nota o sección, abrir diálogo de edición en lugar del formulario
+        # Si es nota o sección, abrir diálogo de edición
         if tipo_fila in ['nota', 'seccion']:
             self.editar_nota_o_seccion(fila)
             return
@@ -905,10 +690,10 @@ class NotasWindow(QDialog):
         # Guardar el índice de la fila para poder eliminarla después
         self.fila_en_edicion = fila
         
-        # Opcional: Cambiar el botón "Agregar" a "Actualizar"
+        # Cambiar el botón "Agregar" a "Actualizar"
         self.btn_agregar.setText("Actualizar")
         
-        # Desconectar la señal actual y conectar una nueva para actualizar en vez de agregar
+        # Desconectar la señal actual y conectar una nueva para actualizar
         try:
             self.btn_agregar.clicked.disconnect()
         except TypeError:
@@ -917,8 +702,14 @@ class NotasWindow(QDialog):
         self.btn_agregar.clicked.connect(self.actualizar_item)
     
     def actualizar_item(self):
+        """Actualiza el item en edición en la tabla"""
+        if self.fila_en_edicion == -1:
+            return
+        
         if not self.validar_datos():
             return
+        
+        fila = self.fila_en_edicion
         
         cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
@@ -931,33 +722,357 @@ class NotasWindow(QDialog):
         importe = cantidad_calculo * precio
         importe_formateado = f"${importe:.2f}"
         
-        iva_texto = f"{self.txt_impuestos.value():.1f} %"
+        iva_porcentaje = self.txt_impuestos.value()
+        iva_texto = f"{iva_porcentaje:.1f} %"
         
-        self.tabla_model.setItem(self.fila_en_edicion, 0, QStandardItem(cantidad))
-        self.tabla_model.setItem(self.fila_en_edicion, 1, QStandardItem(descripcion))
-        self.tabla_model.setItem(self.fila_en_edicion, 2, QStandardItem(precio_formateado))
-        self.tabla_model.setItem(self.fila_en_edicion, 3, QStandardItem(iva_texto))
-        self.tabla_model.setItem(self.fila_en_edicion, 4, QStandardItem(importe_formateado))
-
-        # Actualizar el IVA almacenado 
-        self.iva_por_fila[self.fila_en_edicion] = self.txt_impuestos.value()
+        # Actualizar items en la tabla
+        self.tabla_model.item(fila, 0).setText(cantidad)
+        self.tabla_model.item(fila, 1).setText(descripcion)
+        self.tabla_model.item(fila, 2).setText(precio_formateado)
+        self.tabla_model.item(fila, 3).setText(iva_texto)
+        self.tabla_model.item(fila, 4).setText(importe_formateado)
         
-        self.tabla_model.item(self.fila_en_edicion, 0).setTextAlignment(Qt.AlignCenter)
-        self.tabla_model.item(self.fila_en_edicion, 1).setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.tabla_model.item(self.fila_en_edicion, 2).setTextAlignment(Qt.AlignCenter)
-        self.tabla_model.item(self.fila_en_edicion, 3).setTextAlignment(Qt.AlignCenter)
-        self.tabla_model.item(self.fila_en_edicion, 4).setTextAlignment(Qt.AlignCenter)
+        # Actualizar el IVA almacenado
+        self.iva_por_fila[fila] = iva_porcentaje
         
-        # Limpiar formulario y restaurar botón
+        # Recalcular totales
+        self.calcular_totales()
+        
+        # Limpiar formulario y resetear botón
         self.limpiar_formulario()
+        self.fila_en_edicion = -1
+        self.btn_agregar.setText("Agregar")
+        
+        # Reconectar señal original
+        try:
+            self.btn_agregar.clicked.disconnect()
+        except TypeError:
+            pass
+        self.btn_agregar.clicked.connect(self.agregar_a_tabla)
     
-    def mostrar_advertencia(self, mensaje):
-        msg_box = QMessageBox(QMessageBox.Warning, "Advertencia", mensaje, QMessageBox.Ok, self)
-        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
-        msg_box.exec_()
+    def calcular_totales(self):
+        """Calcula subtotal, impuestos y total"""
+        subtotal = 0
+        total_impuestos = 0
+        
+        for fila in range(self.tabla_model.rowCount()):
+            # Solo calcular filas normales, no notas ni secciones
+            tipo_fila = self.tipo_por_fila.get(fila, 'normal')
+            if tipo_fila != 'normal':
+                continue
+                
+            # Obtener el importe de la columna 4
+            importe_item = self.tabla_model.item(fila, 4)
+            if importe_item:
+                importe_texto = importe_item.text()
+                importe = float(importe_texto.replace("$", "").replace(",", "").strip())
+                
+                # Obtener el porcentaje de IVA almacenado para esta fila
+                iva_porcentaje = self.iva_por_fila.get(fila, 16.0)
+                iva_monto = importe * (iva_porcentaje / 100)
+                
+                subtotal += importe
+                total_impuestos += iva_monto
+        
+        total = subtotal + total_impuestos
+        
+        # Actualizar las etiquetas con formato de moneda
+        self.lbl_subtotal_valor.setText(f"$ {subtotal:,.2f}")
+        self.lbl_impuestos_valor.setText(f"$ {total_impuestos:,.2f}")
+        self.lbl_total_valor.setText(f"$ {total:,.2f}")
+    
+    # ==================== MENÚ CONTEXTUAL ====================
+    
+    def mostrar_menu_contextual(self, position):
+        """Muestra un menú contextual al hacer clic derecho en una fila de la tabla"""
+        indexes = self.tabla_items.selectedIndexes()
+        
+        # Crear menú contextual
+        menu = QMenu(self)
+        
+        # Agregar opciones para insertar nota o sección
+        menu.addSection("Insertar")
+        
+        action_nota = QAction("➕ Agregar Nota", self)
+        action_nota.triggered.connect(self.insertar_nota)
+        menu.addAction(action_nota)
+        
+        action_seccion = QAction("📁 Agregar Sección", self)
+        action_seccion.triggered.connect(self.insertar_seccion)
+        menu.addAction(action_seccion)
+        
+        menu.addSeparator()
+        
+        # Solo mostrar opciones de mover/eliminar si hay una fila seleccionada
+        if indexes:
+            fila = indexes[0].row()
+            tipo_fila = self.tipo_por_fila.get(fila, 'normal')
+            
+            menu.addSection("Acciones")
+            
+            # Agregar opción de editar para notas y secciones
+            if tipo_fila in ['nota', 'seccion']:
+                action_editar = QAction("✏️ Editar", self)
+                action_editar.triggered.connect(lambda: self.editar_nota_o_seccion(fila))
+                menu.addAction(action_editar)
+                menu.addSeparator()
+            
+            es_primera_fila = (fila == 0)
+            es_ultima_fila = (fila == self.tabla_model.rowCount() - 1)
+            
+            action_subir = QAction("Mover Arriba", self)
+            action_subir.setEnabled(not es_primera_fila)
+            action_subir.triggered.connect(lambda: self.mover_fila_arriba(fila))
+            menu.addAction(action_subir)
+            
+            action_bajar = QAction("Mover Abajo", self)
+            action_bajar.setEnabled(not es_ultima_fila)
+            action_bajar.triggered.connect(lambda: self.mover_fila_abajo(fila))
+            menu.addAction(action_bajar)
+            
+            menu.addSeparator()
+            
+            action_eliminar = QAction("Eliminar", self)
+            action_eliminar.triggered.connect(lambda: self.eliminar_fila(fila))
+            menu.addAction(action_eliminar)
+        
+        # Mostrar el menú
+        menu.exec_(self.tabla_items.viewport().mapToGlobal(position))
+    
+    def insertar_nota(self):
+        """Inserta una fila de tipo nota"""
+        from PyQt5.QtWidgets import QInputDialog
+        
+        texto, ok = QInputDialog.getText(
+            self, 
+            "Agregar Nota", 
+            "Ingrese el texto de la nota:",
+            QLineEdit.Normal,
+            ""
+        )
+        
+        if ok and texto:
+            fila = self.tabla_model.rowCount()
+            self.tabla_model.insertRow(fila)
+            
+            # Crear un item que ocupe toda la fila visualmente
+            item_nota = QStandardItem(f"📝 {texto}")
+            item_nota.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            item_nota.setBackground(QColor(245, 245, 245))
+            item_nota.setForeground(QColor(100, 100, 100))
+            
+            # Establecer el item en la primera columna
+            self.tabla_model.setItem(fila, 0, item_nota)
+            
+            # Hacer que ocupe todas las columnas visualmente
+            self.tabla_items.setSpan(fila, 0, 1, 5)
+            
+            # Marcar el tipo de fila
+            self.tipo_por_fila[fila] = 'nota'
+            
+            # Las notas no afectan los totales
+            self.calcular_totales()
+
+    def insertar_seccion(self):
+        """Inserta una fila de tipo sección"""
+        from PyQt5.QtWidgets import QInputDialog
+        
+        texto, ok = QInputDialog.getText(
+            self, 
+            "Agregar Sección", 
+            "Nombre de la sección:",
+            QLineEdit.Normal,
+            ""
+        )
+        
+        if ok and texto:
+            fila = self.tabla_model.rowCount()
+            self.tabla_model.insertRow(fila)
+            
+            # Crear un item de sección con estilo distintivo
+            item_seccion = QStandardItem(texto.upper())
+            item_seccion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            item_seccion.setBackground(QColor(0, 120, 142, 30))
+            item_seccion.setForeground(QColor(0, 120, 142))
+            
+            # Hacer el texto en negrita
+            font = item_seccion.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            item_seccion.setFont(font)
+            
+            # Establecer el item en la primera columna
+            self.tabla_model.setItem(fila, 0, item_seccion)
+            
+            # Hacer que ocupe todas las columnas visualmente
+            self.tabla_items.setSpan(fila, 0, 1, 5)
+            
+            # Marcar el tipo de fila
+            self.tipo_por_fila[fila] = 'seccion'
+            
+            # Las secciones no afectan los totales
+            self.calcular_totales()
+
+    def editar_nota_o_seccion(self, fila):
+        """Edita una nota o sección existente"""
+        from PyQt5.QtWidgets import QInputDialog
+        
+        tipo = self.tipo_por_fila.get(fila, 'normal')
+        if tipo == 'normal':
+            return
+        
+        # Obtener el texto actual
+        item_actual = self.tabla_model.item(fila, 0)
+        if not item_actual:
+            return
+        
+        texto_actual = item_actual.text()
+        
+        # Limpiar el texto para edición
+        if tipo == 'nota':
+            texto_actual = texto_actual.replace("📝 ", "")
+            titulo = "Editar Nota"
+            mensaje = "Modifique el texto de la nota:"
+        else:  # sección
+            titulo = "Editar Sección"
+            mensaje = "Modifique el nombre de la sección:"
+        
+        # Mostrar diálogo de edición
+        texto_nuevo, ok = QInputDialog.getText(
+            self,
+            titulo,
+            mensaje,
+            QLineEdit.Normal,
+            texto_actual
+        )
+        
+        if ok and texto_nuevo:
+            if tipo == 'nota':
+                item_actual.setText(f"📝 {texto_nuevo}")
+                item_actual.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                item_actual.setBackground(QColor(245, 245, 245))
+                item_actual.setForeground(QColor(100, 100, 100))
+            else:  # sección
+                item_actual.setText(texto_nuevo.upper())
+                item_actual.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                item_actual.setBackground(QColor(0, 120, 142, 30))
+                item_actual.setForeground(QColor(0, 120, 142))
+                
+                # Mantener el formato de negrita
+                font = item_actual.font()
+                font.setBold(True)
+                font.setPointSize(10)
+                item_actual.setFont(font)
+    
+    def mover_fila_arriba(self, fila):
+        """Mueve la fila seleccionada una posición arriba"""
+        if fila <= 0:
+            return
+        
+        # Intercambiar filas
+        self.intercambiar_filas(fila, fila - 1)
+        
+        # Seleccionar la nueva posición
+        self.tabla_items.selectRow(fila - 1)
+    
+    def mover_fila_abajo(self, fila):
+        """Mueve la fila seleccionada una posición abajo"""
+        if fila >= self.tabla_model.rowCount() - 1:
+            return
+        
+        # Intercambiar filas
+        self.intercambiar_filas(fila, fila + 1)
+        
+        # Seleccionar la nueva posición
+        self.tabla_items.selectRow(fila + 1)
+    
+    def intercambiar_filas(self, fila1, fila2):
+        """Intercambia dos filas en la tabla"""
+        # Primero, limpiar los spans existentes
+        self.tabla_items.setSpan(fila1, 0, 1, 1)
+        self.tabla_items.setSpan(fila2, 0, 1, 1)
+        
+        # Guardar datos de ambas filas
+        items_fila1 = []
+        items_fila2 = []
+        
+        for col in range(self.tabla_model.columnCount()):
+            item1 = self.tabla_model.item(fila1, col)
+            item2 = self.tabla_model.item(fila2, col)
+            
+            if item1:
+                items_fila1.append(item1.clone())
+            else:
+                items_fila1.append(None)
+            
+            if item2:
+                items_fila2.append(item2.clone())
+            else:
+                items_fila2.append(None)
+        
+        # Intercambiar items
+        for col in range(len(items_fila1)):
+            if items_fila2[col]:
+                self.tabla_model.setItem(fila1, col, items_fila2[col])
+            else:
+                self.tabla_model.setItem(fila1, col, QStandardItem(""))
+            
+            if items_fila1[col]:
+                self.tabla_model.setItem(fila2, col, items_fila1[col])
+            else:
+                self.tabla_model.setItem(fila2, col, QStandardItem(""))
+        
+        # Intercambiar datos en diccionarios
+        tipo1 = self.tipo_por_fila.get(fila1, 'normal')
+        tipo2 = self.tipo_por_fila.get(fila2, 'normal')
+        self.tipo_por_fila[fila1] = tipo2
+        self.tipo_por_fila[fila2] = tipo1
+        
+        iva1 = self.iva_por_fila.get(fila1, 16.0)
+        iva2 = self.iva_por_fila.get(fila2, 16.0)
+        self.iva_por_fila[fila1] = iva2
+        self.iva_por_fila[fila2] = iva1
+        
+        # Aplicar spans según el tipo de fila
+        if self.tipo_por_fila.get(fila1, 'normal') in ['nota', 'seccion']:
+            self.tabla_items.setSpan(fila1, 0, 1, 5)
+        
+        if self.tipo_por_fila.get(fila2, 'normal') in ['nota', 'seccion']:
+            self.tabla_items.setSpan(fila2, 0, 1, 5)
+    
+    def eliminar_fila(self, fila):
+        """Elimina la fila seleccionada"""
+        reply = QMessageBox.question(
+            self,
+            'Confirmar',
+            '¿Eliminar este item?',
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.tabla_model.removeRow(fila)
+            
+            # Reindexar diccionarios
+            nuevo_iva = {}
+            nuevo_tipo = {}
+            for f in range(self.tabla_model.rowCount()):
+                if f < fila:
+                    nuevo_iva[f] = self.iva_por_fila.get(f, 16.0)
+                    nuevo_tipo[f] = self.tipo_por_fila.get(f, 'normal')
+                else:
+                    nuevo_iva[f] = self.iva_por_fila.get(f + 1, 16.0)
+                    nuevo_tipo[f] = self.tipo_por_fila.get(f + 1, 'normal')
+            
+            self.iva_por_fila = nuevo_iva
+            self.tipo_por_fila = nuevo_tipo
+            self.calcular_totales()
+    
+    # ==================== UTILIDADES ====================
     
     def validar_datos(self):
-        if not self.txt_cantidad.text() or self.txt_cantidad.text() == "0":
+        """Valida que los datos necesarios estén completos"""
+        cantidad_texto = self.txt_cantidad.text().strip()
+        if not cantidad_texto or float(cantidad_texto) <= 0:
             self.mostrar_advertencia("Ingrese una cantidad válida.")
             return False
         
@@ -973,6 +1088,7 @@ class NotasWindow(QDialog):
         return True
     
     def limpiar_formulario(self):
+        """Limpia los campos del formulario"""
         self.txt_cantidad.setText("")
         self.txt_descripcion.setText("")
         self.txt_precio.setText("")
@@ -993,9 +1109,104 @@ class NotasWindow(QDialog):
         # Resetear fila en edición
         self.fila_en_edicion = -1
     
+    def mostrar_advertencia(self, mensaje):
+        """Muestra un mensaje de advertencia"""
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Warning)
+        msg.setWindowTitle("Advertencia")
+        msg.setText(mensaje)
+        msg.setStyleSheet(MESSAGE_BOX_STYLE)
+        msg.exec_()
+    
+    def mostrar_error(self, mensaje):
+        """Muestra un mensaje de error"""
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowTitle("Error")
+        msg.setText(mensaje)
+        msg.setStyleSheet(MESSAGE_BOX_STYLE)
+        msg.exec_()
+    
+    def mostrar_exito(self, mensaje):
+        """Muestra un mensaje de éxito"""
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("Éxito")
+        msg.setText(mensaje)
+        msg.setStyleSheet(MESSAGE_BOX_STYLE)
+        msg.exec_()
+    
+    def _obtener_estilo_calendario(self):
+        """Retorna el estilo CSS para los calendarios con altura correcta"""
+        return """
+            QDateEdit {
+                padding: 8px;
+                border: 2px solid #F5F5F5;
+                border-radius: 6px;
+                background-color: #F5F5F5;
+                min-height: 25px;
+                font-size: 16px;
+                margin-top: 0px;
+            }
+            
+            QDateEdit:focus {
+                border: 2px solid #2CD5C4;
+                background-color: white;
+            }
+            
+            QDateEdit::drop-down {
+                border: 0px;
+                background: transparent;
+                subcontrol-position: right center;
+                width: 30px;
+            }
+            
+            QDateEdit::down-arrow {
+                image: url(assets/icons/calendario.png);
+                width: 16px;
+                height: 16px;
+            }
+            
+            QCalendarWidget {
+                background-color: white;
+                border: 2px solid #00788E;
+                border-radius: 8px;
+            }
+            
+            QCalendarWidget QToolButton {
+                color: white;
+                background-color: #00788E;
+                border: none;
+                border-radius: 4px;
+                margin: 2px;
+                padding: 4px;
+            }
+            
+            QCalendarWidget QToolButton:hover {
+                background-color: #2CD5C4;
+            }
+            
+            QCalendarWidget QMenu {
+                background-color: white;
+                border: 1px solid #00788E;
+            }
+            
+            QCalendarWidget QAbstractItemView {
+                selection-background-color: #2CD5C4;
+                selection-color: white;
+            }
+            
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background-color: #00788E;
+            }
+        """
+    
     def closeEvent(self, event):
         """Evento que se dispara al cerrar la ventana"""
+        if self.db:
+            self.db.close()
         event.accept()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
