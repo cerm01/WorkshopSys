@@ -215,6 +215,82 @@ class DatabaseHelper:
             print(f"Error al crear cotización: {e}")
             return None
     
+    # ==================== NOTAS DE VENTA ====================
+    
+    def get_notas(self) -> List[Dict]:
+        """Obtener todas las notas de venta"""
+        db = self._get_session()
+        notas = crud.get_all_notas(db)
+        return [self._nota_to_dict(n) for n in notas]
+    
+    def get_nota(self, nota_id: int) -> Optional[Dict]:
+        """Obtener nota por ID"""
+        db = self._get_session()
+        nota = crud.get_nota(db, nota_id)
+        return self._nota_to_dict(nota) if nota else None
+    
+    def buscar_notas(self, folio: str = None, cliente_id: int = None) -> List[Dict]:
+        """Buscar notas por folio o cliente"""
+        db = self._get_session()
+        notas = crud.get_all_notas(db)
+        
+        # Filtrar según criterios
+        if folio:
+            notas = [n for n in notas if folio.upper() in n.folio.upper()]
+        if cliente_id:
+            notas = [n for n in notas if n.cliente_id == cliente_id]
+        
+        return [self._nota_to_dict(n) for n in notas]
+    
+    def crear_nota(self, nota_data: Dict, items: List[Dict]) -> Optional[Dict]:
+        """Crear nueva nota de venta"""
+        try:
+            db = self._get_session()
+            nota = crud.create_nota_venta(db, nota_data, items)
+            return self._nota_to_dict(nota)
+        except Exception as e:
+            print(f"Error al crear nota: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def actualizar_nota(self, nota_id: int, nota_data: Dict, items: List[Dict]) -> Optional[Dict]:
+        """Actualizar nota existente (elimina la anterior y crea una nueva)"""
+        try:
+            db = self._get_session()
+            # Eliminar nota anterior
+            if crud.delete_nota(db, nota_id):
+                # Crear nueva con los datos actualizados
+                nota = crud.create_nota_venta(db, nota_data, items)
+                return self._nota_to_dict(nota)
+            return None
+        except Exception as e:
+            print(f"Error al actualizar nota: {e}")
+            return None
+    
+    def eliminar_nota(self, nota_id: int) -> bool:
+        """Eliminar nota de venta"""
+        try:
+            db = self._get_session()
+            return crud.delete_nota(db, nota_id)
+        except Exception as e:
+            print(f"Error al eliminar nota: {e}")
+            return False
+    
+    def cancelar_nota(self, nota_id: int) -> bool:
+        """Cancelar nota (cambiar estado a 'Cancelada')"""
+        try:
+            db = self._get_session()
+            nota = crud.get_nota(db, nota_id)
+            if nota:
+                nota.estado = 'Cancelada'
+                db.commit()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error al cancelar nota: {e}")
+            return False
+    
     # ==================== ESTADÍSTICAS ====================
     
     def get_estadisticas(self) -> Dict:
@@ -222,7 +298,7 @@ class DatabaseHelper:
         db = self._get_session()
         return crud.get_estadisticas_dashboard(db)
     
-    # ==================== CONVERSORES ====================
+    # ==================== CONVERSORES (ORM -> Dict) ====================
     
     @staticmethod
     def _cliente_to_dict(cliente) -> Dict:
@@ -239,8 +315,7 @@ class DatabaseHelper:
             'estado': cliente.estado or '',
             'cp': cliente.cp or '',
             'pais': cliente.pais or 'México',
-            'rfc': cliente.rfc or '',
-            'activo': cliente.activo
+            'rfc': cliente.rfc or ''
         }
     
     @staticmethod
@@ -257,6 +332,7 @@ class DatabaseHelper:
             'ciudad': proveedor.ciudad or '',
             'estado': proveedor.estado or '',
             'cp': proveedor.cp or '',
+            'pais': proveedor.pais or 'México',
             'rfc': proveedor.rfc or ''
         }
     
@@ -267,14 +343,12 @@ class DatabaseHelper:
             'id': producto.id,
             'codigo': producto.codigo,
             'nombre': producto.nombre,
-            'categoria': producto.categoria,
-            'stock_actual': producto.stock_actual,
-            'stock_min': producto.stock_min,
-            'ubicacion': producto.ubicacion or '',
+            'categoria': producto.categoria or '',
             'precio_compra': producto.precio_compra,
             'precio_venta': producto.precio_venta,
-            'proveedor': producto.proveedor.nombre if producto.proveedor else '',
-            'descripcion': producto.descripcion or ''
+            'stock_actual': producto.stock_actual,
+            'stock_min': producto.stock_min,
+            'proveedor_id': producto.proveedor_id
         }
     
     @staticmethod
@@ -326,6 +400,30 @@ class DatabaseHelper:
                 'precio_unitario': i.precio_unitario,
                 'importe': i.importe
             } for i in cotizacion.items]
+        }
+    
+    @staticmethod
+    def _nota_to_dict(nota) -> Dict:
+        """Convertir NotaVenta ORM a diccionario"""
+        return {
+            'id': nota.id,
+            'folio': nota.folio,
+            'cliente_id': nota.cliente_id,
+            'cliente_nombre': nota.cliente.nombre if nota.cliente else 'Sin cliente',
+            'estado': nota.estado or 'Pendiente',
+            'metodo_pago': nota.metodo_pago or 'Efectivo',
+            'fecha': nota.fecha.strftime("%d/%m/%Y") if nota.fecha else '',
+            'observaciones': nota.observaciones or '',
+            'subtotal': nota.subtotal,
+            'impuestos': nota.impuestos,
+            'total': nota.total,
+            'items': [{
+                'cantidad': i.cantidad,
+                'descripcion': i.descripcion,
+                'precio_unitario': i.precio_unitario,
+                'importe': i.importe,
+                'impuesto': i.impuesto
+            } for i in nota.items]
         }
 
 
