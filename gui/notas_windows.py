@@ -571,16 +571,6 @@ class NotasWindow(QDialog):
     
     def nueva_nota(self):
         """Limpiar todo para nueva nota"""
-        self.nota_actual_id = None
-        self.modo_edicion = False
-        self.txt_folio.clear()
-        self.txt_folio.setPlaceholderText("NV-Auto")
-        self.date_fecha.setDate(QDate.currentDate())
-        self.txt_cliente.clear()
-        self.txt_referencia.clear()
-        self.tabla_model.setRowCount(0)
-        self.iva_por_fila.clear()
-        self.tipo_por_fila.clear()
         self.limpiar_formulario()
         self.calcular_totales()
 
@@ -1241,6 +1231,16 @@ class NotasWindow(QDialog):
         return True
     
     def limpiar_formulario(self):
+        self.nota_actual_id = None
+        self.modo_edicion = False
+        self.txt_folio.clear()
+        self.txt_folio.setPlaceholderText("NV-Auto")
+        self.date_fecha.setDate(QDate.currentDate())
+        self.txt_cliente.clear()
+        self.txt_referencia.clear()
+        self.tabla_model.setRowCount(0)
+        self.iva_por_fila.clear()
+        self.tipo_por_fila.clear()
         """Limpia los campos del formulario"""
         self.txt_cantidad.setText("")
         self.txt_descripcion.setText("")
