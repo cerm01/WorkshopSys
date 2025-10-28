@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server.database import get_db_sync
 from server import crud
 from typing import List, Optional, Dict, Any
+from datetime import datetime
 
 
 class DatabaseHelper:
@@ -255,41 +256,80 @@ class DatabaseHelper:
             return None
     
     def actualizar_nota(self, nota_id: int, nota_data: Dict, items: List[Dict]) -> Optional[Dict]:
-        """Actualizar nota existente (elimina la anterior y crea una nueva)"""
         try:
             db = self._get_session()
-            # Eliminar nota anterior
-            if crud.delete_nota(db, nota_id):
-                # Crear nueva con los datos actualizados
-                nota = crud.create_nota_venta(db, nota_data, items)
-                return self._nota_to_dict(nota)
-            return None
-        except Exception as e:
-            print(f"Error al actualizar nota: {e}")
-            return None
-    
-    def eliminar_nota(self, nota_id: int) -> bool:
-        """Eliminar nota de venta"""
-        try:
-            db = self._get_session()
-            return crud.delete_nota(db, nota_id)
-        except Exception as e:
-            print(f"Error al eliminar nota: {e}")
-            return False
-    
-    def cancelar_nota(self, nota_id: int) -> bool:
-        """Cancelar nota (cambiar estado a 'Cancelada')"""
-        try:
-            db = self._get_session()
+            
+            # 1. Obtener la nota existente
             nota = crud.get_nota(db, nota_id)
-            if nota:
-                nota.estado = 'Cancelada'
-                db.commit()
-                return True
-            return False
+            if not nota:
+                print(f"❌ No se encontró la nota con ID {nota_id}")
+                return None
+            
+            print(f"📝 Actualizando nota {nota.folio}...")
+            
+            # 2. Actualizar datos de la nota (mantener el folio original)
+            nota.cliente_id = nota_data.get('cliente_id', nota.cliente_id)
+            nota.estado = nota_data.get('estado', nota.estado)
+            nota.metodo_pago = nota_data.get('metodo_pago', nota.metodo_pago)
+            nota.fecha = nota_data.get('fecha', nota.fecha)
+            nota.observaciones = nota_data.get('observaciones', nota.observaciones)
+            
+            # 3. Eliminar items anteriores
+            from server.models import NotaVentaItem
+            
+            for item in nota.items:
+                db.delete(item)
+            db.flush()  # Ejecutar eliminación antes de agregar nuevos
+            
+            # 4. Agregar nuevos items y calcular totales
+            subtotal = 0
+            total_impuestos = 0
+            
+            for item_data in items:
+                cantidad = item_data['cantidad']
+                precio_unitario = item_data['precio_unitario']
+                impuesto_porcentaje = item_data.get('impuesto', 16.0)
+                
+                # Calcular importe
+                importe_sin_iva = cantidad * precio_unitario
+                iva_item = importe_sin_iva * (impuesto_porcentaje / 100)
+                importe_total = importe_sin_iva + iva_item
+                
+                # Crear item
+                nuevo_item = NotaVentaItem(
+                    nota_id=nota.id,
+                    cantidad=cantidad,
+                    descripcion=item_data['descripcion'],
+                    precio_unitario=precio_unitario,
+                    importe=importe_total,
+                    impuesto=impuesto_porcentaje
+                )
+                
+                db.add(nuevo_item)
+                
+                # Acumular totales
+                subtotal += importe_sin_iva
+                total_impuestos += iva_item
+            
+            # 5. Actualizar totales en la nota
+            nota.subtotal = subtotal
+            nota.impuestos = total_impuestos
+            nota.total = subtotal + total_impuestos
+            nota.updated_at = datetime.now()
+            
+            # 6. Guardar cambios
+            db.commit()
+            db.refresh(nota)
+            
+            print(f"✅ Nota {nota.folio} actualizada correctamente")
+            return self._nota_to_dict(nota)
+            
         except Exception as e:
-            print(f"Error al cancelar nota: {e}")
-            return False
+            print(f"❌ Error al actualizar nota: {e}")
+            import traceback
+            traceback.print_exc()
+            db.rollback()
+            return None
     
     # ==================== ESTADÍSTICAS ====================
     

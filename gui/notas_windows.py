@@ -496,7 +496,7 @@ class NotasWindow(QDialog):
             self.mostrar_error(f"Error al cargar clientes: {e}")
     
     def guardar_nota(self):
-        """Guardar nota de venta en la base de datos usando db_helper"""
+        """Guardar nota de venta en la base de datos"""
         # Validar cliente
         nombre_cliente = self.txt_cliente.text()
         cliente_id = self.clientes_dict.get(nombre_cliente, None)
@@ -555,7 +555,12 @@ class NotasWindow(QDialog):
                 self.mostrar_exito(f"{mensaje}: {nota['folio']}")
                 self.txt_folio.setText(nota['folio'])
                 self.nota_actual_id = nota['id']
-                self.modo_edicion = True 
+                
+                if hasattr(self, 'botones') and len(self.botones) > 1:
+                    self.botones[1].setText("Guardar")
+                
+                self.modo_edicion = False
+                self.controlar_estado_campos(False)
             else:
                 self.mostrar_error("No se pudo guardar la nota")
             
@@ -579,6 +584,9 @@ class NotasWindow(QDialog):
         self.limpiar_formulario()
         self.calcular_totales()
 
+        if hasattr(self, 'botones') and len(self.botones) > 1:
+            self.botones[1].setText("Guardar")
+
     def buscar_nota(self):
         """Buscar nota por folio"""
         folio, ok = QInputDialog.getText(self, "Buscar Nota", "Ingrese el folio:")
@@ -598,20 +606,16 @@ class NotasWindow(QDialog):
     
     def cargar_nota_en_formulario(self, nota):
         """Cargar nota en el formulario"""
-        # NO llamar a nueva_nota() aquí
-        
         self.nota_actual_id = nota['id']
         self.modo_edicion = False
         
-        # Limpiar campos principales
+        # Cargar datos principales
         self.txt_folio.setText(nota['folio'])
         self.date_fecha.setDate(QDate.fromString(nota['fecha'], "dd/MM/yyyy"))
         self.txt_referencia.setText(nota['observaciones'])
         
-        # Limpiar cliente
+        # Cargar cliente
         self.txt_cliente.clear()
-        
-        # Buscar nombre del cliente por ID
         for nombre, id_cliente in self.clientes_dict.items():
             if id_cliente == nota['cliente_id']:
                 self.txt_cliente.setText(nombre)
@@ -660,8 +664,10 @@ class NotasWindow(QDialog):
                 self.tipo_por_fila[fila] = 'normal'
         
         self.calcular_totales()
-        
-        # Deshabilitar edición después de cargar
+
+        if hasattr(self, 'botones') and len(self.botones) > 1:
+            self.botones[1].setText("Guardar")
+
         self.controlar_estado_campos(False)
 
     def cancelar_nota(self):
@@ -1177,9 +1183,12 @@ class NotasWindow(QDialog):
         if not self.nota_actual_id:
             self.mostrar_advertencia("No hay una nota cargada para editar")
             return
-        
         self.modo_edicion = True
         self.controlar_estado_campos(True)
+
+        if hasattr(self, 'botones') and len(self.botones) > 1:
+            self.botones[1].setText("Actualizar")
+        
         self.mostrar_exito("Modo edición activado")
     
     def controlar_estado_campos(self, habilitar):
