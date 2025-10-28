@@ -5,18 +5,14 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSizePolicy, QApplication,
     QLabel, QLineEdit, QGridLayout, QGroupBox, QDoubleSpinBox, QMessageBox,
     QTableView, QHeaderView, QMenu, QAction, QFrame, QWidget, QDateEdit, 
-    QCompleter, QInputDialog  # <-- QInputDialog agregado
+    QCompleter, QInputDialog
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QColor, QFont
 
-# --- CAMBIO: Importar db_helper en lugar de acceso directo a BD ---
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# from server.database import get_db_sync  # Eliminado
-# from server import crud                   # Eliminado
-from db_helper import db_helper           # <-- Agregado
+from db_helper import db_helper
 
-# Import styles (Sin cambios)
 from styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE, LABEL_STYLE,
     INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
@@ -47,17 +43,13 @@ class NotasWindow(QDialog):
         self.clientes = []
         self.clientes_dict = {}  # Diccionario: nombre -> id
         self.nota_actual_id = None
-        self.modo_edicion = False # <-- Agregado
+        self.modo_edicion = False
 
-        # Crear la interfaz (Sin cambios)
+        # Crear la interfaz
         self.setup_ui()
         
-        # Cargar datos de BD (Ahora usa db_helper)
+        # Cargar datos
         self.cargar_clientes_bd()
-    
-    # ==================== MÉTODOS DE UI (SIN CAMBIOS) ====================
-    # Todos los métodos de creación de UI se mantienen idénticos 
-    # al 'notas_windows.py' original para no alterar los gráficos.
     
     def setup_ui(self):
         """Configurar la interfaz de usuario"""
@@ -452,22 +444,21 @@ class NotasWindow(QDialog):
         self.botones[1].clicked.connect(self.guardar_nota)    # Guardar
         self.botones[2].clicked.connect(self.cancelar_nota)   # <-- Cancelar
         self.botones[3].clicked.connect(self.buscar_nota)     # <-- Buscar
-        # self.botones[4] (Editar) - Sin acción definida
+        self.botones[4].clicked.connect(self.editar_nota)      # <-- Editar
         self.botones[5].clicked.connect(self.limpiar_formulario)  # Limpiar
         # self.botones[6] (Imprimir) - Sin acción definida
     
-    # ==================== FUNCIONES DE BASE DE DATOS (ACTUALIZADAS) ====================
+    # ==================== FUNCIONES DE BASE DE DATOS ====================
     
     def cargar_clientes_bd(self):
         """Cargar lista de clientes desde la base de datos y configurar autocompletado"""
         try:
-            # --- CAMBIO: Usar db_helper ---
             clientes = db_helper.get_clientes() 
             self.clientes_dict.clear()
             
             nombres_clientes = []
             for cliente in clientes:
-                nombre_completo = f"{cliente['nombre']} - {cliente['tipo']}" # db_helper retorna dicts
+                nombre_completo = f"{cliente['nombre']} - {cliente['tipo']}"
                 nombres_clientes.append(nombre_completo)
                 self.clientes_dict[nombre_completo] = cliente['id']
             
@@ -476,8 +467,6 @@ class NotasWindow(QDialog):
             completer.setCaseSensitivity(Qt.CaseInsensitive)
             completer.setFilterMode(Qt.MatchContains)
             completer.setMaxVisibleItems(9)
-            
-            # --- CAMBIO: Mantener el estilo del 'notas_windows.py' original ---
             completer.popup().setStyleSheet("""
                 QListView {
                     background-color: white;
@@ -555,7 +544,6 @@ class NotasWindow(QDialog):
                 }
                 items.append(item_data)
             
-            # --- CAMBIO: Usar db_helper y modo_edicion ---
             if self.modo_edicion and self.nota_actual_id:
                 nota = db_helper.actualizar_nota(self.nota_actual_id, nota_data, items)
                 mensaje = "Nota actualizada correctamente"
@@ -567,7 +555,7 @@ class NotasWindow(QDialog):
                 self.mostrar_exito(f"{mensaje}: {nota['folio']}")
                 self.txt_folio.setText(nota['folio'])
                 self.nota_actual_id = nota['id']
-                self.modo_edicion = True # <-- Asegurar modo edición tras guardar
+                self.modo_edicion = True 
             else:
                 self.mostrar_error("No se pudo guardar la nota")
             
@@ -579,7 +567,7 @@ class NotasWindow(QDialog):
     def nueva_nota(self):
         """Limpiar todo para nueva nota"""
         self.nota_actual_id = None
-        self.modo_edicion = False # <-- Agregado
+        self.modo_edicion = False
         self.txt_folio.clear()
         self.txt_folio.setPlaceholderText("NV-Auto")
         self.date_fecha.setDate(QDate.currentDate())
@@ -590,8 +578,6 @@ class NotasWindow(QDialog):
         self.tipo_por_fila.clear()
         self.limpiar_formulario()
         self.calcular_totales()
-    
-    # --- NUEVAS FUNCIONES (DE notas_windows_pruebas.py) ---
 
     def buscar_nota(self):
         """Buscar nota por folio"""
@@ -612,15 +598,18 @@ class NotasWindow(QDialog):
     
     def cargar_nota_en_formulario(self, nota):
         """Cargar nota en el formulario"""
-        self.nueva_nota() # Limpiar formulario primero
+        # NO llamar a nueva_nota() aquí
         
         self.nota_actual_id = nota['id']
-        self.modo_edicion = True
+        self.modo_edicion = False
         
+        # Limpiar campos principales
         self.txt_folio.setText(nota['folio'])
-        # Asumiendo que db_helper retorna fechas como "dd/MM/yyyy"
         self.date_fecha.setDate(QDate.fromString(nota['fecha'], "dd/MM/yyyy"))
         self.txt_referencia.setText(nota['observaciones'])
+        
+        # Limpiar cliente
+        self.txt_cliente.clear()
         
         # Buscar nombre del cliente por ID
         for nombre, id_cliente in self.clientes_dict.items():
@@ -628,15 +617,19 @@ class NotasWindow(QDialog):
                 self.txt_cliente.setText(nombre)
                 break
         
+        # Limpiar tabla antes de cargar items
+        self.tabla_model.setRowCount(0)
+        self.iva_por_fila.clear()
+        self.tipo_por_fila.clear()
+        
         # Cargar items
         if 'items' in nota:
             for item in nota['items']:
-                # Usar la lógica de 'agregar_a_tabla' para mantener consistencia
                 cantidad = str(item['cantidad'])
                 descripcion = item['descripcion']
                 precio_formateado = f"${item['precio_unitario']:.2f}"
                 iva_porcentaje = item['impuesto']
-                iva_texto = f"{iva_porcentaje:.1f} %" # <-- Mantenemos formato de 1 decimal
+                iva_texto = f"{iva_porcentaje:.1f} %"
                 importe_formateado = f"${item['importe']:.2f}"
 
                 item_cantidad = QStandardItem(cantidad)
@@ -667,6 +660,9 @@ class NotasWindow(QDialog):
                 self.tipo_por_fila[fila] = 'normal'
         
         self.calcular_totales()
+        
+        # Deshabilitar edición después de cargar
+        self.controlar_estado_campos(False)
 
     def cancelar_nota(self):
         """Cancelar nota actual"""
@@ -692,13 +688,6 @@ class NotasWindow(QDialog):
                                        "Verifique si ya está cancelada.")
             except Exception as e:
                 self.mostrar_error(f"Error al cancelar: {e}")
-
-    # =================================================================
-    # === MÉTODOS DE MANEJO DE ITEMS Y TABLA (SIN CAMBIOS) ============
-    # === Se mantiene la lógica original de 'notas_windows.py' =======
-    # === que es más robusta (incluye 'actualizar_item', ==========
-    # === manejo de 'nota'/'seccion', y re-indexado al borrar) =====
-    # =================================================================
     
     def calcular_importe(self):
         """Calcular el importe basado en cantidad y precio"""
@@ -870,8 +859,6 @@ class NotasWindow(QDialog):
     
     def calcular_totales(self):
         """Calcula subtotal, impuestos y total"""
-        # --- ESTA FUNCIÓN SE MANTIENE INTACTA ---
-        # --- Para actualizar los QLabels correctos de la UI original ---
         subtotal = 0
         total_impuestos = 0
         
@@ -901,7 +888,7 @@ class NotasWindow(QDialog):
         self.lbl_impuestos_valor.setText(f"$ {total_impuestos:,.2f}")
         self.lbl_total_valor.setText(f"$ {total:,.2f}")
     
-    # ==================== MENÚ CONTEXTUAL (SIN CAMBIOS) ====================
+    # ==================== MENÚ CONTEXTUAL ====================
     
     def mostrar_menu_contextual(self, position):
         """Muestra un menú contextual al hacer clic derecho en una fila de la tabla"""
@@ -995,7 +982,6 @@ class NotasWindow(QDialog):
 
     def insertar_seccion(self):
         """Inserta una fila de tipo sección"""
-        # from PyQt5.QtWidgets import QInputDialog # Ya importado arriba
         
         texto, ok = QInputDialog.getText(
             self, 
@@ -1035,7 +1021,6 @@ class NotasWindow(QDialog):
 
     def editar_nota_o_seccion(self, fila):
         """Edita una nota o sección existente"""
-        # from PyQt5.QtWidgets import QInputDialog # Ya importado arriba
         
         tipo = self.tipo_por_fila.get(fila, 'normal')
         if tipo == 'normal':
@@ -1186,9 +1171,47 @@ class NotasWindow(QDialog):
             self.iva_por_fila = nuevo_iva
             self.tipo_por_fila = nuevo_tipo
             self.calcular_totales()
+
+    def editar_nota(self):
+        """Habilita la edición de la nota cargada"""
+        if not self.nota_actual_id:
+            self.mostrar_advertencia("No hay una nota cargada para editar")
+            return
+        
+        self.modo_edicion = True
+        self.controlar_estado_campos(True)
+        self.mostrar_exito("Modo edición activado")
     
-    # ==================== UTILIDADES (SIN CAMBIOS) ====================
-    # Se mantiene la lógica original
+    def controlar_estado_campos(self, habilitar):
+
+        # Campos del cliente (si existen)
+        if hasattr(self, 'txt_cliente'):
+            self.txt_cliente.setReadOnly(not habilitar)
+        if hasattr(self, 'date_fecha'):
+            self.date_fecha.setEnabled(habilitar)
+        if hasattr(self, 'txt_referencia'):
+            self.txt_referencia.setReadOnly(not habilitar)
+        
+        # Campos de producto/servicio (si existen)
+        if hasattr(self, 'cmb_producto'):
+            self.cmb_producto.setEnabled(habilitar)
+        if hasattr(self, 'txt_cantidad'):
+            self.txt_cantidad.setReadOnly(not habilitar)
+        if hasattr(self, 'txt_descripcion'):
+            self.txt_descripcion.setReadOnly(not habilitar)
+        if hasattr(self, 'txt_precio'):
+            self.txt_precio.setReadOnly(not habilitar)
+        if hasattr(self, 'btn_agregar'):
+            self.btn_agregar.setEnabled(habilitar)
+        
+        # Tabla (si existe)
+        if hasattr(self, 'tabla_items'):
+            if habilitar:
+                self.tabla_items.setEditTriggers(QTableView.DoubleClicked)
+            else:
+                self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
+    
+    # ==================== UTILIDADES ====================
     
     def validar_datos(self):
         """Valida que los datos necesarios estén completos"""
@@ -1229,6 +1252,8 @@ class NotasWindow(QDialog):
         
         # Resetear fila en edición
         self.fila_en_edicion = -1
+
+        self.controlar_estado_campos(True)
     
     def mostrar_advertencia(self, mensaje):
         """Muestra un mensaje de advertencia"""
@@ -1324,9 +1349,6 @@ class NotasWindow(QDialog):
     
     def closeEvent(self, event):
         """Evento que se dispara al cerrar la ventana"""
-        # --- CAMBIO: Ya no se maneja self.db ---
-        # if self.db:
-        #     self.db.close()
         event.accept()
 
 
