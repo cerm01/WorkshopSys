@@ -206,6 +206,72 @@ class DatabaseHelper:
         except Exception as e:
             print(f"Error al crear cotización: {e}")
             return None
+        
+    def buscar_cotizaciones(self, folio: str = None, cliente_id: int = None) -> List[Dict]:
+        """Buscar cotizaciones por folio o cliente"""
+        db = self._get_session()
+        cotizaciones = crud.get_all_cotizaciones(db)
+        
+        # Filtrar según criterios
+        if folio:
+            cotizaciones = [c for c in cotizaciones if folio.upper() in c.folio.upper()]
+        if cliente_id:
+            cotizaciones = [c for c in cotizaciones if c.cliente_id == cliente_id]
+        
+        return [self._cotizacion_to_dict(c) for c in cotizaciones]
+
+    def actualizar_cotizacion(self, cotizacion_id: int, cotizacion_data: Dict, items: List[Dict]) -> Optional[Dict]:
+        """Actualizar cotización existente"""
+        try:
+            db = self._get_session()
+            
+            # Obtener cotización existente
+            cotizacion = crud.get_cotizacion(db, cotizacion_id)
+            if not cotizacion:
+                print(f"❌ No se encontró la cotización con ID {cotizacion_id}")
+                return None
+            
+            print(f"📝 Actualizando cotización {cotizacion.folio}...")
+            
+            # Actualizar datos principales (mantener folio)
+            cotizacion.cliente_id = cotizacion_data.get('cliente_id', cotizacion.cliente_id)
+            cotizacion.estado = cotizacion_data.get('estado', cotizacion.estado)
+            cotizacion.vigencia = cotizacion_data.get('vigencia', cotizacion.vigencia)
+            cotizacion.observaciones = cotizacion_data.get('observaciones', cotizacion.observaciones)
+            
+            # Eliminar items anteriores
+            from server.models import CotizacionItem
+            
+            for item in cotizacion.items:
+                db.delete(item)
+            db.flush()
+            
+            # Agregar nuevos items y recalcular totales
+            subtotal = 0
+            impuestos_total = 0
+            
+            for item_data in items:
+                item = CotizacionItem(cotizacion_id=cotizacion.id, **item_data)
+                db.add(item)
+                subtotal += item.importe
+                impuestos_total += (item.importe * item.impuesto / 100)
+            
+            cotizacion.subtotal = subtotal
+            cotizacion.impuestos = impuestos_total
+            cotizacion.total = subtotal + impuestos_total
+            
+            db.commit()
+            db.refresh(cotizacion)
+            
+            print(f"✅ Cotización actualizada correctamente")
+            return self._cotizacion_to_dict(cotizacion)
+            
+        except Exception as e:
+            print(f"❌ Error al actualizar cotización: {e}")
+            db.rollback()
+            import traceback
+            traceback.print_exc()
+            return None
     
     # ==================== NOTAS DE VENTA ====================
     
@@ -431,14 +497,17 @@ class DatabaseHelper:
             'cliente_id': cotizacion.cliente_id,
             'cliente_nombre': cotizacion.cliente.nombre,
             'estado': cotizacion.estado,
+            'vigencia': cotizacion.vigencia,
             'subtotal': cotizacion.subtotal,
             'impuestos': cotizacion.impuestos,
             'total': cotizacion.total,
+            'observaciones': cotizacion.observaciones or '',
             'items': [{
                 'cantidad': i.cantidad,
                 'descripcion': i.descripcion,
                 'precio_unitario': i.precio_unitario,
-                'importe': i.importe
+                'importe': i.importe,
+                'impuesto': i.impuesto
             } for i in cotizacion.items]
         }
     
