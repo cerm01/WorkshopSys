@@ -260,48 +260,44 @@ class NotasWindow(QDialog):
     
     def crear_tabla_items(self, parent_layout):
         """Crear tabla para mostrar los items agregados usando QTableView"""
-        # Crear modelo de datos
+        # Crear modelo de datos con 5 columnas
         self.tabla_model = QStandardItemModel()
-        self.tabla_model.setHorizontalHeaderLabels(["Cantidad", "Descripción", "Precio Unitario", "IVA", "Importe"])
+        self.tabla_model.setHorizontalHeaderLabels([
+            "Cantidad", 
+            "Descripción", 
+            "Precio Unitario", 
+            "IVA", 
+            "Importe"
+        ])
         
         # Crear vista de tabla
         self.tabla_items = QTableView()
         self.tabla_items.setModel(self.tabla_model)
         self.tabla_items.horizontalHeader().setVisible(True)
         self.tabla_items.verticalHeader().setVisible(False)
-
-        # Bloquear edición de celdas
         self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
-        
-        # Aplicar estilo para la tabla
         self.tabla_items.setStyleSheet(TABLE_STYLE)
         
-        # Configurar ancho de columnas
+        # Configurar ancho de columnas (5 columnas)
         header = self.tabla_items.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Cantidad
+        header.setSectionResizeMode(1, QHeaderView.Stretch)           # Descripción
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Precio
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # IVA
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Importe
         
-        # Fijar altura del encabezado
         header.setFixedHeight(40)
-        
-        # Fijar altura de cada fila a 30px
         self.tabla_items.verticalHeader().setDefaultSectionSize(30)
         
-        # Configurar comportamiento de selección
+        # Selección
         self.tabla_items.setSelectionBehavior(QTableView.SelectRows)
         self.tabla_items.setSelectionMode(QTableView.SingleSelection)
         
-        # Habilitar menú contextual
+        # Menú contextual
         self.tabla_items.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tabla_items.customContextMenuRequested.connect(self.mostrar_menu_contextual)
         
-        # Establecer altura para mostrar 15 filas
         self.tabla_items.setMinimumHeight(15 * 30 + 40)
-        
-        # Agregar al layout
         parent_layout.addWidget(self.tabla_items)
     
     def crear_panel_totales(self, parent_layout):
@@ -445,7 +441,7 @@ class NotasWindow(QDialog):
         self.botones[2].clicked.connect(self.cancelar_nota)   # <-- Cancelar
         self.botones[3].clicked.connect(self.buscar_nota)     # <-- Buscar
         self.botones[4].clicked.connect(self.editar_nota)      # <-- Editar
-        self.botones[5].clicked.connect(self.limpiar_formulario)  # Limpiar
+        self.botones[5].clicked.connect(self.nueva_nota)  # Limpiar
         # self.botones[6] (Imprimir) - Sin acción definida
     
     # ==================== FUNCIONES DE BASE DE DATOS ====================
@@ -570,12 +566,36 @@ class NotasWindow(QDialog):
             traceback.print_exc()
     
     def nueva_nota(self):
-        """Limpiar todo para nueva nota"""
-        self.limpiar_formulario()
-        self.calcular_totales()
+            """Reinicia TODO el formulario para una nota nueva."""
+            
+            # 1. Resetear estado y datos de la nota
+            self.nota_actual_id = None
+            self.modo_edicion = False
+            self.txt_folio.clear()
+            self.txt_folio.setPlaceholderText("NV-Auto")
+            
+            # 2. Resetear datos del cliente
+            self.date_fecha.setDate(QDate.currentDate())
+            self.txt_cliente.clear()
+            self.txt_referencia.clear()
+            
+            # 3. Resetear la tabla (modelo y diccionarios)
+            self.tabla_model.setRowCount(0)
+            self.iva_por_fila.clear()
+            self.tipo_por_fila.clear()
+            
+            # 4. Limpiar los campos de entrada de item (llamando a la nueva función)
+            self._limpiar_campos_item()
+            
+            # 5. Resetear los totales (esto los pondrá en $0.00)
+            self.calcular_totales()
+            
+            # 6. Habilitar todos los campos para la nueva nota
+            self.controlar_estado_campos(True)
 
-        if hasattr(self, 'botones') and len(self.botones) > 1:
-            self.botones[1].setText("Guardar")
+            # 7. Resetear texto del botón Guardar/Actualizar
+            if hasattr(self, 'botones') and len(self.botones) > 1:
+                self.botones[1].setText("Guardar")
 
     def buscar_nota(self):
         """Buscar nota por folio"""
@@ -662,28 +682,24 @@ class NotasWindow(QDialog):
 
     def cancelar_nota(self):
         """Cancelar nota actual"""
-        if not self.nota_actual_id or not self.modo_edicion:
-            self.mostrar_advertencia("No hay una nota cargada o guardada para cancelar")
+        if not self.nota_actual_id:
+            self.mostrar_advertencia("No hay una nota para cancelar")
             return
         
         respuesta = QMessageBox.question(
-            self, "Confirmar Cancelación", 
-            f"¿Está seguro de que desea cancelar la nota {self.txt_folio.text()}? "
-            "Esta acción no se puede deshacer.",
+            self, 
+            "Confirmar Cancelación", 
+            f"¿Cancelar la nota {self.txt_folio.text()}?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         
         if respuesta == QMessageBox.Yes:
-            try:
-                if db_helper.cancelar_nota(self.nota_actual_id):
-                    self.mostrar_exito("Nota cancelada correctamente")
-                    self.nueva_nota()
-                else:
-                    self.mostrar_error("No se pudo cancelar la nota. "
-                                       "Verifique si ya está cancelada.")
-            except Exception as e:
-                self.mostrar_error(f"Error al cancelar: {e}")
+            if db_helper.cancelar_nota(self.nota_actual_id):
+                self.mostrar_exito("Nota cancelada")
+                self.nueva_nota()
+            else:
+                self.mostrar_error("No se pudo cancelar (puede estar ya cancelada)")
     
     def calcular_importe(self):
         """Calcular el importe basado en cantidad y precio"""
@@ -757,7 +773,7 @@ class NotasWindow(QDialog):
         self.calcular_totales()
         
         # Limpiar el formulario para un nuevo ingreso
-        self.limpiar_formulario()
+        self._limpiar_campos_item()
         
         # Seleccionar la fila recién agregada
         self.tabla_items.selectRow(fila)
@@ -842,7 +858,7 @@ class NotasWindow(QDialog):
         self.calcular_totales()
         
         # Limpiar formulario y resetear botón
-        self.limpiar_formulario()
+        self._limpiar_campos_item()
         self.fila_en_edicion = -1
         self.btn_agregar.setText("Agregar")
         
@@ -1230,39 +1246,25 @@ class NotasWindow(QDialog):
         
         return True
     
-    def limpiar_formulario(self):
-        self.nota_actual_id = None
-        self.modo_edicion = False
-        self.txt_folio.clear()
-        self.txt_folio.setPlaceholderText("NV-Auto")
-        self.date_fecha.setDate(QDate.currentDate())
-        self.txt_cliente.clear()
-        self.txt_referencia.clear()
-        self.tabla_model.setRowCount(0)
-        self.iva_por_fila.clear()
-        self.tipo_por_fila.clear()
-        """Limpia los campos del formulario"""
-        self.txt_cantidad.setText("")
-        self.txt_descripcion.setText("")
-        self.txt_precio.setText("")
-        self.txt_importe.setValue(0)
-        self.txt_impuestos.setValue(16.00)
-        self.txt_cantidad.setFocus()
-        
-        # Asegurar que el botón tenga el texto correcto
-        self.btn_agregar.setText("Agregar")
-        
-        # Asegurar que esté conectado a la función correcta
-        try:
-            self.btn_agregar.clicked.disconnect()
-        except TypeError:
-            pass
-        self.btn_agregar.clicked.connect(self.agregar_a_tabla)
-        
-        # Resetear fila en edición
-        self.fila_en_edicion = -1
-
-        self.controlar_estado_campos(True)
+    def _limpiar_campos_item(self):
+            """Limpia SOLO los campos de entrada del item (cantidad, desc, etc.)"""
+            self.txt_cantidad.setText("")
+            self.txt_descripcion.setText("")
+            self.txt_precio.setText("")
+            self.txt_importe.setValue(0)
+            self.txt_impuestos.setValue(16.00)
+            self.txt_cantidad.setFocus()
+            
+            # Resetear el botón 'Agregar' (en caso de que estuviera en 'Actualizar')
+            self.btn_agregar.setText("Agregar")
+            try:
+                self.btn_agregar.clicked.disconnect()
+            except TypeError:
+                pass
+            self.btn_agregar.clicked.connect(self.agregar_a_tabla)
+            
+            # Resetear el control de edición de fila
+            self.fila_en_edicion = -1
     
     def mostrar_advertencia(self, mensaje):
         """Muestra un mensaje de advertencia"""

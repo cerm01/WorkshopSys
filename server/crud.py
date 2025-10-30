@@ -1,10 +1,3 @@
-"""
-CRUD Operations - Sistema de Taller Automotriz
-Día 2: 20 Octubre 2025
-
-Funciones para Create, Read, Update, Delete de todas las entidades
-"""
-
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 from typing import List, Optional, Dict, Any
@@ -477,6 +470,20 @@ def create_nota_venta(db: Session, nota_data: Dict[str, Any], items: List[Dict[s
     db.commit()
     db.refresh(nueva_nota)
     return nueva_nota
+
+def cancelar_nota(db: Session, nota_id: int) -> bool:
+    """Cancelar una nota de venta"""
+    nota = get_nota(db, nota_id)
+    if not nota:
+        return False
+    
+    if nota.estado == 'Cancelada':
+        return False  # Ya está cancelada
+    
+    nota.estado = 'Cancelada'
+    nota.updated_at = datetime.now()
+    db.commit()
+    return True
 
 
 # ==================== USUARIOS ====================

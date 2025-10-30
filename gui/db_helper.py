@@ -1,8 +1,3 @@
-"""
-Helper para integrar base de datos con GUI PyQt5
-Simplifica el uso del CRUD en las ventanas
-"""
-
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,10 +10,6 @@ from datetime import datetime
 
 
 class DatabaseHelper:
-    """
-    Clase helper para operaciones de base de datos en GUI
-    Maneja automáticamente la apertura/cierre de sesiones
-    """
     
     def __init__(self):
         self.db = None
@@ -330,6 +321,15 @@ class DatabaseHelper:
             traceback.print_exc()
             db.rollback()
             return None
+        
+    def cancelar_nota(self, nota_id: int) -> bool:
+        """Cancelar una nota de venta"""
+        try:
+            db = self._get_session()
+            return crud.cancelar_nota(db, nota_id)
+        except Exception as e:
+            print(f"Error al cancelar nota: {e}")
+            return False
     
     # ==================== ESTADÍSTICAS ====================
     
