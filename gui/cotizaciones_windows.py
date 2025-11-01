@@ -5,8 +5,8 @@ from PyQt5.QtWidgets import (
     QLabel, QLineEdit, QGridLayout, QGroupBox,
     QDoubleSpinBox, QMessageBox, QTableView, QHeaderView,
     QMenu, QAction, QFrame, QWidget, QDateEdit, QComboBox,
-    QInputDialog,  # <-- Importado de _logica
-    QTextEdit, QDialogButtonBox # <-- Importado de _logica (para 'condiciones')
+    QInputDialog, QCompleter,
+    QTextEdit, QDialogButtonBox
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QIcon, QColor, QFont
@@ -17,12 +17,13 @@ from styles import (
     GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )
 from datetime import datetime, timedelta
-from db_helper import db_helper  # <-- Importado de _logica
+from db_helper import db_helper
 
 
 class CotizacionesWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.clientes_dict = {}
         self.main_window = parent
         self.setWindowTitle("Cotizaciones")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
@@ -34,29 +35,31 @@ class CotizacionesWindow(QDialog):
         # Aplicar estilos
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
 
-        # Variable para seguimiento de edición (Original)
+        # Variable para seguimiento de edición
         self.fila_en_edicion = -1
 
-        # Diccionario para almacenar el IVA de cada fila (Original)
+        # Diccionario para almacenar el IVA de cada fila
         self.iva_por_fila = {}      
 
-        # Diccionario para almacenar el tipo de cada fila (Original)
+        # Diccionario para almacenar el tipo de cada fila
         self.tipo_por_fila = {}  # 'normal', 'nota', 'seccion', 'condiciones'
 
-        # Variables BD (Agregadas de _logica)
+        # Variables BD
         self.cotizacion_actual_id = None
         self.modo_edicion = False
 
         # Crear la interfaz
         self.setup_ui()
 
-        # Estado inicial (Agregado de _logica)
-        self.controlar_estado_campos(False) 
+        self.cargar_clientes_autocompletado()
+
+        # Estado inicial
+        self.controlar_estado_campos(True) 
         self.botones[0].setEnabled(True) # "Nueva"
         self.botones[3].setEnabled(True) # "Buscar"
     
     def setup_ui(self):
-        """Configurar la interfaz de usuario (Original)"""
+        """Configurar la interfaz de usuario  """
         # Layout principal 
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
@@ -101,11 +104,11 @@ class CotizacionesWindow(QDialog):
         # Asignar el layout al diálogo
         self.setLayout(main_layout)
         
-        # Conectar señales (ahora incluye las de _logica)
+        # Conectar señales
         self.conectar_senales()
 
     def crear_grupo_cotizacion(self, parent_layout):
-        """Crear grupo de campos para datos de la cotización (Original)"""
+        """Crear grupo de campos para datos de la cotización  """
         # Crear GroupBox para cotización
         grupo_cotizacion = QGroupBox("")
         grupo_cotizacion.setStyleSheet(GROUP_BOX_STYLE)
@@ -115,7 +118,7 @@ class CotizacionesWindow(QDialog):
         layout.setSpacing(15)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Campo Folio de Cotización (no editable)
+        # Campo Folio de Cotización
         lbl_folio = QLabel("Folio Cotización")
         lbl_folio.setStyleSheet(LABEL_STYLE)
         self.txt_folio = QLineEdit()
@@ -126,14 +129,14 @@ class CotizacionesWindow(QDialog):
             }
         """)
         self.txt_folio.setReadOnly(True)
-        self.txt_folio.setPlaceholderText("COT-Auto") # Placeholder de _logica
+        self.txt_folio.setPlaceholderText("COT-Auto") # Placeholder
         
         # Campo Cliente
         lbl_cliente = QLabel("Cliente")
         lbl_cliente.setStyleSheet(LABEL_STYLE)
         self.txt_cliente = QLineEdit()
         self.txt_cliente.setStyleSheet(INPUT_STYLE)
-        self.txt_cliente.setPlaceholderText("Nombre del cliente o empresa")
+        self.txt_cliente.setPlaceholderText("Escriba para buscar cliente...")
         
         # Campo Fecha de Cotización
         lbl_fecha = QLabel("Fecha Cotización")
@@ -180,7 +183,7 @@ class CotizacionesWindow(QDialog):
         parent_layout.addWidget(grupo_cotizacion)
 
     def _obtener_estilo_calendario(self):
-        """Retorna el estilo CSS común para los calendarios (Original)"""
+        """Retorna el estilo CSS común para los calendarios  """
         return """
             QDateEdit {
                 padding: 8px;
@@ -249,7 +252,7 @@ class CotizacionesWindow(QDialog):
 
     def conectar_senales(self):
         """Conectar las señales de los controles (Fusionado)"""
-        # (Original UI connections)
+        # UI connections
         self.txt_cantidad.textChanged.connect(self.calcular_importe)
         self.txt_precio.textChanged.connect(self.calcular_importe)
         self.btn_agregar.clicked.connect(self.agregar_a_tabla)
@@ -259,7 +262,7 @@ class CotizacionesWindow(QDialog):
         self.date_fecha.dateChanged.connect(self.validar_fechas)
         self.date_vigencia.dateChanged.connect(self.validar_fechas)
 
-        # (Agregado de _logica - Conexiones de botones principales)
+        # Conexiones de botones principales
         self.botones[0].clicked.connect(self.nueva_cotizacion)
         self.botones[1].clicked.connect(self.guardar_cotizacion)
         self.botones[2].clicked.connect(self.cancelar_edicion) # Botón "Cancelar"
@@ -270,7 +273,7 @@ class CotizacionesWindow(QDialog):
         # self.botones[7] (Enviar) - sin lógica
 
     def validar_fechas(self):
-        """Valida que la fecha de vigencia sea posterior a la fecha de cotización (Original)"""
+        """Valida que la fecha de vigencia sea posterior a la fecha de cotización  """
         fecha_cot = self.date_fecha.date()
         fecha_vig = self.date_vigencia.date()
         
@@ -280,7 +283,7 @@ class CotizacionesWindow(QDialog):
             self.date_vigencia.setDate(nueva_vigencia)
     
     def crear_grupo_producto_servicio(self, parent_layout):
-        """Crear grupo de campos para productos/servicios (Original)"""
+        """Crear grupo de campos para productos/servicios  """
         grupo = QGroupBox("")
         grupo.setStyleSheet(GROUP_BOX_STYLE)
         
@@ -366,7 +369,7 @@ class CotizacionesWindow(QDialog):
         parent_layout.addWidget(grupo)
     
     def crear_tabla_items(self, parent_layout):
-        """Crear tabla para mostrar los items cotizados (Original)"""
+        """Crear tabla para mostrar los items cotizados  """
         # Crear modelo de datos
         self.tabla_model = QStandardItemModel()
         self.tabla_model.setHorizontalHeaderLabels(["Cantidad", "Descripción", "Precio Unitario", "IVA", "Importe"])
@@ -412,62 +415,45 @@ class CotizacionesWindow(QDialog):
         parent_layout.addWidget(self.tabla_items)
 
     # ===================================================================
-    # = MÉTODOS DE LÓGICA DE BD (TRAÍDOS DE _logica Y ADAPTADOS)
+    # = MÉTODOS DE BD
     # ===================================================================
 
     def guardar_cotizacion(self):
-        """Guardar en BD (Adaptado a la UI original)"""
+        """Guardar cotización"""
+        # Validar cliente
+        nombre_cliente = self.txt_cliente.text()
+        cliente_id = self.clientes_dict.get(nombre_cliente)
+        
+        if not cliente_id:
+            self.mostrar_advertencia("Seleccione un cliente válido de la lista")
+            return
+        
+        # Validar items
+        if self.tabla_model.rowCount() == 0:
+            self.mostrar_advertencia("Agregue al menos un item")
+            return
+        
         try:
-            if not self.txt_cliente.text():
-                self.mostrar_advertencia("Ingrese un nombre de cliente")
-                return
-            
-            if self.tabla_model.rowCount() == 0:
-                self.mostrar_advertencia("Agregue al menos un item a la cotización")
-                return
-            
-            # Datos adaptados a la UI de cotizaciones_windows.py
             cotizacion_data = {
-                'cliente_nombre': self.txt_cliente.text(), # Se guarda el nombre
-                'proyecto': self.txt_proyecto.text(),
-                'estado': 'Pendiente', # Se asume 'Pendiente' (widget no existe)
+                'cliente_id': cliente_id,  # Usar ID validado
+                'estado': 'Pendiente',
                 'vigencia': self.date_vigencia.date().toString("dd/MM/yyyy"),
-                'fecha': self.date_fecha.date().toString("dd/MM/yyyy"),
-                'observaciones': '' # Se puede añadir un campo si se desea
+                'observaciones': self.txt_proyecto.text()
             }
             
+            # Preparar items (solo normales)
             items = []
             for fila in range(self.tabla_model.rowCount()):
-                tipo = self.tipo_por_fila.get(fila, 'normal')
+                if self.tipo_por_fila.get(fila, 'normal') != 'normal':
+                    continue
                 
-                # Guardamos tipo y orden para reconstruir la tabla
-                item_data = {
-                    'tipo': tipo,
-                    'orden': fila
-                }
-
-                if tipo == 'normal':
-                    # Es un item normal
-                    cantidad = float(self.tabla_model.item(fila, 0).text())
-                    descripcion = self.tabla_model.item(fila, 1).text()
-                    precio_texto = self.tabla_model.item(fila, 2).text().replace('$', '').replace(',', '')
-                    precio_unitario = float(precio_texto)
-                    importe_texto = self.tabla_model.item(fila, 4).text().replace('$', '').replace(',', '')
-                    importe = float(importe_texto)
-                    iva_porcentaje = self.iva_por_fila.get(fila, 16.0)
-                    
-                    item_data.update({
-                        'cantidad': cantidad,
-                        'descripcion': descripcion,
-                        'precio_unitario': precio_unitario,
-                        'importe': importe,
-                        'impuesto': iva_porcentaje
-                    })
-                else:
-                    # Para 'nota', 'seccion', 'condiciones', guardar solo el texto
-                    item_data['descripcion'] = self.tabla_model.item(fila, 0).text()
-
-                items.append(item_data)
+                items.append({
+                    'cantidad': int(self.tabla_model.item(fila, 0).text()),
+                    'descripcion': self.tabla_model.item(fila, 1).text(),
+                    'precio_unitario': float(self.tabla_model.item(fila, 2).text().replace('$', '').replace(',', '')),
+                    'importe': float(self.tabla_model.item(fila, 4).text().replace('$', '').replace(',', '')),
+                    'impuesto': self.iva_por_fila.get(fila, 16.0)
+                })
             
             if self.modo_edicion and self.cotizacion_actual_id:
                 cotizacion = db_helper.actualizar_cotizacion(self.cotizacion_actual_id, cotizacion_data, items)
@@ -483,12 +469,10 @@ class CotizacionesWindow(QDialog):
                 self.modo_edicion = False
                 self.controlar_estado_campos(False)
             else:
-                self.mostrar_error("No se pudo guardar la cotización")
+                self.mostrar_error("No se pudo guardar")
             
         except Exception as e:
-            self.mostrar_error(f"Error al guardar: {e}")
-            import traceback
-            traceback.print_exc()
+            self.mostrar_error(f"Error: {e}")
 
     def nueva_cotizacion(self):
         """Limpiar para nueva (Adaptado)"""
@@ -513,7 +497,7 @@ class CotizacionesWindow(QDialog):
         self.modo_edicion = True # Modo edición se activa para una nueva
 
     def buscar_cotizacion(self):
-        """Buscar cotización (de _logica)"""
+        """Buscar cotización  """
         folio, ok = QInputDialog.getText(self, "Buscar Cotización", "Ingrese el Folio:")
         
         if ok and folio:
@@ -529,15 +513,16 @@ class CotizacionesWindow(QDialog):
                 self.mostrar_error(f"Error al buscar: {e}")
 
     def cargar_cotizacion_en_formulario(self, cotizacion):
-        """Cargar en formulario (Adaptado a la UI original)"""
+        """Cargar en formulario"""
         self.nueva_cotizacion() # Limpia todo primero
         self.controlar_estado_campos(False) # Bloquea
         self.modo_edicion = False
 
         self.cotizacion_actual_id = cotizacion['id']
+        self.modo_edicion = False
         
         self.txt_folio.setText(cotizacion['folio'])
-        # Cargar datos en los widgets de la UI original
+        # Cargar datos en los widgets
         self.txt_cliente.setText(cotizacion.get('cliente_nombre', ''))
         self.txt_proyecto.setText(cotizacion.get('proyecto', ''))
         
@@ -545,6 +530,12 @@ class CotizacionesWindow(QDialog):
             self.date_fecha.setDate(QDate.fromString(cotizacion['fecha'], "dd/MM/yyyy"))
         if cotizacion.get('vigencia'):
             self.date_vigencia.setDate(QDate.fromString(cotizacion['vigencia'], "dd/MM/yyyy"))
+
+        # Cargar cliente por ID
+        for nombre, id_cliente in self.clientes_dict.items():
+            if id_cliente == cotizacion['cliente_id']:
+                self.txt_cliente.setText(nombre)
+                break
         
         self.tabla_model.setRowCount(0)
         self.iva_por_fila.clear()
@@ -592,7 +583,7 @@ class CotizacionesWindow(QDialog):
         self.calcular_totales()
 
     def _agregar_item_tabla(self, cantidad, descripcion, precio, iva_porcentaje):
-        """Helper agregar item (de _logica) - Adaptado para tabla UI"""
+        """Helper agregar item   - Adaptado para tabla UI"""
         cantidad_num = float(cantidad)
         importe = cantidad_num * precio
         
@@ -613,7 +604,7 @@ class CotizacionesWindow(QDialog):
         self.tipo_por_fila[fila] = 'normal'
 
     def editar_cotizacion(self):
-        """Habilitar edición (de _logica)"""
+        """Habilitar edición  """
         if not self.cotizacion_actual_id:
             self.mostrar_advertencia("Primero busque y cargue una cotización para editar.")
             return
@@ -674,12 +665,56 @@ class CotizacionesWindow(QDialog):
         self.botones[6].setEnabled(bool(self.cotizacion_actual_id)) # Imprimir
         self.botones[7].setEnabled(bool(self.cotizacion_actual_id)) # Enviar
 
+    def cargar_clientes_autocompletado(self):
+        """Cargar clientes y configurar autocompletado"""
+        try:
+            clientes = db_helper.get_clientes()
+            self.clientes_dict.clear()
+            
+            nombres = []
+            for cliente in clientes:
+                nombre_completo = f"{cliente['nombre']} - {cliente['tipo']}"
+                nombres.append(nombre_completo)
+                self.clientes_dict[nombre_completo] = cliente['id']
+            
+            completer = QCompleter(nombres)
+            completer.setCaseSensitivity(Qt.CaseInsensitive)
+            completer.setFilterMode(Qt.MatchContains)
+            completer.setMaxVisibleItems(9)
+            completer.popup().setStyleSheet("""
+                QListView {
+                    background-color: white;
+                    border: 2px solid #2CD5C4;
+                    border-radius: 4px;
+                    padding: 5px;
+                    font-size: 16px;
+                    min-height: 60px;
+                }
+                QListView::item {
+                    padding: 10px;
+                    border-radius: 3px;
+                    min-height: 30px;
+                }
+                QListView::item:hover {
+                    background-color: #E0F7FA;
+                }
+                QListView::item:selected {
+                    background-color: #2CD5C4;
+                    color: white;
+                }
+            """)
+            
+            self.txt_cliente.setCompleter(completer)
+            
+        except Exception as e:
+            print(f"Error al cargar clientes: {e}")
+
     # ===================================================================
-    # = MÉTODOS DE LA UI ORIGINAL (MENÚ CONTEXTUAL Y TABLA)
+    # = MÉTODOS MENÚ CONTEXTUAL Y TABLA
     # ===================================================================
     
     def mostrar_menu_contextual(self, position):
-        """Muestra un menú contextual al hacer clic derecho en una fila de la tabla (Original)"""
+        """Muestra un menú contextual al hacer clic derecho en una fila de la tabla  """
         # Solo mostrar menú si estamos en modo edición
         if not self.modo_edicion:
             return
@@ -744,7 +779,7 @@ class CotizacionesWindow(QDialog):
         menu.exec_(self.tabla_items.viewport().mapToGlobal(position))
 
     def insertar_nota(self):
-        """Inserta una fila de tipo nota (Original)"""
+        """Inserta una fila de tipo nota  """
         texto, ok = QInputDialog.getText(
             self, "Agregar Nota", "Ingrese el texto de la nota:", QLineEdit.Normal, ""
         )
@@ -763,7 +798,7 @@ class CotizacionesWindow(QDialog):
             self.calcular_totales()
 
     def insertar_seccion(self):
-        """Inserta una fila de tipo sección (Original)"""
+        """Inserta una fila de tipo sección  """
         texto, ok = QInputDialog.getText(
             self, "Agregar Sección", "Nombre de la sección:", QLineEdit.Normal, ""
         )
@@ -785,7 +820,7 @@ class CotizacionesWindow(QDialog):
             self.calcular_totales()
 
     def insertar_condiciones(self):
-        """Inserta condiciones comerciales (Original)"""
+        """Inserta condiciones comerciales  """
         dialog = QDialog(self)
         dialog.setWindowTitle("Agregar Condiciones Comerciales")
         dialog.setMinimumWidth(500)
@@ -822,7 +857,7 @@ class CotizacionesWindow(QDialog):
                 self.calcular_totales()
 
     def editar_elemento_especial(self, fila):
-        """Edita una nota, sección o condiciones existente (Original)"""
+        """Edita una nota, sección o condiciones existente  """
         tipo = self.tipo_por_fila.get(fila, 'normal')
         if tipo == 'normal': return
         
@@ -869,21 +904,21 @@ class CotizacionesWindow(QDialog):
                     item_actual.setText(f"📋 CONDICIONES COMERCIALES:\n{texto_nuevo}")
     
     def mover_fila_arriba(self, fila):
-        """Mover fila hacia arriba (Original)"""
+        """Mover fila hacia arriba  """
         if fila <= 0: return
         self._intercambiar_filas(fila, fila - 1)
         self.tabla_items.selectRow(fila - 1)
         self.calcular_totales()
     
     def mover_fila_abajo(self, fila):
-        """Mover fila hacia abajo (Original)"""
+        """Mover fila hacia abajo  """
         if fila >= self.tabla_model.rowCount() - 1: return
         self._intercambiar_filas(fila, fila + 1)
         self.tabla_items.selectRow(fila + 1)
         self.calcular_totales()
     
     def _intercambiar_filas(self, fila1, fila2):
-        """Helper para mover filas (Original)"""
+        """Helper para mover filas  """
         for col in range(self.tabla_model.columnCount()):
             item1 = self.tabla_model.takeItem(fila1, col)
             item2 = self.tabla_model.takeItem(fila2, col)
@@ -911,7 +946,7 @@ class CotizacionesWindow(QDialog):
                 self.tabla_items.setRowHeight(fila, 30)
     
     def eliminar_fila(self, fila):
-        """Elimina una fila de la tabla (Original, con lógica de _logica)"""
+        """Elimina una fila de la tabla"""
         msg_box = QMessageBox(QMessageBox.Question, 
                             "Confirmar", "¿Eliminar este elemento?", 
                             QMessageBox.Yes | QMessageBox.No, self)
@@ -941,7 +976,7 @@ class CotizacionesWindow(QDialog):
                 self.limpiar_formulario_items()
     
     def calcular_importe(self):
-        """Calcular el importe (Original)"""
+        """Calcular el importe  """
         try:
             cantidad = float(self.txt_cantidad.text()) if self.txt_cantidad.text() else 0
             precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
@@ -956,7 +991,7 @@ class CotizacionesWindow(QDialog):
             self.txt_importe.setValue(0)
     
     def calcular_totales(self):
-        """Calcula y actualiza los totales (Original)"""
+        """Calcula y actualiza los totales  """
         subtotal = 0.0
         total_impuestos = 0.0
         
@@ -981,7 +1016,7 @@ class CotizacionesWindow(QDialog):
         self.lbl_total_valor.setText(f"$ {total:,.2f}")
     
     def crear_panel_totales(self, parent_layout):
-        """Crear panel para mostrar totales (Original)"""
+        """Crear panel para mostrar totales  """
         contenedor_principal = QWidget()
         layout_principal = QHBoxLayout()
         layout_principal.setContentsMargins(0, 0, 0, 0)
@@ -1074,7 +1109,7 @@ class CotizacionesWindow(QDialog):
         parent_layout.addWidget(contenedor_principal)
     
     def agregar_a_tabla(self):
-        """Agrega los datos del formulario a la tabla (Original)"""
+        """Agrega los datos del formulario a la tabla  """
         if not self.validar_datos():
             return
         
@@ -1117,7 +1152,7 @@ class CotizacionesWindow(QDialog):
         self.tabla_items.selectRow(fila)
     
     def cargar_item_para_editar(self, index):
-        """Carga los datos de la fila (Original) - con chequeo de modo_edicion"""
+        """Carga los datos de la fila   - con chequeo de modo_edicion"""
         if not self.modo_edicion:
             return
             
@@ -1150,7 +1185,7 @@ class CotizacionesWindow(QDialog):
         self.btn_agregar.clicked.connect(self.actualizar_item)
     
     def actualizar_item(self):
-        """Actualiza el item en edición (Original)"""
+        """Actualiza el item en edición  """
         if not self.validar_datos():
             return
         
@@ -1183,27 +1218,27 @@ class CotizacionesWindow(QDialog):
         self.limpiar_formulario_items()
     
     # ===================================================================
-    # = HELPERS (Originales y de _logica)
+    # = HELPERS
     # ===================================================================
 
     def mostrar_advertencia(self, mensaje):
-        """Muestra un mensaje de advertencia (Original)"""
+        """Muestra un mensaje de advertencia  """
         msg_box = QMessageBox(QMessageBox.Warning, "Advertencia", mensaje, QMessageBox.Ok, self)
         msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         msg_box.exec_()
     
     def mostrar_exito(self, mensaje):
-        """Muestra un mensaje de éxito (de _logica)"""
+        """Muestra un mensaje de éxito  """
         QMessageBox.information(self, "Éxito", mensaje)
 
     def mostrar_error(self, mensaje):
-        """Muestra un mensaje de error (de _logica)"""
+        """Muestra un mensaje de error  """
         msg = QMessageBox(QMessageBox.Critical, "Error", mensaje, QMessageBox.Ok, self)
         msg.setStyleSheet(MESSAGE_BOX_STYLE)
         msg.exec_()
 
     def validar_datos(self):
-        """Valida los datos del formulario de items (Original)"""
+        """Valida los datos del formulario de items  """
         if not self.txt_cantidad.text() or self.txt_cantidad.text() == "0":
             self.mostrar_advertencia("Ingrese una cantidad válida.")
             return False
@@ -1220,7 +1255,7 @@ class CotizacionesWindow(QDialog):
         return True
     
     def limpiar_formulario_items(self):
-        """Limpia los campos del formulario de entrada (Original)"""
+        """Limpia los campos del formulario de entrada  """
         self.txt_cantidad.setText("")
         self.txt_descripcion.setText("")
         self.txt_precio.setText("")
@@ -1236,15 +1271,12 @@ class CotizacionesWindow(QDialog):
         self.fila_en_edicion = -1
     
     def closeEvent(self, event):
-        """Evento que se dispara al cerrar la ventana (Original)"""
-        # Aquí puedes agregar lógica para guardar cambios pendientes
+        """Evento que se dispara al cerrar la ventana  """
         event.accept()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    # Debes asegurarte de tener un archivo 'db_helper.py' accesible
-    # y un archivo 'styles.py'
     window = CotizacionesWindow()
     window.show()
     sys.exit(app.exec_())
