@@ -435,7 +435,7 @@ class NotasWindow(QDialog):
         # Conectar doble clic en tabla para editar
         self.tabla_items.doubleClicked.connect(self.cargar_item_para_editar)
         
-        # --- CAMBIO: Conectar todos los botones ---
+        # Conectar todos los botones ---
         self.botones[0].clicked.connect(self.nueva_nota)      # Nuevo
         self.botones[1].clicked.connect(self.guardar_nota)    # Guardar
         self.botones[2].clicked.connect(self.cancelar_nota)   # <-- Cancelar

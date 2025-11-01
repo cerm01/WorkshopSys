@@ -54,9 +54,7 @@ class CotizacionesWindow(QDialog):
         self.cargar_clientes_autocompletado()
 
         # Estado inicial
-        self.controlar_estado_campos(True) 
-        self.botones[0].setEnabled(True) # "Nueva"
-        self.botones[3].setEnabled(True) # "Buscar"
+        self.controlar_estado_campos(True)
     
     def setup_ui(self):
         """Configurar la interfaz de usuario  """
@@ -265,12 +263,14 @@ class CotizacionesWindow(QDialog):
         # Conexiones de botones principales
         self.botones[0].clicked.connect(self.nueva_cotizacion)
         self.botones[1].clicked.connect(self.guardar_cotizacion)
-        self.botones[2].clicked.connect(self.cancelar_edicion) # Botón "Cancelar"
+        # Botón "Cancelar"
+        self.botones[2].clicked.connect(self.cancelar_cotizacion) 
         self.botones[3].clicked.connect(self.buscar_cotizacion)
         self.botones[4].clicked.connect(self.editar_cotizacion)
-        self.botones[5].clicked.connect(self.limpiar_formulario_items) # Limpiar solo formulario
-        # self.botones[6] (Imprimir) - sin lógica
-        # self.botones[7] (Enviar) - sin lógica
+        # Botón "Limpiar"
+        self.botones[5].clicked.connect(self.nueva_cotizacion)
+        # self.botones[6] (Imprimir)
+        # self.botones[7] (Enviar)
 
     def validar_fechas(self):
         """Valida que la fecha de vigencia sea posterior a la fecha de cotización  """
@@ -467,7 +467,7 @@ class CotizacionesWindow(QDialog):
                 self.txt_folio.setText(cotizacion['folio'])
                 self.cotizacion_actual_id = cotizacion['id']
                 self.modo_edicion = False
-                self.controlar_estado_campos(False)
+                self.controlar_estado_campos(False) # Deshabilita campos
             else:
                 self.mostrar_error("No se pudo guardar")
             
@@ -493,7 +493,7 @@ class CotizacionesWindow(QDialog):
         
         self.limpiar_formulario_items()
         self.calcular_totales()
-        self.controlar_estado_campos(True)
+        self.controlar_estado_campos(True) # Habilita campos
         self.modo_edicion = True # Modo edición se activa para una nueva
 
     def buscar_cotizacion(self):
@@ -514,12 +514,18 @@ class CotizacionesWindow(QDialog):
 
     def cargar_cotizacion_en_formulario(self, cotizacion):
         """Cargar en formulario"""
-        self.nueva_cotizacion() # Limpia todo primero
-        self.controlar_estado_campos(False) # Bloquea
-        self.modo_edicion = False
-
+        self.nueva_cotizacion() # Limpia todo primero (y habilita campos)
+        
+        # --- INICIO DE CORRECCIÓN ---
+        # Se asigna el ID y el modo_edicion ANTES de llamar a controlar_estado_campos
         self.cotizacion_actual_id = cotizacion['id']
         self.modo_edicion = False
+        
+        self.controlar_estado_campos(False) # Bloquea campos, pero ahora SÍ habilitará "Editar"
+        # --- FIN DE CORRECCIÓN ---
+
+        # self.cotizacion_actual_id = cotizacion['id'] # <-- ESTA LÍNEA SE MOVIÓ ARRIBA
+        # self.modo_edicion = False # <-- ESTA LÍNEA SE MOVIÓ ARRIBA
         
         self.txt_folio.setText(cotizacion['folio'])
         # Cargar datos en los widgets
@@ -611,35 +617,40 @@ class CotizacionesWindow(QDialog):
         
         self.modo_edicion = True
         self.controlar_estado_campos(True)
-        self.mostrar_exito("Modo edición habilitado. Ahora puede modificar los campos.")
 
-    def cancelar_edicion(self):
-        """Cancela la edición o la nueva cotización"""
+        if hasattr(self, 'botones') and len(self.botones) > 1:
+            self.botones[1].setText("Actualizar") 
+
+    def cancelar_cotizacion(self):
+        """Cancela la cotización actual (la marca como 'Cancelada' en la BD)
+           Imita el comportamiento de NotasWindow.
+        """
         if not self.cotizacion_actual_id:
-            # Si no hay ID, es una cotización nueva, solo limpiar
-            self.nueva_cotizacion()
-            self.controlar_estado_campos(False)
-        else:
-            # Si hay un ID, es una edición, recargarla desde la BD
+            self.mostrar_advertencia("No hay una cotización cargada para cancelar.")
+            return
+        
+        respuesta = QMessageBox.question(
+            self, 
+            "Confirmar Cancelación", 
+            f"¿Desea cancelar la cotización {self.txt_folio.text()}? Esta acción no se puede revertir.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if respuesta == QMessageBox.Yes:
             try:
-                cotizaciones = db_helper.buscar_cotizaciones(id=self.cotizacion_actual_id)
-                if cotizaciones:
-                    self.cargar_cotizacion_en_formulario(cotizaciones[0])
-                    self.mostrar_exito("Edición cancelada. Se restauraron los datos originales.")
+                if db_helper.cancelar_cotizacion(self.cotizacion_actual_id): 
+                    self.mostrar_exito("Cotización cancelada correctamente.")
+                    self.nueva_cotizacion() # Limpia el formulario y lo habilita
                 else:
-                    # Si no se encuentra (p.ej. se borró), limpiar
-                    self.nueva_cotizacion()
-                    self.controlar_estado_campos(False)
+                    self.mostrar_error("No se pudo cancelar la cotización (puede estar ya cancelada).")
+            except AttributeError:
+                 self.mostrar_error("Error de programador: La función 'cancelar_cotizacion' no existe en db_helper.")
             except Exception as e:
                 self.mostrar_error(f"Error al cancelar: {e}")
-                self.nueva_cotizacion()
-                self.controlar_estado_campos(False)
-        
-        self.modo_edicion = False
-        # self.controlar_estado_campos(False) # Ya se llama dentro de los if/else
 
     def controlar_estado_campos(self, habilitar):
-        """Habilitar/deshabilitar campos (Adaptado a la UI original)"""
+        """Habilitar/deshabilitar campos"""
         # Campos de encabezado
         self.txt_cliente.setEnabled(habilitar)
         self.txt_proyecto.setEnabled(habilitar)
@@ -653,14 +664,19 @@ class CotizacionesWindow(QDialog):
         self.txt_impuestos.setEnabled(habilitar)
         self.btn_agregar.setEnabled(habilitar)
 
+        if habilitar:
+            self.tabla_items.setEditTriggers(QTableView.DoubleClicked)
+        else:
+            self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
+
         # Control de botones principales
         self.botones[0].setEnabled(True) # Nueva (siempre activa)
         self.botones[1].setEnabled(habilitar) # Guardar
-        self.botones[2].setEnabled(habilitar) # Cancelar
+        self.botones[2].setEnabled(True) # Cancelar (ahora siempre activa, como en Notas)
         self.botones[3].setEnabled(True) # Buscar (siempre activo)
         # Editar solo se habilita si hay una cotización cargada Y no estamos en modo edición
         self.botones[4].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) 
-        self.botones[5].setEnabled(habilitar) # Limpiar (formulario items)
+        self.botones[5].setEnabled(True) # Limpiar (siempre activo)
         # Imprimir/Enviar solo si hay una cotización cargada
         self.botones[6].setEnabled(bool(self.cotizacion_actual_id)) # Imprimir
         self.botones[7].setEnabled(bool(self.cotizacion_actual_id)) # Enviar
