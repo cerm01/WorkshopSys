@@ -273,6 +273,14 @@ class DatabaseHelper:
             traceback.print_exc()
             return None
     
+    def cancelar_cotizacion(self, cotizacion_id: int) -> bool:
+        """Cancelar una cotización"""
+        try:
+            db = self._get_session()
+            return crud.cancelar_cotizacion(db, cotizacion_id)
+        except Exception as e:
+            print(f"Error al cancelar cotización: {e}")
+            return False
     # ==================== NOTAS DE VENTA ====================
     
     def get_notas(self) -> List[Dict]:

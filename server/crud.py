@@ -427,6 +427,19 @@ def delete_cotizacion(db: Session, cotizacion_id: int) -> bool:
         return True
     return False
 
+def cancelar_cotizacion(db: Session, cotizacion_id: int) -> bool:
+    """Cancelar una cotización"""
+    cotizacion = get_cotizacion(db, cotizacion_id)
+    if not cotizacion:
+        return False
+    
+    if cotizacion.estado == 'Cancelada':
+        return False
+    
+    cotizacion.estado = 'Cancelada'
+    cotizacion.updated_at = datetime.now()
+    db.commit()
+    return True
 
 # ==================== NOTAS DE VENTA ====================
 

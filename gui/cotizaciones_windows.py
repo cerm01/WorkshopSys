@@ -622,33 +622,26 @@ class CotizacionesWindow(QDialog):
             self.botones[1].setText("Actualizar") 
 
     def cancelar_cotizacion(self):
-        """Cancela la cotización actual (la marca como 'Cancelada' en la BD)
-           Imita el comportamiento de NotasWindow.
-        """
+        """Cancelar cotización en BD y limpiar formulario"""
         if not self.cotizacion_actual_id:
-            self.mostrar_advertencia("No hay una cotización cargada para cancelar.")
+            self.mostrar_advertencia("No hay cotización para cancelar")
             return
         
         respuesta = QMessageBox.question(
             self, 
             "Confirmar Cancelación", 
-            f"¿Desea cancelar la cotización {self.txt_folio.text()}? Esta acción no se puede revertir.",
+            f"¿Cancelar la cotización {self.txt_folio.text()}?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         
         if respuesta == QMessageBox.Yes:
-            try:
-                if db_helper.cancelar_cotizacion(self.cotizacion_actual_id): 
-                    self.mostrar_exito("Cotización cancelada correctamente.")
-                    self.nueva_cotizacion() # Limpia el formulario y lo habilita
-                else:
-                    self.mostrar_error("No se pudo cancelar la cotización (puede estar ya cancelada).")
-            except AttributeError:
-                 self.mostrar_error("Error de programador: La función 'cancelar_cotizacion' no existe en db_helper.")
-            except Exception as e:
-                self.mostrar_error(f"Error al cancelar: {e}")
-
+            if db_helper.cancelar_cotizacion(self.cotizacion_actual_id):
+                self.mostrar_exito("Cotización cancelada")
+                self.nueva_cotizacion()
+            else:
+                self.mostrar_error("No se pudo cancelar (puede estar ya cancelada)")
+                
     def controlar_estado_campos(self, habilitar):
         """Habilitar/deshabilitar campos"""
         # Campos de encabezado
