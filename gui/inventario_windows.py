@@ -3,7 +3,8 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
     QLineEdit, QGridLayout, QGroupBox, QMessageBox, QTableView, 
     QHeaderView, QFrame, QWidget, QComboBox, QSpinBox, 
-    QDoubleSpinBox, QTabWidget, QTextEdit, QScrollArea, QInputDialog
+    QDoubleSpinBox, QTabWidget, QTextEdit, QScrollArea, QInputDialog,
+    QCompleter
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor
@@ -12,13 +13,13 @@ from styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE,
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
-# Importar el helper de la base de datos
+
 try:
     from db_helper import db_helper
 except ImportError:
     print("Error: No se pudo importar 'db_helper'. Asegúrate de que el archivo db_helper.py existe.")
     sys.exit(1)
-# --- FIN IMPORTS DE LÓGICA ---
+
 
 
 class InventarioWindow(QDialog):
@@ -38,11 +39,14 @@ class InventarioWindow(QDialog):
         # Variables de control
         self.producto_en_edicion_id = None
         self.modo_edicion = False
+
+        self.proveedores_dict = {}
         
         # Configurar UI
         self.setup_ui()
         self.conectar_senales()
         self.cargar_productos_desde_bd()
+        self.cargar_proveedores_bd() ### MODIFICADO ### Llamar a la función para cargar proveedores
     
     def setup_ui(self):
         """Configurar interfaz con pestañas"""
@@ -193,7 +197,7 @@ class InventarioWindow(QDialog):
         # FILA 2: Proveedor | Precio Compra | Precio Venta | Stock Min
         row = 1
         labels_campos = [
-            ("Proveedor:", "txt_proveedor", "Nombre proveedor"),
+            ("Proveedor:", "txt_proveedor", "Escriba para buscar proveedor..."), ### MODIFICADO ### Placeholder
             ("P. Compra:", "spin_precio_compra", None),
             ("P. Venta:", "spin_precio_venta", None),
             ("Stock Mín:", "spin_stock_min", None)
@@ -614,19 +618,20 @@ class InventarioWindow(QDialog):
             'descripcion': self.txt_descripcion.text().strip()
         }
         
-        # Buscar proveedor por nombre
+        ### INICIO: MODIFICADO ###
+        # Obtener el ID del proveedor
         proveedor_nombre = self.txt_proveedor.text().strip()
         if proveedor_nombre:
-            try:
-                proveedores = db_helper.buscar_proveedores(proveedor_nombre)
-                if proveedores:
-                    datos['proveedor_id'] = proveedores[0]['id']
-                # Si no hay proveedor, se guarda sin él (depende de tu BD)
-            except AttributeError:
-                 print("Advertencia: 'db_helper.buscar_proveedores' no implementado. Guardando sin ID de proveedor.")
-            except Exception as e:
-                 print(f"Error buscando proveedor: {e}")
-
+            proveedor_id = self.proveedores_dict.get(proveedor_nombre, None)
+            
+            if proveedor_id:
+                datos['proveedor_id'] = proveedor_id
+            else:
+                self.mostrar_mensaje("Advertencia", f"Proveedor '{proveedor_nombre}' no es válido. Seleccione uno de la lista.", QMessageBox.Warning)
+                datos['proveedor_id'] = None
+        else:
+            datos['proveedor_id'] = None
+        ### FIN: MODIFICADO ###
         
         producto = db_helper.crear_producto(datos)
         
@@ -654,17 +659,20 @@ class InventarioWindow(QDialog):
             'descripcion': self.txt_descripcion.text().strip()
         }
         
-        # Lógica de proveedor
+        ### INICIO: MODIFICADO ###
+        # Obtener el ID del proveedor
         proveedor_nombre = self.txt_proveedor.text().strip()
         if proveedor_nombre:
-            try:
-                proveedores = db_helper.buscar_proveedores(proveedor_nombre)
-                if proveedores:
-                    datos['proveedor_id'] = proveedores[0]['id']
-            except AttributeError:
-                 print("Advertencia: 'db_helper.buscar_proveedores' no implementado. Guardando sin ID de proveedor.")
-            except Exception as e:
-                 print(f"Error buscando proveedor: {e}")
+            proveedor_id = self.proveedores_dict.get(proveedor_nombre, None)
+            
+            if proveedor_id:
+                datos['proveedor_id'] = proveedor_id
+            else:
+                self.mostrar_mensaje("Advertencia", f"Proveedor '{proveedor_nombre}' no es válido. Seleccione uno de la lista.", QMessageBox.Warning)
+                datos['proveedor_id'] = None
+        else:
+            datos['proveedor_id'] = None
+        ### FIN: MODIFICADO ###
         
         producto = db_helper.actualizar_producto(self.producto_en_edicion_id, datos)
         
@@ -786,6 +794,51 @@ class InventarioWindow(QDialog):
                         self.mostrar_mensaje("Éxito", f"Se retiraron {cantidad} unidades.", QMessageBox.Information)
                     else:
                         self.mostrar_mensaje("Error", "No se pudo registrar la salida.", QMessageBox.Critical)
+    
+    def cargar_proveedores_bd(self):
+        """Cargar proveedores y configurar autocompletado"""
+        try:
+            proveedores = db_helper.get_proveedores()
+            self.proveedores_dict.clear()
+            
+            nombres_proveedores = []
+            for prov in proveedores:
+                nombre_completo = f"{prov['nombre']} - {prov['tipo']}"
+                nombres_proveedores.append(nombre_completo)
+                self.proveedores_dict[nombre_completo] = prov['id']
+            
+            # Configurar QCompleter
+            completer = QCompleter(nombres_proveedores)
+            completer.setCaseSensitivity(Qt.CaseInsensitive)
+            completer.setFilterMode(Qt.MatchContains)
+            completer.setMaxVisibleItems(9)
+            completer.popup().setStyleSheet("""
+                QListView {
+                    background-color: white;
+                    border: 2px solid #2CD5C4;
+                    border-radius: 4px;
+                    padding: 5px;
+                    font-size: 16px;
+                    min-height: 60px;
+                }
+                QListView::item {
+                    padding: 10px;
+                    border-radius: 3px;
+                    min-height: 30px;
+                }
+                QListView::item:hover {
+                    background-color: #E0F7FA;
+                }
+                QListView::item:selected {
+                    background-color: #2CD5C4;
+                    color: white;
+                }
+            """)
+            
+            self.txt_proveedor.setCompleter(completer)
+            
+        except Exception as e:
+            print(f"Error al cargar proveedores: {e}")
     
     # ==================== FUNCIONES DE ACTUALIZACIÓN ====================
     
@@ -946,8 +999,17 @@ class InventarioWindow(QDialog):
             self.actualizar_label_valor(self.labels_detalle_prod['categoria'], producto['categoria'])
             self.actualizar_label_valor(self.labels_detalle_prod['stock'], str(producto['stock_actual']))
             self.actualizar_label_valor(self.labels_detalle_prod['stock_min'], str(producto['stock_min']))
-            self.actualizar_label_valor(self.labels_detalle_prod['ubicacion'], producto.get('ubicacion', '---')) # Usar .get por si acaso
-            self.actualizar_label_valor(self.labels_detalle_prod['proveedor'], producto.get('proveedor', '---')) # Asume que get_productos trae el nombre
+            self.actualizar_label_valor(self.labels_detalle_prod['ubicacion'], producto.get('ubicacion', '---'))
+            
+            # Cargar nombre del proveedor desde el diccionario
+            proveedor_id_producto = producto.get('proveedor_id', None)
+            proveedor_nombre_panel = "---"
+            if proveedor_id_producto is not None:
+                for nombre, id_prov in self.proveedores_dict.items():
+                    if id_prov == proveedor_id_producto:
+                        proveedor_nombre_panel = nombre
+                        break
+            self.actualizar_label_valor(self.labels_detalle_prod['proveedor'], proveedor_nombre_panel)
             self.actualizar_label_valor(self.labels_detalle_prod['precio_compra'], f"${producto['precio_compra']:.2f}")
             self.actualizar_label_valor(self.labels_detalle_prod['precio_venta'], f"${producto['precio_venta']:.2f}")
             self.actualizar_label_valor(self.labels_detalle_prod['descripcion'], producto.get('descripcion', '---'))
@@ -1016,7 +1078,18 @@ class InventarioWindow(QDialog):
         self.txt_nombre_prod.setText(producto['nombre'])
         self.cmb_categoria.setCurrentText(producto['categoria'])
         self.txt_ubicacion.setText(producto.get('ubicacion', ''))
-        self.txt_proveedor.setText(producto.get('proveedor', ''))
+
+        # Cargar proveedor (adaptado de notas_windows)
+        self.txt_proveedor.clear()
+        proveedor_id_producto = producto.get('proveedor_id', None) # Asumiendo que get_productos() devuelve proveedor_id
+        
+        if proveedor_id_producto is not None:
+            # Buscar el nombre del proveedor en el diccionario usando el ID
+            for nombre, id_prov in self.proveedores_dict.items():
+                if id_prov == proveedor_id_producto:
+                    self.txt_proveedor.setText(nombre)
+                    break
+        
         self.spin_precio_compra.setValue(producto['precio_compra'])
         self.spin_precio_venta.setValue(producto['precio_venta'])
         self.spin_stock_actual.setValue(producto['stock_actual'])

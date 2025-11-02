@@ -38,8 +38,6 @@ class NotasWindow(QDialog):
         self.iva_por_fila = {}
         self.tipo_por_fila = {}  # 'normal', 'nota', 'seccion'
         
-        # Variables para BD (Actualizadas)
-        # self.db = None  # Eliminado
         self.clientes = []
         self.clientes_dict = {}  # Diccionario: nombre -> id
         self.nota_actual_id = None
