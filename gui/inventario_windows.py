@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
     QLineEdit, QGridLayout, QGroupBox, QMessageBox, QTableView, 
     QHeaderView, QFrame, QWidget, QComboBox, QSpinBox, 
-    QDoubleSpinBox, QTabWidget, QTextEdit, QScrollArea
+    QDoubleSpinBox, QTabWidget, QTextEdit, QScrollArea, QInputDialog
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor
@@ -12,6 +12,13 @@ from styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE,
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
+# Importar el helper de la base de datos
+try:
+    from db_helper import db_helper
+except ImportError:
+    print("Error: No se pudo importar 'db_helper'. Asegúrate de que el archivo db_helper.py existe.")
+    sys.exit(1)
+# --- FIN IMPORTS DE LÓGICA ---
 
 
 class InventarioWindow(QDialog):
@@ -29,16 +36,13 @@ class InventarioWindow(QDialog):
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
         
         # Variables de control
-        self.producto_en_edicion = None
+        self.producto_en_edicion_id = None
         self.modo_edicion = False
-        self.productos_data = []
-        self.movimientos_data = []
-        self.proximo_id = 1
         
         # Configurar UI
         self.setup_ui()
         self.conectar_senales()
-        self.cargar_datos_ejemplo()
+        self.cargar_productos_desde_bd()
     
     def setup_ui(self):
         """Configurar interfaz con pestañas"""
@@ -259,7 +263,6 @@ class InventarioWindow(QDialog):
         self.txt_id_prod.setPlaceholderText("Auto")
         grid.addWidget(self.txt_id_prod, row, 7)
         
-        # Resto del código igual...
         grupo.setLayout(grid)
         parent_layout.addWidget(grupo)
     
@@ -447,7 +450,7 @@ class InventarioWindow(QDialog):
         
         self.cmb_filtro_tipo = QComboBox()
         self.cmb_filtro_tipo.setStyleSheet(INPUT_STYLE)
-        self.cmb_filtro_tipo.addItems(["Todos", "Entradas", "Salidas"])
+        self.cmb_filtro_tipo.addItems(["Todos", "Entrada", "Salida"])
         self.cmb_filtro_tipo.currentTextChanged.connect(self.filtrar_movimientos)
         filtros_layout.addWidget(self.cmb_filtro_tipo)
         
@@ -559,7 +562,7 @@ class InventarioWindow(QDialog):
         """Actualizar valor en label de detalle"""
         for widget in frame.findChildren(QLabel):
             if widget.objectName() == "valor":
-                widget.setText(valor if valor else "---")
+                widget.setText(str(valor) if valor else "---") # Convertir a str
                 break
     
     def conectar_senales(self):
@@ -570,6 +573,16 @@ class InventarioWindow(QDialog):
         )
         self.txt_buscar.textChanged.connect(self.buscar_productos)
     
+    def cargar_productos_desde_bd(self):
+        """Cargar productos desde la base de datos"""
+        try:
+            # Las funciones de actualización ahora cargan desde la BD
+            self.actualizar_tabla_productos()
+            self.actualizar_alertas()
+            self.actualizar_tabla_movimientos()
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"Error al cargar productos: {e}", QMessageBox.Critical)
+
     # ==================== OPERACIONES CRUD ====================
     
     def nuevo_producto(self):
@@ -583,19 +596,17 @@ class InventarioWindow(QDialog):
             return
         
         if self.modo_edicion:
-            self.actualizar_producto()
+            self.actualizar_producto_bd()
         else:
-            self.agregar_producto()
+            self.agregar_producto_bd()
     
-    def agregar_producto(self):
-        """Agregar nuevo producto"""
-        producto = {
-            'id': self.proximo_id,
+    def agregar_producto_bd(self):
+        """Agregar nuevo producto a BD"""
+        datos = {
             'codigo': self.txt_codigo.text().strip(),
             'nombre': self.txt_nombre_prod.text().strip(),
             'categoria': self.cmb_categoria.currentText(),
             'ubicacion': self.txt_ubicacion.text().strip(),
-            'proveedor': self.txt_proveedor.text().strip(),
             'precio_compra': self.spin_precio_compra.value(),
             'precio_venta': self.spin_precio_venta.value(),
             'stock_actual': self.spin_stock_actual.value(),
@@ -603,39 +614,66 @@ class InventarioWindow(QDialog):
             'descripcion': self.txt_descripcion.text().strip()
         }
         
-        self.productos_data.append(producto)
-        self.proximo_id += 1
+        # Buscar proveedor por nombre
+        proveedor_nombre = self.txt_proveedor.text().strip()
+        if proveedor_nombre:
+            try:
+                proveedores = db_helper.buscar_proveedores(proveedor_nombre)
+                if proveedores:
+                    datos['proveedor_id'] = proveedores[0]['id']
+                # Si no hay proveedor, se guarda sin él (depende de tu BD)
+            except AttributeError:
+                 print("Advertencia: 'db_helper.buscar_proveedores' no implementado. Guardando sin ID de proveedor.")
+            except Exception as e:
+                 print(f"Error buscando proveedor: {e}")
+
         
-        self.actualizar_tabla_productos()
-        self.actualizar_alertas()
-        self.limpiar_formulario_producto()
-        self.mostrar_mensaje("Éxito", "Producto agregado correctamente.", QMessageBox.Information)
+        producto = db_helper.crear_producto(datos)
+        
+        if producto:
+            self.cargar_productos_desde_bd()
+            self.limpiar_formulario_producto()
+            self.mostrar_mensaje("Éxito", "Producto agregado correctamente.", QMessageBox.Information)
+        else:
+            self.mostrar_mensaje("Error", "No se pudo agregar el producto.", QMessageBox.Critical)
     
-    def actualizar_producto(self):
-        """Actualizar producto existente"""
-        if not self.producto_en_edicion:
+    def actualizar_producto_bd(self):
+        """Actualizar producto en BD"""
+        if not self.producto_en_edicion_id:
             return
         
-        for i, prod in enumerate(self.productos_data):
-            if prod['id'] == self.producto_en_edicion['id']:
-                self.productos_data[i].update({
-                    'codigo': self.txt_codigo.text().strip(),
-                    'nombre': self.txt_nombre_prod.text().strip(),
-                    'categoria': self.cmb_categoria.currentText(),
-                    'ubicacion': self.txt_ubicacion.text().strip(),
-                    'proveedor': self.txt_proveedor.text().strip(),
-                    'precio_compra': self.spin_precio_compra.value(),
-                    'precio_venta': self.spin_precio_venta.value(),
-                    'stock_actual': self.spin_stock_actual.value(),
-                    'stock_min': self.spin_stock_min.value(),
-                    'descripcion': self.txt_descripcion.text().strip()
-                })
-                break
+        datos = {
+            'codigo': self.txt_codigo.text().strip(),
+            'nombre': self.txt_nombre_prod.text().strip(),
+            'categoria': self.cmb_categoria.currentText(),
+            'ubicacion': self.txt_ubicacion.text().strip(),
+            'precio_compra': self.spin_precio_compra.value(),
+            'precio_venta': self.spin_precio_venta.value(),
+            'stock_actual': self.spin_stock_actual.value(),
+            'stock_min': self.spin_stock_min.value(),
+            'descripcion': self.txt_descripcion.text().strip()
+        }
         
-        self.actualizar_tabla_productos()
-        self.actualizar_alertas()
-        self.cancelar_edicion()
-        self.mostrar_mensaje("Éxito", "Producto actualizado correctamente.", QMessageBox.Information)
+        # Lógica de proveedor
+        proveedor_nombre = self.txt_proveedor.text().strip()
+        if proveedor_nombre:
+            try:
+                proveedores = db_helper.buscar_proveedores(proveedor_nombre)
+                if proveedores:
+                    datos['proveedor_id'] = proveedores[0]['id']
+            except AttributeError:
+                 print("Advertencia: 'db_helper.buscar_proveedores' no implementado. Guardando sin ID de proveedor.")
+            except Exception as e:
+                 print(f"Error buscando proveedor: {e}")
+        
+        producto = db_helper.actualizar_producto(self.producto_en_edicion_id, datos)
+        
+        if producto:
+            self.cargar_productos_desde_bd() 
+            self.limpiar_formulario_producto()
+            self.mostrar_mensaje("Éxito", "Producto actualizado correctamente.", QMessageBox.Information)
+        else:
+            self.mostrar_mensaje("Error", "No se pudo actualizar el producto.", QMessageBox.Critical)
     
     def editar_producto(self):
         """Cargar producto para edición"""
@@ -645,12 +683,13 @@ class InventarioWindow(QDialog):
             return
         
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
-        producto = self.obtener_producto_por_id(producto_id)
+        productos = db_helper.get_productos()
+        producto = next((p for p in productos if p['id'] == producto_id), None)
         
         if producto:
             self.cargar_datos_formulario_producto(producto)
             self.modo_edicion = True
-            self.producto_en_edicion = producto
+            self.producto_en_edicion_id = producto_id
             self.txt_codigo.setFocus()
     
     def eliminar_producto(self):
@@ -661,32 +700,36 @@ class InventarioWindow(QDialog):
             return
         
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
-        producto = self.obtener_producto_por_id(producto_id)
+        productos = db_helper.get_productos()
+        producto = next((p for p in productos if p['id'] == producto_id), None)
+        nombre_producto = producto['nombre'] if producto else f"ID {producto_id}"
         
         if producto:
             respuesta = QMessageBox.question(
                 self, "Confirmar",
-                f"¿Eliminar producto '{producto['nombre']}'?",
+                f"¿Eliminar producto '{nombre_producto}'?",
                 QMessageBox.Yes | QMessageBox.No
             )
             
             if respuesta == QMessageBox.Yes:
-                self.productos_data.remove(producto)
-                self.actualizar_tabla_productos()
-                self.actualizar_alertas()
-                self.limpiar_formulario_producto()
+                if db_helper.eliminar_producto(producto_id):
+                    self.cargar_productos_desde_bd()
+                    self.limpiar_formulario_producto()
+                    self.mostrar_mensaje("Éxito", "Producto eliminado.", QMessageBox.Information)
+                else:
+                    self.mostrar_mensaje("Error", "No se pudo eliminar el producto.", QMessageBox.Critical)
     
     def registrar_entrada(self):
         """Registrar entrada de stock"""
-        from PyQt5.QtWidgets import QInputDialog
-        
         fila = self.tabla_productos.currentIndex().row()
         if fila < 0:
             self.mostrar_mensaje("Advertencia", "Seleccione un producto.", QMessageBox.Warning)
             return
         
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
-        producto = self.obtener_producto_por_id(producto_id)
+        
+        productos = db_helper.get_productos()
+        producto = next((p for p in productos if p['id'] == producto_id), None)
         
         if producto:
             cantidad, ok = QInputDialog.getInt(
@@ -702,23 +745,23 @@ class InventarioWindow(QDialog):
                 )
                 
                 if ok2:
-                    producto['stock_actual'] += cantidad
-                    self.registrar_movimiento("Entrada", producto, cantidad, motivo)
-                    self.actualizar_tabla_productos()
-                    self.actualizar_alertas()
-                    self.mostrar_mensaje("Éxito", f"Se agregaron {cantidad} unidades.", QMessageBox.Information)
+                    if db_helper.registrar_movimiento(producto_id, "Entrada", cantidad, motivo, "Admin"):
+                        self.cargar_productos_desde_bd() # Recargar todo
+                        self.mostrar_mensaje("Éxito", f"Se agregaron {cantidad} unidades.", QMessageBox.Information)
+                    else:
+                        self.mostrar_mensaje("Error", "No se pudo registrar la entrada.", QMessageBox.Critical)
     
     def registrar_salida(self):
         """Registrar salida de stock"""
-        from PyQt5.QtWidgets import QInputDialog
-        
         fila = self.tabla_productos.currentIndex().row()
         if fila < 0:
             self.mostrar_mensaje("Advertencia", "Seleccione un producto.", QMessageBox.Warning)
             return
         
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
-        producto = self.obtener_producto_por_id(producto_id)
+        
+        productos = db_helper.get_productos()
+        producto = next((p for p in productos if p['id'] == producto_id), None)
         
         if producto:
             if producto['stock_actual'] == 0:
@@ -738,39 +781,29 @@ class InventarioWindow(QDialog):
                 )
                 
                 if ok2:
-                    producto['stock_actual'] -= cantidad
-                    self.registrar_movimiento("Salida", producto, cantidad, motivo)
-                    self.actualizar_tabla_productos()
-                    self.actualizar_alertas()
-                    self.mostrar_mensaje("Éxito", f"Se retiraron {cantidad} unidades.", QMessageBox.Information)
-    
-    def registrar_movimiento(self, tipo, producto, cantidad, motivo):
-        """Registrar movimiento en el historial"""
-        from datetime import datetime
-        
-        movimiento = {
-            'id': len(self.movimientos_data) + 1,
-            'fecha': datetime.now().strftime("%d/%m/%Y %H:%M"),
-            'tipo': tipo,
-            'producto': producto['nombre'],
-            'cantidad': cantidad,
-            'usuario': "Admin",  # Aquí puedes usar el usuario actual
-            'motivo': motivo
-        }
-        
-        self.movimientos_data.append(movimiento)
-        self.actualizar_tabla_movimientos()
+                    if db_helper.registrar_movimiento(producto_id, "Salida", cantidad, motivo, "Admin"):
+                        self.cargar_productos_desde_bd() # Recargar todo
+                        self.mostrar_mensaje("Éxito", f"Se retiraron {cantidad} unidades.", QMessageBox.Information)
+                    else:
+                        self.mostrar_mensaje("Error", "No se pudo registrar la salida.", QMessageBox.Critical)
     
     # ==================== FUNCIONES DE ACTUALIZACIÓN ====================
     
-    def actualizar_tabla_productos(self):
+    def actualizar_tabla_productos(self, productos=None):
         """Actualizar tabla de productos"""
+        if productos is None:
+            try:
+                productos = db_helper.get_productos()
+            except Exception as e:
+                self.mostrar_mensaje("Error BD", f"No se pudo leer productos: {e}", QMessageBox.Critical)
+                return
+
         self.tabla_productos_model.clear()
         self.tabla_productos_model.setHorizontalHeaderLabels([
             "ID", "Código", "Nombre", "Categoría", "Stock", "P. Venta", "Estado"
         ])
         
-        for producto in self.productos_data:
+        for producto in productos:
             # Determinar estado
             if producto['stock_actual'] == 0:
                 estado = "SIN STOCK"
@@ -808,17 +841,23 @@ class InventarioWindow(QDialog):
     
     def actualizar_tabla_movimientos(self):
         """Actualizar tabla de movimientos"""
+        try:
+            movimientos = db_helper.get_movimientos()
+        except Exception as e:
+            self.mostrar_mensaje("Error BD", f"No se pudo leer movimientos: {e}", QMessageBox.Critical)
+            return
+
         self.tabla_movimientos_model.clear()
         self.tabla_movimientos_model.setHorizontalHeaderLabels([
             "ID", "Fecha", "Tipo", "Producto", "Cantidad", "Usuario", "Motivo"
         ])
         
-        for mov in reversed(self.movimientos_data):  # Más recientes primero
+        for mov in reversed(movimientos):  # Más recientes primero
             fila = [
                 QStandardItem(str(mov['id'])),
-                QStandardItem(mov['fecha']),
+                QStandardItem(str(mov['fecha'])), # Asegurar str
                 QStandardItem(mov['tipo']),
-                QStandardItem(mov['producto']),
+                QStandardItem(mov['producto']), # Asume que get_movimientos trae el nombre
                 QStandardItem(str(mov['cantidad'])),
                 QStandardItem(mov['usuario']),
                 QStandardItem(mov['motivo'])
@@ -842,15 +881,16 @@ class InventarioWindow(QDialog):
     
     def actualizar_alertas(self):
         """Actualizar tabla de alertas"""
+        try:
+            productos_bajo_stock = db_helper.get_productos_bajo_stock()
+        except Exception as e:
+            self.mostrar_mensaje("Error BD", f"No se pudo leer alertas: {e}", QMessageBox.Critical)
+            return
+        
         self.tabla_alertas_model.clear()
         self.tabla_alertas_model.setHorizontalHeaderLabels([
             "ID", "Código", "Nombre", "Stock Actual", "Stock Mínimo", "Diferencia"
         ])
-        
-        productos_bajo_stock = [
-            p for p in self.productos_data 
-            if p['stock_actual'] <= p['stock_min']
-        ]
         
         # Actualizar contador en título
         self.lbl_titulo_alertas.setText(
@@ -891,7 +931,13 @@ class InventarioWindow(QDialog):
         
         fila = current.row()
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
-        producto = self.obtener_producto_por_id(producto_id)
+
+        try:
+            productos = db_helper.get_productos()
+            producto = next((p for p in productos if p['id'] == producto_id), None)
+        except Exception as e:
+            print(f"Error al leer producto para panel: {e}")
+            return
         
         if producto:
             self.actualizar_label_valor(self.labels_detalle_prod['id'], str(producto['id']))
@@ -900,11 +946,11 @@ class InventarioWindow(QDialog):
             self.actualizar_label_valor(self.labels_detalle_prod['categoria'], producto['categoria'])
             self.actualizar_label_valor(self.labels_detalle_prod['stock'], str(producto['stock_actual']))
             self.actualizar_label_valor(self.labels_detalle_prod['stock_min'], str(producto['stock_min']))
-            self.actualizar_label_valor(self.labels_detalle_prod['ubicacion'], producto['ubicacion'])
-            self.actualizar_label_valor(self.labels_detalle_prod['proveedor'], producto['proveedor'])
+            self.actualizar_label_valor(self.labels_detalle_prod['ubicacion'], producto.get('ubicacion', '---')) # Usar .get por si acaso
+            self.actualizar_label_valor(self.labels_detalle_prod['proveedor'], producto.get('proveedor', '---')) # Asume que get_productos trae el nombre
             self.actualizar_label_valor(self.labels_detalle_prod['precio_compra'], f"${producto['precio_compra']:.2f}")
             self.actualizar_label_valor(self.labels_detalle_prod['precio_venta'], f"${producto['precio_venta']:.2f}")
-            self.actualizar_label_valor(self.labels_detalle_prod['descripcion'], producto['descripcion'])
+            self.actualizar_label_valor(self.labels_detalle_prod['descripcion'], producto.get('descripcion', '---'))
     
     def buscar_productos(self, texto):
         """Buscar productos en tiempo real"""
@@ -912,64 +958,33 @@ class InventarioWindow(QDialog):
             self.actualizar_tabla_productos()
             return
         
-        texto = texto.lower()
-        self.tabla_productos_model.clear()
-        self.tabla_productos_model.setHorizontalHeaderLabels([
-            "ID", "Código", "Nombre", "Categoría", "Stock", "P. Venta", "Estado"
-        ])
-        
-        for producto in self.productos_data:
-            if (texto in producto['codigo'].lower() or 
-                texto in producto['nombre'].lower() or
-                texto in producto['categoria'].lower()):
-                
-                # Determinar estado
-                if producto['stock_actual'] == 0:
-                    estado = "SIN STOCK"
-                    color_estado = QColor(255, 107, 107)
-                elif producto['stock_actual'] <= producto['stock_min']:
-                    estado = "BAJO"
-                    color_estado = QColor(255, 177, 66)
-                else:
-                    estado = "OK"
-                    color_estado = QColor(46, 213, 196)
-                
-                fila = [
-                    QStandardItem(str(producto['id'])),
-                    QStandardItem(producto['codigo']),
-                    QStandardItem(producto['nombre']),
-                    QStandardItem(producto['categoria']),
-                    QStandardItem(str(producto['stock_actual'])),
-                    QStandardItem(f"${producto['precio_venta']:.2f}"),
-                    QStandardItem(estado)
-                ]
-                
-                fila[0].setTextAlignment(Qt.AlignCenter)
-                fila[1].setTextAlignment(Qt.AlignCenter)
-                fila[3].setTextAlignment(Qt.AlignCenter)
-                fila[4].setTextAlignment(Qt.AlignCenter)
-                fila[5].setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                fila[6].setTextAlignment(Qt.AlignCenter)
-                fila[6].setBackground(color_estado)
-                fila[6].setForeground(QColor(255, 255, 255))
-                
-                self.tabla_productos_model.appendRow(fila)
+        try:
+            productos = db_helper.buscar_productos(texto)
+            self.actualizar_tabla_productos(productos) # Carga solo los filtrados
+        except Exception as e:
+            print(f"Error al buscar: {e}")
     
     def filtrar_movimientos(self, tipo):
         """Filtrar movimientos por tipo"""
+        try:
+            if tipo == "Todos":
+                movimientos = db_helper.get_movimientos()
+            else:
+                # Filtrar después de obtener (como en logica.py)
+                todos_mov = db_helper.get_movimientos()
+                movimientos = [m for m in todos_mov if m['tipo'] == tipo]
+        except Exception as e:
+            self.mostrar_mensaje("Error BD", f"No se pudo filtrar movimientos: {e}", QMessageBox.Critical)
+            return
         self.tabla_movimientos_model.clear()
         self.tabla_movimientos_model.setHorizontalHeaderLabels([
             "ID", "Fecha", "Tipo", "Producto", "Cantidad", "Usuario", "Motivo"
         ])
         
-        movimientos_filtrados = self.movimientos_data
-        if tipo != "Todos":
-            movimientos_filtrados = [m for m in self.movimientos_data if m['tipo'] == tipo]
-        
-        for mov in reversed(movimientos_filtrados):
+        for mov in reversed(movimientos):
             fila = [
                 QStandardItem(str(mov['id'])),
-                QStandardItem(mov['fecha']),
+                QStandardItem(str(mov['fecha'])),
                 QStandardItem(mov['tipo']),
                 QStandardItem(mov['producto']),
                 QStandardItem(str(mov['cantidad'])),
@@ -993,9 +1008,6 @@ class InventarioWindow(QDialog):
     
     # ==================== FUNCIONES DE SOPORTE ====================
     
-    def obtener_producto_por_id(self, producto_id):
-        """Buscar producto por ID"""
-        return next((p for p in self.productos_data if p['id'] == producto_id), None)
     
     def cargar_datos_formulario_producto(self, producto):
         """Cargar datos en formulario"""
@@ -1003,13 +1015,13 @@ class InventarioWindow(QDialog):
         self.txt_codigo.setText(producto['codigo'])
         self.txt_nombre_prod.setText(producto['nombre'])
         self.cmb_categoria.setCurrentText(producto['categoria'])
-        self.txt_ubicacion.setText(producto['ubicacion'])
-        self.txt_proveedor.setText(producto['proveedor'])
+        self.txt_ubicacion.setText(producto.get('ubicacion', ''))
+        self.txt_proveedor.setText(producto.get('proveedor', ''))
         self.spin_precio_compra.setValue(producto['precio_compra'])
         self.spin_precio_venta.setValue(producto['precio_venta'])
         self.spin_stock_actual.setValue(producto['stock_actual'])
         self.spin_stock_min.setValue(producto['stock_min'])
-        self.txt_descripcion.setText(producto['descripcion'])
+        self.txt_descripcion.setText(producto.get('descripcion', ''))
     
     def validar_formulario_producto(self):
         """Validar formulario"""
@@ -1025,9 +1037,14 @@ class InventarioWindow(QDialog):
         
         # Verificar código duplicado (solo al agregar)
         if not self.modo_edicion:
-            if any(p['codigo'] == self.txt_codigo.text().strip() for p in self.productos_data):
-                self.mostrar_mensaje("Error", "El código ya existe.", QMessageBox.Critical)
-                self.txt_codigo.setFocus()
+            try:
+                productos = db_helper.get_productos()
+                if any(p['codigo'] == self.txt_codigo.text().strip() for p in productos):
+                    self.mostrar_mensaje("Error", "El código ya existe.", QMessageBox.Critical)
+                    self.txt_codigo.setFocus()
+                    return False
+            except Exception as e:
+                self.mostrar_mensaje("Error BD", f"No se pudo validar código: {e}", QMessageBox.Critical)
                 return False
         
         return True
@@ -1050,7 +1067,7 @@ class InventarioWindow(QDialog):
     def cancelar_edicion(self):
         """Cancelar edición"""
         self.modo_edicion = False
-        self.producto_en_edicion = None
+        self.producto_en_edicion_id = None
     
     def mostrar_mensaje(self, titulo, mensaje, tipo):
         """Mostrar mensaje"""
@@ -1058,83 +1075,6 @@ class InventarioWindow(QDialog):
         msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         msg_box.exec_()
     
-    def cargar_datos_ejemplo(self):
-        """Cargar datos de ejemplo"""
-        ejemplos = [
-            {
-                'id': 1, 'codigo': 'REF-001', 'nombre': 'Filtro de Aceite',
-                'categoria': 'Refacciones', 'ubicacion': 'Estante A1',
-                'proveedor': 'Autopartes SA', 'precio_compra': 45.00, 'precio_venta': 75.00,
-                'stock_actual': 15, 'stock_min': 10, 'descripcion': 'Filtro de aceite universal'
-            },
-            {
-                'id': 2, 'codigo': 'HER-001', 'nombre': 'Llave Inglesa 12"',
-                'categoria': 'Herramientas', 'ubicacion': 'Caja B3',
-                'proveedor': 'Ferretería Total', 'precio_compra': 120.00, 'precio_venta': 180.00,
-                'stock_actual': 3, 'stock_min': 5, 'descripcion': 'Llave ajustable 12 pulgadas'
-            },
-            {
-                'id': 3, 'codigo': 'CON-001', 'nombre': 'Aceite Motor 10W-40',
-                'categoria': 'Consumibles', 'ubicacion': 'Bodega C1',
-                'proveedor': 'Lubricantes MX', 'precio_compra': 85.00, 'precio_venta': 135.00,
-                'stock_actual': 0, 'stock_min': 20, 'descripcion': 'Aceite sintético 1 litro'
-            },
-            {
-                'id': 4, 'codigo': 'REF-002', 'nombre': 'Pastillas de Freno',
-                'categoria': 'Refacciones', 'ubicacion': 'Estante A2',
-                'proveedor': 'Autopartes SA', 'precio_compra': 250.00, 'precio_venta': 400.00,
-                'stock_actual': 8, 'stock_min': 6, 'descripcion': 'Pastillas delanteras universales'
-            },
-            {
-                'id': 5, 'codigo': 'ACC-001', 'nombre': 'Tapete Automotriz',
-                'categoria': 'Accesorios', 'ubicacion': 'Estante D1',
-                'proveedor': 'Accesorios Pro', 'precio_compra': 150.00, 'precio_venta': 280.00,
-                'stock_actual': 12, 'stock_min': 8, 'descripcion': 'Tapete universal de hule'
-            }
-        ]
-        
-        self.productos_data.extend(ejemplos)
-        self.proximo_id = 6
-        
-        # Crear movimientos de ejemplo
-        from datetime import datetime, timedelta
-        
-        movimientos_ejemplo = [
-            {
-                'id': 1,
-                'fecha': (datetime.now() - timedelta(days=5)).strftime("%d/%m/%Y %H:%M"),
-                'tipo': 'Entrada',
-                'producto': 'Filtro de Aceite',
-                'cantidad': 20,
-                'usuario': 'Admin',
-                'motivo': 'Compra a proveedor'
-            },
-            {
-                'id': 2,
-                'fecha': (datetime.now() - timedelta(days=3)).strftime("%d/%m/%Y %H:%M"),
-                'tipo': 'Salida',
-                'producto': 'Filtro de Aceite',
-                'cantidad': 5,
-                'usuario': 'Admin',
-                'motivo': 'Orden de trabajo #123'
-            },
-            {
-                'id': 3,
-                'fecha': (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y %H:%M"),
-                'tipo': 'Salida',
-                'producto': 'Aceite Motor 10W-40',
-                'cantidad': 15,
-                'usuario': 'Admin',
-                'motivo': 'Servicio múltiple'
-            }
-        ]
-        
-        self.movimientos_data.extend(movimientos_ejemplo)
-        
-        # Actualizar todas las vistas
-        self.actualizar_tabla_productos()
-        self.actualizar_tabla_movimientos()
-        self.actualizar_alertas()
     
     def closeEvent(self, event):
         """Evento al cerrar"""

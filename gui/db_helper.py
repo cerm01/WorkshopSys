@@ -126,6 +126,12 @@ class DatabaseHelper:
         productos = crud.get_productos_bajo_stock(db)
         return [self._producto_to_dict(p) for p in productos]
     
+    def get_productos_sin_stock(self) -> List[Dict]:
+        """Obtener productos sin stock"""
+        db = self._get_session()
+        productos = crud.get_productos_sin_stock(db)
+        return [self._producto_to_dict(p) for p in productos]
+    
     def buscar_productos(self, texto: str) -> List[Dict]:
         """Buscar productos"""
         db = self._get_session()
@@ -141,6 +147,25 @@ class DatabaseHelper:
         except Exception as e:
             print(f"Error al crear producto: {e}")
             return None
+    
+    def actualizar_producto(self, producto_id: int, datos: Dict) -> Optional[Dict]:
+        """Actualizar producto existente"""
+        try:
+            db = self._get_session()
+            producto = crud.update_producto(db, producto_id, datos)
+            return self._producto_to_dict(producto) if producto else None
+        except Exception as e:
+            print(f"Error al actualizar producto: {e}")
+            return None
+    
+    def eliminar_producto(self, producto_id: int) -> bool:
+        """Eliminar producto"""
+        try:
+            db = self._get_session()
+            return crud.delete_producto(db, producto_id, soft_delete=True)
+        except Exception as e:
+            print(f"Error al eliminar producto: {e}")
+            return False
     
     def registrar_movimiento(self, producto_id: int, tipo: str, cantidad: int, 
                             motivo: str, usuario: str) -> bool:
@@ -484,11 +509,14 @@ class DatabaseHelper:
             'codigo': producto.codigo,
             'nombre': producto.nombre,
             'categoria': producto.categoria or '',
+            'ubicacion': producto.ubicacion or '',
+            'proveedor': producto.proveedor.nombre if producto.proveedor else '',
+            'proveedor_id': producto.proveedor_id,
             'precio_compra': producto.precio_compra,
             'precio_venta': producto.precio_venta,
             'stock_actual': producto.stock_actual,
             'stock_min': producto.stock_min,
-            'proveedor_id': producto.proveedor_id
+            'descripcion': producto.descripcion or ''
         }
     
     @staticmethod
