@@ -264,56 +264,65 @@ class InventarioWindow(QDialog):
         parent_layout.addWidget(grupo)
     
     def crear_tabla_productos(self, parent_layout):
-        """Tabla de productos"""
-        widget = QWidget()
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Título y búsqueda
-        header_layout = QHBoxLayout()
-        lbl_titulo = QLabel("📦 Lista de Productos")
-        lbl_titulo.setStyleSheet("""
-            font-size: 16px;
-            font-weight: bold;
-            color: white;
-            background: qlineargradient(
-                x1: 0, y1: 0, x2: 1, y2: 0,
-                stop: 0 #2CD5C4, stop: 1 #00788E
-            );
-            padding: 8px;
-            border-radius: 5px;
-        """)
-        header_layout.addWidget(lbl_titulo)
-        
-        # Campo de búsqueda
-        self.txt_buscar = QLineEdit()
-        self.txt_buscar.setStyleSheet(INPUT_STYLE)
-        self.txt_buscar.setPlaceholderText("🔍 Buscar producto...")
-        self.txt_buscar.setMaximumWidth(300)
-        header_layout.addWidget(self.txt_buscar)
-        
-        layout.addLayout(header_layout)
-        
-        # Modelo de tabla
-        self.tabla_productos_model = QStandardItemModel()
-        self.tabla_productos_model.setHorizontalHeaderLabels([
-            "ID", "Código", "Nombre", "Categoría", "Stock", "P. Venta", "Estado"
-        ])
-        
-        self.tabla_productos = QTableView()
-        self.tabla_productos.setModel(self.tabla_productos_model)
-        self.tabla_productos.setSelectionBehavior(QTableView.SelectRows)
-        self.tabla_productos.setSelectionMode(QTableView.SingleSelection)
-        self.tabla_productos.setEditTriggers(QTableView.NoEditTriggers)
-        self.tabla_productos.setStyleSheet(TABLE_STYLE)
-        self.tabla_productos.verticalHeader().setDefaultSectionSize(35)
-        
-        header = self.tabla_productos.horizontalHeader()
-        header.setFixedHeight(40)
-        
-        layout.addWidget(self.tabla_productos)
-        widget.setLayout(layout)
-        parent_layout.addWidget(widget, 7)
+            """Tabla de productos"""
+            widget = QWidget()
+            layout = QVBoxLayout()
+            layout.setContentsMargins(0, 0, 0, 0)
+            
+            # Título y búsqueda
+            header_layout = QHBoxLayout()
+            lbl_titulo = QLabel("📦 Lista de Productos")
+            lbl_titulo.setStyleSheet("""
+                font-size: 16px;
+                font-weight: bold;
+                color: white;
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 #2CD5C4, stop: 1 #00788E
+                );
+                padding: 8px;
+                border-radius: 5px;
+            """)
+            header_layout.addWidget(lbl_titulo)
+            
+            # Campo de búsqueda
+            self.txt_buscar = QLineEdit()
+            self.txt_buscar.setStyleSheet(INPUT_STYLE)
+            self.txt_buscar.setPlaceholderText("🔍 Buscar producto...")
+            self.txt_buscar.setMaximumWidth(300)
+            header_layout.addWidget(self.txt_buscar)
+            
+            layout.addLayout(header_layout)
+            
+            # Modelo de tabla
+            self.tabla_productos_model = QStandardItemModel()
+            self.tabla_productos_model.setHorizontalHeaderLabels([
+                "ID", "Código", "Nombre", "Categoría", "Stock", "P. Venta", "Estado"
+            ])
+            
+            self.tabla_productos = QTableView()
+            self.tabla_productos.setModel(self.tabla_productos_model)
+            self.tabla_productos.setSelectionBehavior(QTableView.SelectRows)
+            self.tabla_productos.setSelectionMode(QTableView.SingleSelection)
+            self.tabla_productos.setEditTriggers(QTableView.NoEditTriggers)
+            self.tabla_productos.setStyleSheet(TABLE_STYLE)
+            self.tabla_productos.verticalHeader().setDefaultSectionSize(35)
+            
+            header = self.tabla_productos.horizontalHeader()
+            header.setFixedHeight(40)
+            header.setStretchLastSection(True)
+            
+            header.setSectionResizeMode(0, QHeaderView.ResizeToContents) # ID
+            header.setSectionResizeMode(1, QHeaderView.ResizeToContents) # Código
+            header.setSectionResizeMode(2, QHeaderView.Stretch)           # Nombre
+            header.setSectionResizeMode(3, QHeaderView.ResizeToContents) # Categoría
+            header.setSectionResizeMode(4, QHeaderView.ResizeToContents) # Stock
+            header.setSectionResizeMode(5, QHeaderView.ResizeToContents) # P. Venta
+            header.setSectionResizeMode(6, QHeaderView.ResizeToContents) # Estado
+            
+            layout.addWidget(self.tabla_productos)
+            widget.setLayout(layout)
+            parent_layout.addWidget(widget, 7)
     
     def crear_panel_detalle_producto(self, parent_layout):
         """Panel con detalles del producto"""
@@ -1126,25 +1135,6 @@ class InventarioWindow(QDialog):
         self.actualizar_tabla_productos()
         self.actualizar_tabla_movimientos()
         self.actualizar_alertas()
-    
-    def showEvent(self, event):
-        """Ajustar columnas al mostrar"""
-        super().showEvent(event)
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(50, self.ajustar_columnas)
-    
-    def ajustar_columnas(self):
-        """Ajustar anchos de columnas"""
-        # Tabla de productos
-        header = self.tabla_productos.horizontalHeader()
-        ancho = self.tabla_productos.viewport().width()
-        header.resizeSection(0, int(ancho * 0.05))  # ID
-        header.resizeSection(1, int(ancho * 0.12))  # Código
-        header.resizeSection(2, int(ancho * 0.30))  # Nombre
-        header.resizeSection(3, int(ancho * 0.15))  # Categoría
-        header.resizeSection(4, int(ancho * 0.10))  # Stock
-        header.resizeSection(5, int(ancho * 0.13))  # Precio
-        header.resizeSection(6, int(ancho * 0.15))  # Estado
     
     def closeEvent(self, event):
         """Evento al cerrar"""
