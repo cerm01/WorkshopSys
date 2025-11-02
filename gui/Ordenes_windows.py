@@ -83,7 +83,7 @@ class OrdenesWindow(QDialog):
         self.txt_folio = QLineEdit()
         self.txt_folio.setStyleSheet(INPUT_STYLE + "QLineEdit { background-color: #E8E8E8; color: #666666; }")
         self.txt_folio.setReadOnly(True)
-        self.txt_folio.setPlaceholderText("ORD-00000")
+        self.txt_folio.setPlaceholderText("ORD-Auto")
         
         # Cliente
         lbl_cliente = QLabel("Cliente")
@@ -357,7 +357,6 @@ class OrdenesWindow(QDialog):
             self.mostrar_error(f"Error al cargar clientes: {e}")
 
     def guardar_orden(self):
-        """Guarda una orden nueva o actualiza una existente."""
         if not db_helper: 
             self.mostrar_error("No hay conexión a la base de datos.")
             return
@@ -369,19 +368,19 @@ class OrdenesWindow(QDialog):
         cliente_id = self.clientes_dict.get(nombre_cliente, None)
         
         if not cliente_id:
-            self.mostrar_advertencia("Seleccione un cliente válido de la lista.")
+            self.mostrar_advertencia("Seleccione un cliente válido.")
             return
         
+        # Recopilar items
         items_a_guardar = []
         for fila in range(self.tabla_model.rowCount()):
             tipo = self.tipo_por_fila.get(fila, 'normal')
             
             if tipo == 'normal':
                 try:
-                    cantidad_texto = self.tabla_model.item(fila, 0).text()
-                    cantidad = int(cantidad_texto)
+                    cantidad = int(self.tabla_model.item(fila, 0).text())
                     if cantidad <= 0:
-                        raise ValueError("Cantidad debe ser positiva")
+                        raise ValueError()
                         
                     items_a_guardar.append({
                         'cantidad': cantidad,
@@ -392,7 +391,7 @@ class OrdenesWindow(QDialog):
                     return
 
         if not items_a_guardar:
-            self.mostrar_advertencia("Agregue al menos un servicio o trabajo válido.")
+            self.mostrar_advertencia("Agregue al menos un servicio.")
             return
         
         orden_data = {
@@ -409,12 +408,12 @@ class OrdenesWindow(QDialog):
             if self.orden_actual_id:
                 orden = db_helper.actualizar_orden(self.orden_actual_id, orden_data, items_a_guardar)
                 if orden:
-                    self.mostrar_exito("Orden actualizada correctamente")
+                    self.mostrar_exito("Orden actualizada")
                     self.txt_folio.setText(orden['folio'])
             else:
                 orden = db_helper.crear_orden(orden_data, items_a_guardar)
                 if orden:
-                    self.mostrar_exito("Orden guardada correctamente")
+                    self.mostrar_exito("Orden guardada")
                     self.txt_folio.setText(orden['folio'])
                     self.orden_actual_id = orden['id']
             
@@ -422,34 +421,28 @@ class OrdenesWindow(QDialog):
             self.controlar_estado_campos(False)
             
         except Exception as e:
-            self.mostrar_error(f"Error al guardar la orden: {e}")
+            self.mostrar_error(f"Error al guardar: {e}")
 
     def buscar_orden(self):
-        """Busca una orden por su folio."""
-        if not db_helper: return
+        if not db_helper: 
+            return
         
-        folio, ok = QInputDialog.getText(self, "Buscar Orden", "Ingrese el folio (Ej: ORD-00001):")
+        folio, ok = QInputDialog.getText(self, "Buscar Orden", "Ingrese el folio (ej: ORD-2025-0001):")
         if ok and folio:
             try:
-                # Extraer solo la parte numérica del folio
-                folio_busqueda = folio.strip().upper()
+                # Búsqueda parcial
+                ordenes = db_helper.buscar_ordenes(folio=folio.strip())
                 
-                # Quitar prefijo "ORD-" si existe, para quedarnos solo con el número
-                if folio_busqueda.startswith("ORD-"):
-                    folio_busqueda = folio_busqueda.split('-')[-1]
-                
-                # Enviar solo la parte numérica (ej: "0003")
-                orden = db_helper.buscar_orden(folio_busqueda)
-                
-                if orden:
-                    self.cargar_orden_en_formulario(orden)
+                if ordenes:
+                    self.cargar_orden_en_formulario(ordenes[0])
+                    if len(ordenes) > 1:
+                        self.mostrar_info(f"Se encontraron {len(ordenes)} órdenes. Mostrando la primera.")
                 else:
                     self.mostrar_advertencia("Orden no encontrada.")
             except Exception as e:
-                self.mostrar_error(f"Error al buscar orden: {e}")
+                self.mostrar_error(f"Error al buscar: {e}")
 
     def cargar_orden_en_formulario(self, orden):
-        """Muestra los datos de una orden cargada en la UI."""
         self.orden_actual_id = orden['id']
         self.modo_edicion = False
         self.tipo_por_fila.clear()
@@ -461,9 +454,9 @@ class OrdenesWindow(QDialog):
         self.txt_placa.setText(orden['vehiculo_placas'])
         self.cmb_estado.setCurrentText(orden['estado'])
         
+        # Cargar fecha
         try:
             fecha_dt = orden['fecha_recepcion']
-            
             if isinstance(fecha_dt, str):
                 fecha_dt = datetime.strptime(fecha_dt, '%Y-%m-%d %H:%M:%S')
             
@@ -471,21 +464,17 @@ class OrdenesWindow(QDialog):
                 self.date_fecha.setDate(QDate(fecha_dt.year, fecha_dt.month, fecha_dt.day))
             else:
                 self.date_fecha.setDate(QDate.currentDate())
-            
-        except (ValueError, TypeError, AttributeError):
-             self.date_fecha.setDate(QDate.currentDate())
+        except:
+            self.date_fecha.setDate(QDate.currentDate())
 
+        # Cargar cliente
         self.txt_cliente.clear()
-        cliente_encontrado = False
         for nombre, id_cliente in self.clientes_dict.items():
             if id_cliente == orden['cliente_id']:
                 self.txt_cliente.setText(nombre)
-                cliente_encontrado = True
                 break
         
-        if not cliente_encontrado:
-            self.txt_cliente.setText(f"[ID: {orden['cliente_id']}] Cliente Desconocido")
-        
+        # Cargar items
         self.tabla_model.removeRows(0, self.tabla_model.rowCount())
         for item in orden['items']:
             cantidad = QStandardItem(str(item['cantidad']))
@@ -500,40 +489,34 @@ class OrdenesWindow(QDialog):
         self.controlar_estado_campos(False)
 
     def habilitar_edicion(self):
-        """Permite editar una orden ya cargada."""
         if not self.orden_actual_id:
-            self.mostrar_advertencia("No hay ninguna orden cargada para editar.")
+            self.mostrar_advertencia("No hay orden cargada.")
             return
         
         self.modo_edicion = True
         self.controlar_estado_campos(True)
-        self.mostrar_info("Modo de edición activado.")
+        self.mostrar_info("Modo edición activado.")
 
     def cancelar_orden(self):
-        """Marca una orden como 'Cancelada' en la BD."""
         if not self.orden_actual_id:
-            self.mostrar_advertencia("No hay orden cargada para cancelar.")
+            self.mostrar_advertencia("No hay orden cargada.")
             return
         
-        if not db_helper: return
-        
         respuesta = QMessageBox.question(
-            self, "Confirmar Cancelación", 
-            f"¿Está seguro de que desea cancelar la orden {self.txt_folio.text()}?\nEsta acción no se puede deshacer.",
+            self, "Confirmar", 
+            "¿Cancelar esta orden?",
             QMessageBox.Yes | QMessageBox.No
         )
         
         if respuesta == QMessageBox.Yes:
             try:
                 if db_helper.cancelar_orden(self.orden_actual_id):
-                    self.mostrar_exito("Orden cancelada correctamente.")
+                    self.mostrar_exito("Orden cancelada.")
                     self.cmb_estado.setCurrentText("Cancelada")
-                    self.modo_edicion = False
-                    self.controlar_estado_campos(False)
                 else:
-                    self.mostrar_error("No se pudo cancelar la orden.")
+                    self.mostrar_error("No se pudo cancelar.")
             except Exception as e:
-                self.mostrar_error(f"Error al cancelar: {e}")
+                self.mostrar_error(f"Error: {e}")
 
     def controlar_estado_campos(self, habilitar):
         """Habilita o deshabilita los campos del formulario."""
