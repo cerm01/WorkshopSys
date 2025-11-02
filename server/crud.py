@@ -307,7 +307,7 @@ def create_orden(db: Session, orden_data: Dict[str, Any], items: List[Dict[str, 
     if 'folio' not in orden_data:
         ultimo_folio = db.query(Orden).order_by(Orden.id.desc()).first()
         numero = 1 if not ultimo_folio else ultimo_folio.id + 1
-        orden_data['folio'] = f"ORD-{datetime.now().year}-{numero:04d}"
+        orden_data['folio'] = f"ORD-{datetime.now().year}-{numero:05d}"
     
     # Crear orden
     nueva_orden = Orden(**orden_data)
@@ -380,7 +380,7 @@ def create_cotizacion(db: Session, cotizacion_data: Dict[str, Any], items: List[
     if 'folio' not in cotizacion_data:
         ultimo_folio = db.query(Cotizacion).order_by(Cotizacion.id.desc()).first()
         numero = 1 if not ultimo_folio else ultimo_folio.id + 1
-        cotizacion_data['folio'] = f"COT-{datetime.now().year}-{numero:04d}"
+        cotizacion_data['folio'] = f"COT-{datetime.now().year}-{numero:05d}"
     
     # Crear cotización
     nueva_cotizacion = Cotizacion(**cotizacion_data)
