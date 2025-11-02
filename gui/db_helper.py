@@ -163,12 +163,16 @@ class DatabaseHelper:
     
     # ==================== ÓRDENES ====================
     
-    def get_ordenes(self, estado: Optional[str] = None) -> List[Dict]:
-        """Obtener órdenes"""
-        db = self._get_session()
-        ordenes = crud.get_all_ordenes(db, estado=estado)
-        return [self._orden_to_dict(o) for o in ordenes]
-    
+    def buscar_orden(self, folio: str) -> Optional[Dict]:
+        """Buscar orden por folio"""
+        try:
+            db = self._get_session()
+            orden = crud.get_orden_by_folio(db, folio)
+            return self._orden_to_dict(orden) if orden else None
+        except Exception as e:
+            print(f"Error al buscar orden: {e}")
+            return None
+
     def crear_orden(self, orden_data: Dict, items: List[Dict]) -> Optional[Dict]:
         """Crear nueva orden"""
         try:
@@ -178,15 +182,38 @@ class DatabaseHelper:
         except Exception as e:
             print(f"Error al crear orden: {e}")
             return None
-    
-    def cambiar_estado_orden(self, orden_id: int, estado: str) -> bool:
-        """Cambiar estado de orden"""
+
+    def actualizar_orden(self, orden_id: int, orden_data: Dict, items: List[Dict]) -> Optional[Dict]:
+        """Actualizar orden existente"""
         try:
             db = self._get_session()
-            crud.cambiar_estado_orden(db, orden_id, estado)
-            return True
+            
+            # Actualizar datos de orden
+            orden = crud.update_orden(db, orden_id, orden_data)
+            if not orden:
+                return None
+            
+            # Eliminar items viejos y agregar nuevos
+            db.query(crud.OrdenItem).filter(crud.OrdenItem.orden_id == orden_id).delete()
+            for item_data in items:
+                item = crud.OrdenItem(orden_id=orden_id, **item_data)
+                db.add(item)
+            
+            db.commit()
+            db.refresh(orden)
+            return self._orden_to_dict(orden)
         except Exception as e:
-            print(f"Error al cambiar estado: {e}")
+            print(f"Error al actualizar orden: {e}")
+            db.rollback()
+            return None
+
+    def cancelar_orden(self, orden_id: int) -> bool:
+        """Cancelar una orden"""
+        try:
+            db = self._get_session()
+            return crud.cambiar_estado_orden(db, orden_id, "Cancelada") is not None
+        except Exception as e:
+            print(f"Error al cancelar orden: {e}")
             return False
     
     # ==================== COTIZACIONES ====================
