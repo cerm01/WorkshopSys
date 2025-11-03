@@ -70,40 +70,40 @@ class EstadoCuentaClienteDialog(QDialog):
         self.btn_cerrar = btn_cerrar
 
     def crear_grupo_filtros(self, parent_layout):
-        grupo = QGroupBox("Seleccionar Periodo")
+        grupo = QGroupBox()
         grupo.setStyleSheet(GROUP_BOX_STYLE)
         
         layout = QHBoxLayout()
         layout.setSpacing(10)
 
-        lbl_style_dark = LABEL_STYLE.replace("white", "#333333")
-
         lbl_ini = QLabel("Fecha Inicial:")
-        lbl_ini.setStyleSheet(lbl_style_dark)
+        lbl_ini.setStyleSheet(LABEL_STYLE)
         self.date_inicial = QDateEdit()
         self.date_inicial.setCalendarPopup(True)
         self.date_inicial.setDisplayFormat("dd/MM/yyyy")
         self.date_inicial.setStyleSheet(INPUT_STYLE)
-        self.date_inicial.setDate(QDate.currentDate().addYears(-1)) # Por defecto 1 año atrás
+        self.date_inicial.setDate(QDate.currentDate().addYears(-1))
+        self.date_inicial.setFixedHeight(40) # <-- Altura fija
         
         lbl_fin = QLabel("Fecha Final:")
-        lbl_fin.setStyleSheet(lbl_style_dark)
+        lbl_fin.setStyleSheet(LABEL_STYLE)
         self.date_final = QDateEdit()
         self.date_final.setCalendarPopup(True)
         self.date_final.setDisplayFormat("dd/MM/yyyy")
         self.date_final.setStyleSheet(INPUT_STYLE)
-        self.date_final.setDate(QDate.currentDate()) # Por defecto hoy
+        self.date_final.setDate(QDate.currentDate())
+        self.date_final.setFixedHeight(40) # <-- Altura fija
 
         self.btn_filtrar = QPushButton("Generar Reporte")
         self.btn_filtrar.setStyleSheet(FORM_BUTTON_STYLE)
-        self.btn_filtrar.setFixedHeight(40)
+        self.btn_filtrar.setFixedHeight(50)
 
-        layout.addWidget(lbl_ini)
-        layout.addWidget(self.date_inicial)
-        layout.addWidget(lbl_fin)
-        layout.addWidget(self.date_final)
-        layout.addStretch()
-        layout.addWidget(self.btn_filtrar)
+        layout.addWidget(lbl_ini, 0)
+        layout.addWidget(self.date_inicial, 1)
+        layout.addWidget(lbl_fin, 0)
+        layout.addWidget(self.date_final, 1)
+        layout.addStretch(2) # <-- Espacio flexible principal
+        layout.addWidget(self.btn_filtrar, 0) # <-- Botón con estiramiento 0
         
         grupo.setLayout(layout)
         parent_layout.addWidget(grupo)

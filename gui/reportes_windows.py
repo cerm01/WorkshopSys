@@ -156,7 +156,7 @@ class ReportesWindow(QDialog):
             btn = QPushButton(texto)
             btn.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedHeight(50)
+            btn.setMinimumHeight(40)
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             btn.clicked.connect(funcion)
             layout.addWidget(btn)
