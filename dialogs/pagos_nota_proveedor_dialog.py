@@ -132,14 +132,19 @@ class PagosNotaProveedorDialog(QDialog):
         
         layout = QGridLayout()
         layout.setSpacing(10)
-
+        top_row_style = INPUT_STYLE + """
+        QDoubleSpinBox, QDateEdit {
+            font-size: 18px;
+            min-height: 40px;
+        }
+        """
         # Fila 1
         layout.addWidget(self.crear_label_pago("Monto a Pagar:"), 0, 0)
         self.spin_monto_pago = QDoubleSpinBox()
         self.spin_monto_pago.setRange(0.00, 9999999.99)
         self.spin_monto_pago.setDecimals(2)
         self.spin_monto_pago.setPrefix("$ ")
-        self.spin_monto_pago.setStyleSheet(INPUT_STYLE + "QDoubleSpinBox { font-size: 18px; }")
+        self.spin_monto_pago.setStyleSheet(top_row_style) # Estilo aplicado
         layout.addWidget(self.spin_monto_pago, 0, 1)
         
         layout.addWidget(self.crear_label_pago("Fecha de Pago:"), 0, 2)
@@ -147,7 +152,7 @@ class PagosNotaProveedorDialog(QDialog):
         self.date_fecha_pago.setDate(QDate.currentDate())
         self.date_fecha_pago.setCalendarPopup(True)
         self.date_fecha_pago.setDisplayFormat("dd/MM/yyyy")
-        self.date_fecha_pago.setStyleSheet(INPUT_STYLE + "QDateEdit { font-size: 18px; }")
+        self.date_fecha_pago.setStyleSheet(top_row_style) # Estilo aplicado
         layout.addWidget(self.date_fecha_pago, 0, 3)
 
         # Fila 2
