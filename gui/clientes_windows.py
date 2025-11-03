@@ -16,6 +16,12 @@ from styles import (
 )
 
 from db_helper import db_helper
+# Importar la nueva ventana de diálogo
+try:
+    from gui.estado_cuenta_dialog import EstadoCuentaClienteDialog
+except ImportError as e:
+    print(f"Error al importar EstadoCuentaClienteDialog: {e}")
+    EstadoCuentaClienteDialog = None
 
 class ClientesWindow(QDialog):
     def __init__(self, parent=None):
@@ -414,6 +420,14 @@ class ClientesWindow(QDialog):
         scroll.setWidget(self.detalle_widget)
         
         layout.addWidget(scroll)
+        # Crear y añadir el botón de estado de cuenta
+        self.btn_estado_cuenta = QPushButton("Ver Estado de Cuenta")
+        # Usar el mismo estilo que los botones principales
+        self.btn_estado_cuenta.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
+        self.btn_estado_cuenta.setCursor(Qt.PointingHandCursor)
+        self.btn_estado_cuenta.clicked.connect(self.abrir_estado_cuenta)
+        
+        layout.addWidget(self.btn_estado_cuenta) # Añadir el botón al final del panel        
         panel.setLayout(layout)
         parent_layout.addWidget(panel, 3)
 
@@ -474,6 +488,31 @@ class ClientesWindow(QDialog):
             layout.addWidget(btn)
         
         parent_layout.addLayout(layout)
+
+    def abrir_estado_cuenta(self):
+        """
+        Abre el diálogo de estado de cuenta para el cliente seleccionado.
+        """
+        if EstadoCuentaClienteDialog is None:
+            self.mostrar_mensaje("Error", "No se pudo cargar el módulo de Estado de Cuenta.", QMessageBox.Critical)
+            return
+
+        indice = self.tabla_clientes.currentIndex()
+        if not indice.isValid():
+            self.mostrar_mensaje("Advertencia", "Seleccione un cliente para ver su estado de cuenta.", QMessageBox.Warning)
+            return
+        
+        fila = indice.row()
+        try:
+            cliente_id = int(self.tabla_model.item(fila, 0).text())
+            nombre_cliente = self.tabla_model.item(fila, 1).text()
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"No se pudo obtener la información del cliente: {e}", QMessageBox.Critical)
+            return
+
+        # Abrir el diálogo de estado de cuenta
+        dialog = EstadoCuentaClienteDialog(cliente_id, nombre_cliente, self)
+        dialog.exec_()
 
     def actualizar_panel_detalle(self):
         """Actualizar panel de detalles con cliente seleccionado"""
