@@ -5,7 +5,7 @@ import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
     QGridLayout, QGroupBox, QDoubleSpinBox, QMessageBox, QTableView,
-    QHeaderView, QWidget, QDateEdit, QComboBox,
+    QHeaderView, QWidget, QDateEdit, QComboBox, QApplication,
     QMenu, QAction  # Importar QMenu y QAction para el clic derecho
 )
 from PyQt5.QtCore import Qt, QDate
