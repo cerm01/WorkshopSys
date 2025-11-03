@@ -6,7 +6,8 @@ from datetime import datetime
 from server.models import (
     Cliente, Proveedor, Producto, MovimientoInventario,
     Orden, OrdenItem, Cotizacion, CotizacionItem,
-    NotaVenta, NotaVentaItem, NotaVentaPago, Usuario
+    NotaVenta, NotaVentaItem, NotaVentaPago, Usuario,
+    NotaProveedor, NotaProveedorItem, NotaProveedorPago
 )
 
 
@@ -596,6 +597,171 @@ def eliminar_pago_nota(db: Session, pago_id: int) -> Optional[NotaVenta]:
         nota.estado = 'Registrado'
         nota.total_pagado = 0.0 # Asegurar 0
         nota.saldo = nota.total # Asegurar saldo completo
+    else:
+        nota.estado = 'Pagado Parcialmente'
+        
+    # 5. Eliminar el pago
+    db.delete(pago)
+    
+    # 6. Guardar cambios
+    db.commit()
+    db.refresh(nota)
+    
+    return nota
+
+# ==================== NOTAS DE PROVEEDOR ====================
+
+def get_all_notas_proveedor(db: Session) -> List[NotaProveedor]:
+    """Obtener todas las notas de proveedor"""
+    return db.query(NotaProveedor).order_by(NotaProveedor.fecha.desc()).all()
+
+
+def get_nota_proveedor(db: Session, nota_id: int) -> Optional[NotaProveedor]:
+    """Obtener nota de proveedor por ID"""
+    return db.query(NotaProveedor).filter(NotaProveedor.id == nota_id).first()
+
+
+def create_nota_proveedor(db: Session, nota_data: Dict[str, Any], items: List[Dict[str, Any]]) -> NotaProveedor:
+    """Crear nueva nota de proveedor con items"""
+    # Generar folio único si no existe
+    if 'folio' not in nota_data:
+        ultimo_folio = db.query(NotaProveedor).order_by(NotaProveedor.id.desc()).first()
+        numero = 1 if not ultimo_folio else ultimo_folio.id + 1
+        nota_data['folio'] = f"NP-{datetime.now().year}-{numero:05d}"
+    
+    nota_data['estado'] = 'Registrado'
+    nota_data['total_pagado'] = 0.0
+    
+    # Crear nota
+    nueva_nota = NotaProveedor(**nota_data)
+    db.add(nueva_nota)
+    db.flush()
+    
+    # Agregar items y calcular totales
+    subtotal = 0
+    impuestos_total = 0
+    
+    for item_data in items:
+        item = NotaProveedorItem(nota_id=nueva_nota.id, **item_data)
+        db.add(item)
+        subtotal += item.importe
+        impuestos_total += (item.importe * item.impuesto / 100)
+    
+    nueva_nota.subtotal = subtotal
+    nueva_nota.impuestos = impuestos_total
+    nueva_nota.total = subtotal + impuestos_total
+    nueva_nota.saldo = nueva_nota.total
+    
+    db.commit()
+    db.refresh(nueva_nota)
+    return nueva_nota
+
+def cancelar_nota_proveedor(db: Session, nota_id: int) -> bool:
+    """Cancelar una nota de proveedor"""
+    nota = get_nota_proveedor(db, nota_id)
+    if not nota:
+        return False
+    
+    if nota.estado == 'Pagado' or nota.estado == 'Cancelada':
+        return False
+    
+    nota.estado = 'Cancelada'
+    nota.saldo = 0.0
+    nota.updated_at = datetime.now()
+    db.commit()
+    return True
+
+def get_pagos_por_nota_proveedor(db: Session, nota_id: int) -> List[NotaProveedorPago]:
+    """Obtener historial de pagos de una nota de proveedor"""
+    return db.query(NotaProveedorPago).filter(NotaProveedorPago.nota_id == nota_id).order_by(NotaProveedorPago.fecha_pago.desc()).all()
+
+
+def registrar_pago_nota_proveedor(
+    db: Session, 
+    nota_id: int, 
+    monto: float, 
+    fecha_pago: datetime, 
+    metodo_pago: str, 
+    memo: Optional[str] = None
+) -> Optional[NotaProveedor]:
+    """
+    Registrar un pago a una nota de proveedor y actualizar su estado.
+    """
+    nota = get_nota_proveedor(db, nota_id)
+    if not nota:
+        raise ValueError("La nota de proveedor no existe.")
+    
+    if nota.estado == 'Cancelada':
+        raise ValueError("No se pueden aplicar pagos a una nota cancelada.")
+        
+    if nota.estado == 'Pagado':
+        raise ValueError("Esta nota ya ha sido liquidada.")
+        
+    if monto <= 0:
+        raise ValueError("El monto debe ser positivo.")
+        
+    if monto > (nota.saldo + 0.01):
+        raise ValueError(f"El monto ${monto} excede el saldo pendiente de ${nota.saldo:.2f}.")
+    
+    # 1. Registrar el pago
+    nuevo_pago = NotaProveedorPago(
+        nota_id=nota_id,
+        monto=monto,
+        fecha_pago=fecha_pago,
+        metodo_pago=metodo_pago,
+        memo=memo
+    )
+    db.add(nuevo_pago)
+    
+    # 2. Actualizar la nota
+    nota.total_pagado += monto
+    nota.saldo -= monto
+    
+    # 3. Actualizar estado de la nota
+    if nota.saldo <= 0.01:
+        nota.saldo = 0.0
+        nota.estado = 'Pagado'
+    else:
+        nota.estado = 'Pagado Parcialmente'
+        
+    nota.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(nota)
+    
+    return nota
+
+def get_pago_proveedor_by_id(db: Session, pago_id: int) -> Optional[NotaProveedorPago]:
+    """Obtener un pago a proveedor específico por su ID"""
+    return db.query(NotaProveedorPago).filter(NotaProveedorPago.id == pago_id).first()
+
+def eliminar_pago_nota_proveedor(db: Session, pago_id: int) -> Optional[NotaProveedor]:
+    """
+    Elimina un registro de pago a proveedor y revierte los cambios en la Nota de Proveedor.
+    """
+    # 1. Buscar el pago
+    pago = get_pago_proveedor_by_id(db, pago_id)
+    if not pago:
+        raise ValueError("El pago no existe.")
+
+    # 2. Buscar la nota principal
+    nota = get_nota_proveedor(db, pago.nota_id)
+    if not nota:
+        raise ValueError("La nota asociada no existe.")
+        
+    if nota.estado == 'Cancelada':
+        raise ValueError("No se puede modificar o revertir pagos de una nota cancelada.")
+
+    # 3. Revertir los montos en la nota
+    monto_pago = pago.monto
+    nota.total_pagado -= monto_pago
+    nota.saldo += monto_pago
+
+    # 4. Re-evaluar el estado de la nota
+    if nota.total_pagado <= 0.01:
+        nota.estado = 'Registrado'
+        nota.total_pagado = 0.0
+        nota.saldo = nota.total
     else:
         nota.estado = 'Pagado Parcialmente'
         

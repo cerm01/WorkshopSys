@@ -1,5 +1,3 @@
-# cerm01/workshopsys/WorkshopSys-c449e3d330974e8d8a9db8730905785824a34fe9/server/models.py
-
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -72,6 +70,8 @@ class Proveedor(Base):
     
     # Relaciones
     productos = relationship("Producto", back_populates="proveedor")
+    # Relación con NotaProveedor
+    notas = relationship("NotaProveedor", back_populates="proveedor", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Proveedor(id={self.id}, nombre='{self.nombre}')>"
@@ -325,6 +325,84 @@ class NotaVentaPago(Base):
 
     def __repr__(self):
         return f"<NotaVentaPago(id={self.id}, nota_id={self.nota_id}, monto={self.monto})>"
+
+# ==================== NOTAS DE PROVEEDOR ====================
+class NotaProveedor(Base):
+    __tablename__ = "notas_proveedor"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    folio = Column(String(50), unique=True, nullable=False, index=True)
+    
+    # Proveedor
+    proveedor_id = Column(Integer, ForeignKey("proveedores.id"), nullable=False)
+    proveedor = relationship("Proveedor", back_populates="notas")
+    
+    # Estado
+    estado = Column(String(50), default="Registrado") # Registrado, Pagado Parcialmente, Pagado, Cancelado
+    metodo_pago = Column(String(50), nullable=True)
+    
+    # Totales
+    subtotal = Column(Float, default=0.0)
+    impuestos = Column(Float, default=0.0)
+    total = Column(Float, default=0.0)
+    
+    # Cuentas por Pagar
+    total_pagado = Column(Float, default=0.0)
+    saldo = Column(Float, default=0.0)
+    
+    # Metadata
+    observaciones = Column(Text, nullable=True) # Usado para 'Referencia' en la GUI
+    fecha = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    # Relaciones
+    items = relationship("NotaProveedorItem", back_populates="nota", cascade="all, delete-orphan")
+    pagos = relationship("NotaProveedorPago", back_populates="nota", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<NotaProveedor(id={self.id}, folio='{self.folio}', total={self.total}, saldo={self.saldo})>"
+
+
+class NotaProveedorItem(Base):
+    __tablename__ = "notas_proveedor_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    nota_id = Column(Integer, ForeignKey("notas_proveedor.id"), nullable=False)
+    nota = relationship("NotaProveedor", back_populates="items")
+    
+    cantidad = Column(Integer, default=1)
+    descripcion = Column(Text, nullable=False)
+    precio_unitario = Column(Float, default=0.0)
+    importe = Column(Float, default=0.0)
+    impuesto = Column(Float, default=0.0) # Porcentaje
+    
+    created_at = Column(DateTime, default=datetime.now)
+
+    def __repr__(self):
+        return f"<NotaProveedorItem(id={self.id}, descripcion='{self.descripcion[:30]}')>"
+
+
+class NotaProveedorPago(Base):
+    __tablename__ = "notas_proveedor_pagos"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Relación con NotaProveedor
+    nota_id = Column(Integer, ForeignKey("notas_proveedor.id"), nullable=False)
+    nota = relationship("NotaProveedor", back_populates="pagos")
+    
+    # Datos del pago
+    monto = Column(Float, nullable=False)
+    fecha_pago = Column(DateTime, default=datetime.now)
+    metodo_pago = Column(String(50), nullable=False)
+    memo = Column(Text, nullable=True)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.now)
+
+    def __repr__(self):
+        return f"<NotaProveedorPago(id={self.id}, nota_id={self.nota_id}, monto={self.monto})>"
 
 # ==================== USUARIOS (Para sistema distribuido) ====================
 

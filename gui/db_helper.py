@@ -492,6 +492,162 @@ class DatabaseHelper:
         except Exception as e:
             print(f"Error en db_helper al eliminar pago: {e}")
             raise e
+    
+    # ==================== NOTAS DE PROVEEDOR ====================
+    
+    def get_notas_proveedor(self) -> List[Dict]:
+        """Obtener todas las notas de proveedor"""
+        db = self._get_session()
+        notas = crud.get_all_notas_proveedor(db)
+        return [self._nota_proveedor_to_dict(n) for n in notas]
+    
+    def get_nota_proveedor(self, nota_id: int) -> Optional[Dict]:
+        """Obtener nota de proveedor por ID"""
+        db = self._get_session()
+        nota = crud.get_nota_proveedor(db, nota_id)
+        return self._nota_proveedor_to_dict(nota) if nota else None
+    
+    def buscar_notas_proveedor(self, folio: str = None, proveedor_id: int = None) -> List[Dict]:
+        """Buscar notas de proveedor por folio o proveedor_id"""
+        db = self._get_session()
+        notas = crud.get_all_notas_proveedor(db)
+        
+        if folio:
+            notas = [n for n in notas if folio.upper() in n.folio.upper()]
+        if proveedor_id:
+            notas = [n for n in notas if n.proveedor_id == proveedor_id]
+        
+        return [self._nota_proveedor_to_dict(n) for n in notas]
+    
+    def crear_nota_proveedor(self, nota_data: Dict, items: List[Dict]) -> Optional[Dict]:
+        """Crear nueva nota de proveedor"""
+        try:
+            db = self._get_session()
+            nota = crud.create_nota_proveedor(db, nota_data, items)
+            return self._nota_proveedor_to_dict(nota)
+        except Exception as e:
+            print(f"Error al crear nota proveedor: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def actualizar_nota_proveedor(self, nota_id: int, nota_data: Dict, items: List[Dict]) -> Optional[Dict]:
+        """Actualizar nota de proveedor (lógica similar a actualizar_nota)"""
+        try:
+            db = self._get_session()
+            nota = crud.get_nota_proveedor(db, nota_id)
+            if not nota:
+                print(f"❌ No se encontró la nota proveedor con ID {nota_id}")
+                return None
+            
+            print(f"📝 Actualizando nota proveedor {nota.folio}...")
+            
+            # Actualizar datos
+            nota.proveedor_id = nota_data.get('proveedor_id', nota.proveedor_id)
+            nota.estado = nota_data.get('estado', nota.estado)
+            nota.metodo_pago = nota_data.get('metodo_pago', nota.metodo_pago)
+            nota.fecha = nota_data.get('fecha', nota.fecha)
+            nota.observaciones = nota_data.get('observaciones', nota.observaciones)
+            
+            # Importar el modelo de item correcto
+            from server.models import NotaProveedorItem
+            
+            # Eliminar items anteriores
+            for item in nota.items:
+                db.delete(item)
+            db.flush()
+            
+            # Agregar nuevos items y calcular totales
+            subtotal = 0
+            total_impuestos = 0
+            
+            for item_data in items:
+                cantidad = item_data['cantidad']
+                precio_unitario = item_data['precio_unitario']
+                impuesto_porcentaje = item_data.get('impuesto', 16.0)
+                
+                importe_sin_iva = cantidad * precio_unitario
+                iva_item = importe_sin_iva * (impuesto_porcentaje / 100)
+                
+                nuevo_item = NotaProveedorItem(
+                    nota_id=nota.id,
+                    cantidad=cantidad,
+                    descripcion=item_data['descripcion'],
+                    precio_unitario=precio_unitario,
+                    importe=importe_sin_iva,
+                    impuesto=impuesto_porcentaje
+                )
+                
+                db.add(nuevo_item)
+                subtotal += importe_sin_iva
+                total_impuestos += iva_item
+            
+            # Actualizar totales en la nota
+            nota.subtotal = subtotal
+            nota.impuestos = total_impuestos
+            nota.total = subtotal + total_impuestos
+            nota.saldo = nota.total - nota.total_pagado
+            
+            # Actualizar estado basado en saldo
+            if nota.saldo <= 0.01 and nota.estado != 'Cancelada':
+                nota.saldo = 0.0
+                nota.estado = 'Pagado'
+            elif nota.total_pagado > 0 and nota.estado != 'Cancelada':
+                nota.estado = 'Pagado Parcialmente'
+            elif nota.total_pagado == 0 and nota.estado != 'Cancelada':
+                nota.estado = 'Registrado'
+
+            nota.updated_at = datetime.now()
+            
+            db.commit()
+            db.refresh(nota)
+            
+            print(f"✅ Nota proveedor {nota.folio} actualizada correctamente")
+            return self._nota_proveedor_to_dict(nota)
+            
+        except Exception as e:
+            print(f"❌ Error al actualizar nota proveedor: {e}")
+            import traceback
+            traceback.print_exc()
+            db.rollback()
+            return None
+        
+    def cancelar_nota_proveedor(self, nota_id: int) -> bool:
+        """Cancelar una nota de proveedor"""
+        try:
+            db = self._get_session()
+            return crud.cancelar_nota_proveedor(db, nota_id)
+        except Exception as e:
+            print(f"Error al cancelar nota proveedor: {e}")
+            return False
+    
+    # ==================== PAGOS DE NOTAS PROVEEDOR ====================
+    
+    def get_pagos_nota_proveedor(self, nota_id: int) -> List[Dict]:
+        """Obtener historial de pagos de una nota de proveedor"""
+        db = self._get_session()
+        pagos = crud.get_pagos_por_nota_proveedor(db, nota_id)
+        return [self._pago_proveedor_to_dict(p) for p in pagos]
+
+    def registrar_pago_proveedor(self, nota_id: int, monto: float, fecha_pago: datetime, metodo_pago: str, memo: str) -> Optional[Dict]:
+        """Registrar un pago a proveedor y devolver la nota actualizada"""
+        try:
+            db = self._get_session()
+            nota_actualizada = crud.registrar_pago_nota_proveedor(db, nota_id, monto, fecha_pago, metodo_pago, memo)
+            return self._nota_proveedor_to_dict(nota_actualizada) if nota_actualizada else None
+        except Exception as e:
+            print(f"Error en db_helper al registrar pago proveedor: {e}")
+            raise e 
+    
+    def eliminar_pago_proveedor(self, pago_id: int) -> Optional[Dict]:
+        """Elimina un pago a proveedor y devuelve la nota actualizada"""
+        try:
+            db = self._get_session()
+            nota_actualizada = crud.eliminar_pago_nota_proveedor(db, pago_id)
+            return self._nota_proveedor_to_dict(nota_actualizada)
+        except Exception as e:
+            print(f"Error en db_helper al eliminar pago proveedor: {e}")
+            raise e
 
     # ==================== ESTADÍSTICAS ====================
     
@@ -661,6 +817,50 @@ class DatabaseHelper:
             'pagos': [DatabaseHelper._pago_to_dict(p) for p in nota.pagos]
         }
 
+    @staticmethod
+    def _pago_proveedor_to_dict(pago) -> Dict:
+        """Convertir NotaProveedorPago ORM a diccionario"""
+        if not pago: return {}
+        return {
+            'id': pago.id,
+            'nota_id': pago.nota_id,
+            'monto': pago.monto,
+            'fecha_pago': pago.fecha_pago.strftime("%d/%m/%Y %H:%M"),
+            'metodo_pago': pago.metodo_pago,
+            'memo': pago.memo or ''
+        }
+
+    @staticmethod
+    def _nota_proveedor_to_dict(nota) -> Dict:
+        """Convertir NotaProveedor ORM a diccionario"""
+        
+        if not nota:
+            return None
+            
+        return {
+            'id': nota.id,
+            'folio': nota.folio,
+            'proveedor_id': nota.proveedor_id,
+            'proveedor_nombre': nota.proveedor.nombre if nota.proveedor else 'Sin proveedor',
+            'estado': nota.estado or 'Registrado',
+            
+            'metodo_pago': nota.metodo_pago or 'Efectivo',
+            'fecha': nota.fecha.strftime("%d/%m/%Y") if nota.fecha else '',
+            'observaciones': nota.observaciones or '',
+            'subtotal': nota.subtotal,
+            'impuestos': nota.impuestos,
+            'total': nota.total,
+            'total_pagado': nota.total_pagado,
+            'saldo': nota.saldo,
+            'items': [{
+                'cantidad': i.cantidad,
+                'descripcion': i.descripcion,
+                'precio_unitario': i.precio_unitario,
+                'importe': i.importe,
+                'impuesto': i.impuesto
+            } for i in nota.items],
+            'pagos': [DatabaseHelper._pago_proveedor_to_dict(p) for p in nota.pagos]
+        }
 
 # Instancia global para usar en toda la aplicación
 db_helper = DatabaseHelper()

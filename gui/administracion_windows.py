@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFrame, QToolButton, QHBoxLayout, QApplication
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFrame, QToolButton, QHBoxLayout, QApplication, QLabel
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor
 
@@ -8,6 +8,7 @@ from utils import recolor_icon
 from notas_windows import NotasWindow
 from cotizaciones_windows import CotizacionesWindow
 from ordenes_windows import OrdenesWindow
+from notas_proveedores_windows import NotasProveedoresWindow
 # Importar los estilos
 from styles import WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
 
@@ -32,6 +33,13 @@ class AdministracionWindow(QDialog):
             "class": OrdenesWindow,
             "display_name": "Órdenes de Trabajo",
             "icon": "assets/icons/ordenes.png",
+            "size": (250, 250),
+            "icon_size": (120, 120)
+        },
+        "notas_proveedores": {
+            "class": NotasProveedoresWindow,
+            "display_name": "Notas de Proveedores",
+            "icon": "assets/icons/proveedores.png",
             "size": (250, 250),
             "icon_size": (120, 120)
         }
@@ -64,15 +72,16 @@ class AdministracionWindow(QDialog):
         # Layout para los botones 
         buttons_layout = QHBoxLayout()
         buttons_layout.addStretch()
-        
-        # Crear los botones dinámicamente basados en la configuración
-        for identifier, config in self.WINDOW_CONFIG.items():
-            button = self.create_button(
-                config=config,
-                identifier=identifier
-            )
-            buttons_layout.addWidget(button)
-            buttons_layout.addStretch()
+        button_order = ["notas", "cotizaciones", "ordenes",  "notas_proveedores"]
+        for identifier in button_order:
+            if identifier in self.WINDOW_CONFIG:
+                config = self.WINDOW_CONFIG[identifier]
+                button = self.create_button(
+                    config=config,
+                    identifier=identifier
+                )
+                buttons_layout.addWidget(button)
+                buttons_layout.addStretch()
         
         # Layout interno del frame
         frame_layout = QVBoxLayout()
@@ -121,6 +130,9 @@ class AdministracionWindow(QDialog):
             # Crear nueva instancia si no existe
             if self.window_instances[window_id] is None:
                 window_class = self.WINDOW_CONFIG[window_id]["class"]
+                if window_class is None:
+                    print(f"Error: La clase para '{window_id}' no está definida.")
+                    return
                 self.window_instances[window_id] = window_class(self)
             
             # Mostrar la ventana
