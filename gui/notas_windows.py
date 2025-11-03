@@ -110,27 +110,38 @@ class NotasWindow(QDialog):
         layout.setSpacing(15)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Campo Folio (no editable)
-        lbl_folio = QLabel("Folio")
-        lbl_folio.setStyleSheet(LABEL_STYLE)
-        self.txt_folio = QLineEdit()
-        self.txt_folio.setStyleSheet(INPUT_STYLE + """
+        # Estilo de campo solo lectura
+        readonly_style = INPUT_STYLE + """
             QLineEdit {
                 background-color: #E8E8E8;
                 color: #666666;
             }
-        """)
+        """
+        
+        # --- CAMPO FOLIO ---
+        lbl_folio = QLabel("Folio")
+        lbl_folio.setStyleSheet(LABEL_STYLE)
+        self.txt_folio = QLineEdit()
+        self.txt_folio.setStyleSheet(readonly_style)
         self.txt_folio.setReadOnly(True)
         self.txt_folio.setPlaceholderText("NV-Auto")
         
-        # Campo Cliente - CON AUTOCOMPLETADO
+        # --- NUEVO CAMPO ESTADO ---
+        lbl_estado = QLabel("Estado")
+        lbl_estado.setStyleSheet(LABEL_STYLE)
+        self.txt_estado = QLineEdit()
+        self.txt_estado.setStyleSheet(readonly_style) # Mismo estilo
+        self.txt_estado.setReadOnly(True)
+        self.txt_estado.setPlaceholderText("Estado")
+        
+        # --- CAMPO CLIENTE ---
         lbl_cliente = QLabel("Cliente")
         lbl_cliente.setStyleSheet(LABEL_STYLE)
         self.txt_cliente = QLineEdit()
         self.txt_cliente.setStyleSheet(INPUT_STYLE)
         self.txt_cliente.setPlaceholderText("Escriba para buscar cliente...")
         
-        # Campo Fecha
+        # --- CAMPO FECHA ---
         lbl_fecha = QLabel("Fecha")
         lbl_fecha.setStyleSheet(LABEL_STYLE)
         self.date_fecha = QDateEdit()
@@ -139,22 +150,28 @@ class NotasWindow(QDialog):
         self.date_fecha.setDisplayFormat("dd/MM/yyyy")
         self.date_fecha.setStyleSheet(self._obtener_estilo_calendario())
         
-        # Campo Referencia
+        # --- CAMPO REFERENCIA ---
         lbl_referencia = QLabel("Referencia")
         lbl_referencia.setStyleSheet(LABEL_STYLE)
         self.txt_referencia = QLineEdit()
         self.txt_referencia.setStyleSheet(INPUT_STYLE)
         self.txt_referencia.setPlaceholderText("Placa/ID de vehículo/cliente")
         
-        # Agregar widgets al layout
+        # --- AGREGAR WIDGETS AL LAYOUT ---
         layout.addWidget(lbl_folio)
-        layout.addWidget(self.txt_folio, 1)
+        layout.addWidget(self.txt_folio, 1)        # Stretch 1
+        
+        layout.addWidget(lbl_estado)
+        layout.addWidget(self.txt_estado, 1)      # Stretch 1
+        
         layout.addWidget(lbl_cliente)
-        layout.addWidget(self.txt_cliente, 2)
+        layout.addWidget(self.txt_cliente, 3)     # Stretch 3 (más espacio)
+        
         layout.addWidget(lbl_fecha)
-        layout.addWidget(self.date_fecha, 1)
+        layout.addWidget(self.date_fecha, 1)      # Stretch 1
+        
         layout.addWidget(lbl_referencia)
-        layout.addWidget(self.txt_referencia, 1)
+        layout.addWidget(self.txt_referencia, 2)  # Stretch 2
         
         grupo_cliente.setLayout(layout)
         parent_layout.addWidget(grupo_cliente)
@@ -561,6 +578,7 @@ class NotasWindow(QDialog):
                 self.mostrar_exito(f"{mensaje}: {nota['folio']}")
                 self.txt_folio.setText(nota['folio'])
                 self.nota_actual_id = nota['id']
+                self.txt_estado.setText(nota.get('estado', 'Pagada'))
                 
                 if hasattr(self, 'botones') and len(self.botones) > 1:
                     self.botones[1].setText("Guardar")
@@ -583,6 +601,7 @@ class NotasWindow(QDialog):
             self.modo_edicion = False
             self.txt_folio.clear()
             self.txt_folio.setPlaceholderText("NV-Auto")
+            self.txt_estado.clear() # <-- CAMBIO AÑADIDO
             
             # 2. Resetear datos del cliente
             self.date_fecha.setDate(QDate.currentDate())
@@ -639,6 +658,7 @@ class NotasWindow(QDialog):
         self.txt_folio.setText(nota['folio'])
         self.date_fecha.setDate(QDate.fromString(nota['fecha'], "dd/MM/yyyy"))
         self.txt_referencia.setText(nota['observaciones'])
+        self.txt_estado.setText(nota.get('estado', '')) # <-- CAMBIO AÑADIDO
         
         # Cargar cliente
         self.txt_cliente.clear()
