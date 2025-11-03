@@ -74,13 +74,13 @@ class PagosNotaProveedorDialog(QDialog):
         main_layout.addLayout(bottom_layout)
 
     def crear_grupo_busqueda(self, parent_layout):
-        grupo = QGroupBox("Datos de la Nota de Proveedor")  
+        grupo = QGroupBox()  
         grupo.setStyleSheet(GROUP_BOX_STYLE)
         
         layout = QGridLayout()
         layout.setSpacing(10)
         
-        self.btn_buscar_nota = QPushButton("Buscar Nota (Proveedor)")  
+        self.btn_buscar_nota = QPushButton("Buscar Nota de Proveedor")  
         self.btn_buscar_nota.setStyleSheet(FORM_BUTTON_STYLE)
         layout.addWidget(self.btn_buscar_nota, 0, 0, 2, 1) # Abarca 2 filas
         
@@ -126,7 +126,7 @@ class PagosNotaProveedorDialog(QDialog):
         parent_layout.addWidget(grupo)
 
     def crear_grupo_registro_pago(self, parent_layout):
-        self.grupo_pago = QGroupBox("Registrar Nuevo Pago / Abono")
+        self.grupo_pago = QGroupBox()
         self.grupo_pago.setStyleSheet(GROUP_BOX_STYLE)
         self.grupo_pago.setEnabled(False) # Deshabilitado hasta cargar nota
         
@@ -136,7 +136,7 @@ class PagosNotaProveedorDialog(QDialog):
         # Fila 1
         layout.addWidget(self.crear_label_pago("Monto a Pagar:"), 0, 0)
         self.spin_monto_pago = QDoubleSpinBox()
-        self.spin_monto_pago.setRange(0.01, 9999999.99)
+        self.spin_monto_pago.setRange(0.00, 9999999.99)
         self.spin_monto_pago.setDecimals(2)
         self.spin_monto_pago.setPrefix("$ ")
         self.spin_monto_pago.setStyleSheet(INPUT_STYLE + "QDoubleSpinBox { font-size: 18px; }")
@@ -147,7 +147,7 @@ class PagosNotaProveedorDialog(QDialog):
         self.date_fecha_pago.setDate(QDate.currentDate())
         self.date_fecha_pago.setCalendarPopup(True)
         self.date_fecha_pago.setDisplayFormat("dd/MM/yyyy")
-        self.date_fecha_pago.setStyleSheet(INPUT_STYLE)
+        self.date_fecha_pago.setStyleSheet(INPUT_STYLE + "QDateEdit { font-size: 18px; }")
         layout.addWidget(self.date_fecha_pago, 0, 3)
 
         # Fila 2
@@ -159,7 +159,7 @@ class PagosNotaProveedorDialog(QDialog):
         self.cmb_metodo_pago.setStyleSheet(INPUT_STYLE)
         layout.addWidget(self.cmb_metodo_pago, 1, 1)
 
-        layout.addWidget(self.crear_label_pago("Memo (Opcional):"), 1, 2)
+        layout.addWidget(self.crear_label_pago("Memo:"), 1, 2)
         self.txt_memo_pago = QLineEdit()
         self.txt_memo_pago.setPlaceholderText("Ej: Pago de factura F-123, Abono...")  
         self.txt_memo_pago.setStyleSheet(INPUT_STYLE)
@@ -182,10 +182,9 @@ class PagosNotaProveedorDialog(QDialog):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 10, 0, 0)
         
-        lbl = QLabel("Historial de Pagos de la Nota (Clic derecho en un pago para eliminar)")
-        # Estilo de label oscuro (no blanco, ya que el fondo no es el gradiente principal)
-        lbl_style_dark = LABEL_STYLE.replace("white", "#333333")
-        lbl.setStyleSheet(lbl_style_dark)
+        lbl = QLabel("Historial de Pagos de la Nota de Proveedor")
+        lbl.setStyleSheet("QLabel { color: #FFFFFF; font-size: 16px; font-weight: bold; }")
+        lbl.setAlignment(Qt.AlignCenter)
         layout.addWidget(lbl)
         
         self.tabla_pagos_model = QStandardItemModel()
@@ -256,7 +255,7 @@ class PagosNotaProveedorDialog(QDialog):
         
         # Ajustar el SpinBox de monto
         self.spin_monto_pago.setValue(saldo)
-        self.spin_monto_pago.setMaximum(max(0.01, saldo)) # setMaximum debe ser > setMinimum
+        self.spin_monto_pago.setMaximum(max(0.00, saldo))
         
         self.cargar_historial_pagos()
         
