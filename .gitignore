@@ -2,4 +2,5 @@ env/
 gui/__pycache__/
 gui/pruebas.py
 server/__pycache__/
+dialogs/__pycache__/
 taller.db

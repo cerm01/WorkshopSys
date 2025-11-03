@@ -18,6 +18,7 @@ from styles import (
     INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )
 
+from dialogs.buscar_notas_dialog import BuscarNotasDialog
 
 class NotasWindow(QDialog):
     def __init__(self, parent=None):
@@ -304,9 +305,20 @@ class NotasWindow(QDialog):
         contenedor_principal = QWidget()
         layout_principal = QHBoxLayout()
         layout_principal.setContentsMargins(0, 0, 0, 0)
-        
-        # Agregar espacio a la izquierda
-        layout_principal.addStretch(6)
+
+        self.botones_intermedios_layout = QHBoxLayout()
+        self.botones_intermedios_layout.setContentsMargins(0, 10, 0, 0) # Margen superior
+        self.botones_intermedios_layout.setSpacing(10)
+        self.btn_ver_notas = QPushButton("Notas Emitidas")
+        self.btn_ver_notas.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
+        self.btn_ver_notas.setCursor(Qt.PointingHandCursor)
+        self.btn_ver_notas.clicked.connect(self.abrir_ventana_notas)
+        self.btn_ver_notas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.botones_intermedios_layout.addWidget(self.btn_ver_notas, 1)
+        self.botones_intermedios_layout.addStretch(2)
+        botones_intermedios_container = QWidget()
+        botones_intermedios_container.setLayout(self.botones_intermedios_layout)
+        layout_principal.addWidget(botones_intermedios_container, 6)
         
         # Crear un widget contenedor para el frame
         contenedor_frame = QWidget()
@@ -611,6 +623,12 @@ class NotasWindow(QDialog):
                     
             except Exception as e:
                 self.mostrar_error(f"Error al buscar: {e}")
+
+    def abrir_ventana_notas(self):
+        """Abre ventana con todas las notas"""
+        dialog = BuscarNotasDialog(self)
+        if dialog.exec_() == QDialog.Accepted and dialog.nota_seleccionada:
+            self.cargar_nota_en_formulario(dialog.nota_seleccionada)
     
     def cargar_nota_en_formulario(self, nota):
         """Cargar nota en el formulario"""
