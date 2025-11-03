@@ -6,7 +6,7 @@ from datetime import datetime
 from server.models import (
     Cliente, Proveedor, Producto, MovimientoInventario,
     Orden, OrdenItem, Cotizacion, CotizacionItem,
-    NotaVenta, NotaVentaItem, Usuario
+    NotaVenta, NotaVentaItem, NotaVentaPago, Usuario
 )
 
 
@@ -461,6 +461,8 @@ def create_nota_venta(db: Session, nota_data: Dict[str, Any], items: List[Dict[s
         numero = 1 if not ultimo_folio else ultimo_folio.id + 1
         nota_data['folio'] = f"NV-{datetime.now().year}-{numero:05d}"
     
+    nota_data['estado'] = 'Registrado'
+    nota_data['total_pagado'] = 0.0
     # Crear nota
     nueva_nota = NotaVenta(**nota_data)
     db.add(nueva_nota)
@@ -479,6 +481,7 @@ def create_nota_venta(db: Session, nota_data: Dict[str, Any], items: List[Dict[s
     nueva_nota.subtotal = subtotal
     nueva_nota.impuestos = impuestos_total
     nueva_nota.total = subtotal + impuestos_total
+    nueva_nota.saldo = nueva_nota.total
     
     db.commit()
     db.refresh(nueva_nota)
@@ -490,14 +493,120 @@ def cancelar_nota(db: Session, nota_id: int) -> bool:
     if not nota:
         return False
     
-    if nota.estado == 'Cancelada':
-        return False  # Ya está cancelada
+    # Solo se puede cancelar si no está pagada.
+    if nota.estado == 'Pagado' or nota.estado == 'Cancelada':
+        return False  # No se puede cancelar una nota pagada o ya cancelada
     
     nota.estado = 'Cancelada'
+    nota.saldo = 0.0 # Al cancelar, el saldo pendiente es 0
     nota.updated_at = datetime.now()
     db.commit()
     return True
 
+def get_pagos_por_nota(db: Session, nota_id: int) -> List[NotaVentaPago]:
+    """Obtener historial de pagos de una nota"""
+    return db.query(NotaVentaPago).filter(NotaVentaPago.nota_id == nota_id).order_by(NotaVentaPago.fecha_pago.desc()).all()
+
+
+def registrar_pago_nota(
+    db: Session, 
+    nota_id: int, 
+    monto: float, 
+    fecha_pago: datetime, 
+    metodo_pago: str, 
+    memo: Optional[str] = None
+) -> Optional[NotaVenta]:
+    """
+    Registrar un pago o abono a una nota de venta y actualizar su estado.
+    """
+    nota = get_nota(db, nota_id)
+    if not nota:
+        raise ValueError("La nota de venta no existe.")
+    
+    if nota.estado == 'Cancelada':
+        raise ValueError("No se pueden aplicar pagos a una nota cancelada.")
+        
+    if nota.estado == 'Pagado':
+        raise ValueError("Esta nota ya ha sido liquidada.")
+        
+    if monto <= 0:
+        raise ValueError("El monto debe ser positivo.")
+        
+    # Usar una tolerancia de 0.01 (un centavo) para comparaciones de punto flotante
+    if monto > (nota.saldo + 0.01):
+        raise ValueError(f"El monto ${monto} excede el saldo pendiente de ${nota.saldo:.2f}.")
+    
+    # 1. Registrar el pago
+    nuevo_pago = NotaVentaPago(
+        nota_id=nota_id,
+        monto=monto,
+        fecha_pago=fecha_pago,
+        metodo_pago=metodo_pago,
+        memo=memo
+    )
+    db.add(nuevo_pago)
+    
+    # 2. Actualizar la nota
+    nota.total_pagado += monto
+    nota.saldo -= monto
+    
+    # 3. Actualizar estado de la nota (Cumpliendo Punto 7 de tus requisitos)
+    if nota.saldo <= 0.01:
+        nota.saldo = 0.0  # Forzar a 0 exacto si se liquida
+        nota.estado = 'Pagado'
+    else:
+        nota.estado = 'Pagado Parcialmente'
+        
+    nota.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(nota)
+    
+    return nota
+
+def get_pago_by_id(db: Session, pago_id: int) -> Optional[NotaVentaPago]:
+    """Obtener un pago específico por su ID"""
+    return db.query(NotaVentaPago).filter(NotaVentaPago.id == pago_id).first()
+
+def eliminar_pago_nota(db: Session, pago_id: int) -> Optional[NotaVenta]:
+    """
+    Elimina un registro de pago y revierte los cambios en la Nota de Venta.
+    """
+    # 1. Buscar el pago
+    pago = get_pago_by_id(db, pago_id)
+    if not pago:
+        raise ValueError("El pago no existe.")
+
+    # 2. Buscar la nota principal
+    nota = get_nota(db, pago.nota_id)
+    if not nota:
+        raise ValueError("La nota asociada no existe.")
+        
+    if nota.estado == 'Cancelada':
+        raise ValueError("No se puede modificar o revertir pagos de una nota cancelada.")
+
+    # 3. Revertir los montos en la nota
+    monto_pago = pago.monto
+    nota.total_pagado -= monto_pago
+    nota.saldo += monto_pago
+
+    # 4. Re-evaluar el estado de la nota
+    # Tolerancia para floats
+    if nota.total_pagado <= 0.01:
+        nota.estado = 'Registrado'
+        nota.total_pagado = 0.0 # Asegurar 0
+        nota.saldo = nota.total # Asegurar saldo completo
+    else:
+        nota.estado = 'Pagado Parcialmente'
+        
+    # 5. Eliminar el pago
+    db.delete(pago)
+    
+    # 6. Guardar cambios
+    db.commit()
+    db.refresh(nota)
+    
+    return nota
 
 # ==================== USUARIOS ====================
 

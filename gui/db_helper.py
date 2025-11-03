@@ -409,7 +409,6 @@ class DatabaseHelper:
                 # Calcular importe
                 importe_sin_iva = cantidad * precio_unitario
                 iva_item = importe_sin_iva * (impuesto_porcentaje / 100)
-                importe_total = importe_sin_iva + iva_item
                 
                 # Crear item
                 nuevo_item = NotaVentaItem(
@@ -417,7 +416,7 @@ class DatabaseHelper:
                     cantidad=cantidad,
                     descripcion=item_data['descripcion'],
                     precio_unitario=precio_unitario,
-                    importe=importe_total,
+                    importe=importe_sin_iva,
                     impuesto=impuesto_porcentaje
                 )
                 
@@ -431,9 +430,19 @@ class DatabaseHelper:
             nota.subtotal = subtotal
             nota.impuestos = total_impuestos
             nota.total = subtotal + total_impuestos
+            nota.saldo = nota.total - nota.total_pagado
+            
+            if nota.saldo <= 0.01 and nota.estado != 'Cancelada':
+                nota.saldo = 0.0
+                nota.estado = 'Pagado'
+            elif nota.total_pagado > 0 and nota.estado != 'Cancelada':
+                nota.estado = 'Pagado Parcialmente'
+            elif nota.total_pagado == 0 and nota.estado != 'Cancelada':
+                nota.estado = 'Registrado'
+
             nota.updated_at = datetime.now()
             
-            # 6. Guardar cambios
+            # 8. Guardar cambios
             db.commit()
             db.refresh(nota)
             
@@ -456,6 +465,34 @@ class DatabaseHelper:
             print(f"Error al cancelar nota: {e}")
             return False
     
+    # ==================== PAGOS DE NOTAS ====================
+    
+    def get_pagos_nota(self, nota_id: int) -> List[Dict]:
+        """Obtener historial de pagos de una nota"""
+        db = self._get_session()
+        pagos = crud.get_pagos_por_nota(db, nota_id)
+        return [self._pago_to_dict(p) for p in pagos]
+
+    def registrar_pago(self, nota_id: int, monto: float, fecha_pago: datetime, metodo_pago: str, memo: str) -> Optional[Dict]:
+        """Registrar un pago y devolver la nota actualizada"""
+        try:
+            db = self._get_session()
+            nota_actualizada = crud.registrar_pago_nota(db, nota_id, monto, fecha_pago, metodo_pago, memo)
+            return self._nota_to_dict(nota_actualizada) if nota_actualizada else None
+        except Exception as e:
+            print(f"Error en db_helper al registrar pago: {e}")
+            raise e 
+    
+    def eliminar_pago(self, pago_id: int) -> Optional[Dict]:
+        """Elimina un pago y devuelve la nota actualizada"""
+        try:
+            db = self._get_session()
+            nota_actualizada = crud.eliminar_pago_nota(db, pago_id)
+            return self._nota_to_dict(nota_actualizada)
+        except Exception as e:
+            print(f"Error en db_helper al eliminar pago: {e}")
+            raise e
+
     # ==================== ESTADÍSTICAS ====================
     
     def get_estadisticas(self) -> Dict:
@@ -468,6 +505,7 @@ class DatabaseHelper:
     @staticmethod
     def _cliente_to_dict(cliente) -> Dict:
         """Convertir Cliente ORM a diccionario"""
+        if not cliente: return {}
         return {
             'id': cliente.id,
             'nombre': cliente.nombre,
@@ -486,6 +524,7 @@ class DatabaseHelper:
     @staticmethod
     def _proveedor_to_dict(proveedor) -> Dict:
         """Convertir Proveedor ORM a diccionario"""
+        if not proveedor: return {}
         return {
             'id': proveedor.id,
             'nombre': proveedor.nombre,
@@ -504,6 +543,7 @@ class DatabaseHelper:
     @staticmethod
     def _producto_to_dict(producto) -> Dict:
         """Convertir Producto ORM a diccionario"""
+        if not producto: return {}
         return {
             'id': producto.id,
             'codigo': producto.codigo,
@@ -522,6 +562,7 @@ class DatabaseHelper:
     @staticmethod
     def _movimiento_to_dict(movimiento) -> Dict:
         """Convertir MovimientoInventario ORM a diccionario"""
+        if not movimiento: return {}
         return {
             'id': movimiento.id,
             'fecha': movimiento.created_at.strftime("%d/%m/%Y %H:%M"),
@@ -533,8 +574,22 @@ class DatabaseHelper:
         }
     
     @staticmethod
+    def _pago_to_dict(pago) -> Dict:
+        """Convertir NotaVentaPago ORM a diccionario"""
+        if not pago: return {}
+        return {
+            'id': pago.id,
+            'nota_id': pago.nota_id,
+            'monto': pago.monto,
+            'fecha_pago': pago.fecha_pago.strftime("%d/%m/%Y %H:%M"),
+            'metodo_pago': pago.metodo_pago,
+            'memo': pago.memo or ''
+        }
+    
+    @staticmethod
     def _orden_to_dict(orden) -> Dict:
         """Convertir Orden ORM a diccionario"""
+        if not orden: return {}
         return {
             'id': orden.id,
             'folio': orden.folio,
@@ -553,6 +608,7 @@ class DatabaseHelper:
     @staticmethod
     def _cotizacion_to_dict(cotizacion) -> Dict:
         """Convertir Cotizacion ORM a diccionario"""
+        if not cotizacion: return {}
         return {
             'id': cotizacion.id,
             'folio': cotizacion.folio,
@@ -576,25 +632,33 @@ class DatabaseHelper:
     @staticmethod
     def _nota_to_dict(nota) -> Dict:
         """Convertir NotaVenta ORM a diccionario"""
+        
+        if not nota:
+            return None
+            
         return {
             'id': nota.id,
             'folio': nota.folio,
             'cliente_id': nota.cliente_id,
             'cliente_nombre': nota.cliente.nombre if nota.cliente else 'Sin cliente',
-            'estado': nota.estado or 'Pendiente',
+            'estado': nota.estado or 'Registrado', # Estado por defecto actualizado
+            
             'metodo_pago': nota.metodo_pago or 'Efectivo',
             'fecha': nota.fecha.strftime("%d/%m/%Y") if nota.fecha else '',
             'observaciones': nota.observaciones or '',
             'subtotal': nota.subtotal,
             'impuestos': nota.impuestos,
             'total': nota.total,
+            'total_pagado': nota.total_pagado,
+            'saldo': nota.saldo,
             'items': [{
                 'cantidad': i.cantidad,
                 'descripcion': i.descripcion,
                 'precio_unitario': i.precio_unitario,
-                'importe': i.importe,
+                'importe': i.importe, # Este es el importe BASE (subtotal del item)
                 'impuesto': i.impuesto
-            } for i in nota.items]
+            } for i in nota.items],
+            'pagos': [DatabaseHelper._pago_to_dict(p) for p in nota.pagos]
         }
 
 

@@ -1,3 +1,5 @@
+# cerm01/workshopsys/WorkshopSys-c449e3d330974e8d8a9db8730905785824a34fe9/server/models.py
+
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -253,14 +255,18 @@ class NotaVenta(Base):
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     cliente = relationship("Cliente", back_populates="notas")
     
-    # Estado
-    estado = Column(String(50), default="Pagada")
+    # 1. Estado por defecto actualizado
+    estado = Column(String(50), default="Registrado") # Opciones: Registrado, Pagado Parcialmente, Pagado, Cancelado
     metodo_pago = Column(String(50), nullable=True)
     
     # Totales
     subtotal = Column(Float, default=0.0)
     impuestos = Column(Float, default=0.0)
     total = Column(Float, default=0.0)
+    
+    # 2. Columnas para Cuentas por Cobrar
+    total_pagado = Column(Float, default=0.0)
+    saldo = Column(Float, default=0.0)
     
     # Metadata
     observaciones = Column(Text, nullable=True)
@@ -270,9 +276,13 @@ class NotaVenta(Base):
     
     # Relaciones
     items = relationship("NotaVentaItem", back_populates="nota", cascade="all, delete-orphan")
+    
+    # 3. Nueva relación con Pagos
+    pagos = relationship("NotaVentaPago", back_populates="nota", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<NotaVenta(id={self.id}, folio='{self.folio}', total={self.total})>"
+        # 4. Actualizado para mostrar el saldo
+        return f"<NotaVenta(id={self.id}, folio='{self.folio}', total={self.total}, saldo={self.saldo})>"
 
 
 class NotaVentaItem(Base):
@@ -293,6 +303,28 @@ class NotaVentaItem(Base):
     def __repr__(self):
         return f"<NotaVentaItem(id={self.id}, descripcion='{self.descripcion[:30]}')>"
 
+# 5. NotaVentaPago
+
+class NotaVentaPago(Base):
+    __tablename__ = "notas_venta_pagos"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Relación con NotaVenta
+    nota_id = Column(Integer, ForeignKey("notas_venta.id"), nullable=False)
+    nota = relationship("NotaVenta", back_populates="pagos")
+    
+    # Datos del pago
+    monto = Column(Float, nullable=False)
+    fecha_pago = Column(DateTime, default=datetime.now)
+    metodo_pago = Column(String(50), nullable=False)
+    memo = Column(Text, nullable=True)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.now)
+
+    def __repr__(self):
+        return f"<NotaVentaPago(id={self.id}, nota_id={self.nota_id}, monto={self.monto})>"
 
 # ==================== USUARIOS (Para sistema distribuido) ====================
 

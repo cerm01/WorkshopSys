@@ -19,6 +19,12 @@ from styles import (
 )
 
 from dialogs.buscar_notas_dialog import BuscarNotasDialog
+# Importar la nueva ventana de pagos
+try:
+    from gui.pagos_nota_dialog import PagosNotaDialog
+except ImportError as e:
+    print(f"Error al importar PagosNotaDialog: {e}")
+    PagosNotaDialog = None # Marcar como Nulo si falla
 
 class NotasWindow(QDialog):
     def __init__(self, parent=None):
@@ -332,7 +338,13 @@ class NotasWindow(QDialog):
         self.btn_ver_notas.clicked.connect(self.abrir_ventana_notas)
         self.btn_ver_notas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.botones_intermedios_layout.addWidget(self.btn_ver_notas, 1)
-        self.botones_intermedios_layout.addStretch(2)
+        self.btn_pagos_abonos = QPushButton("Pagos y Abonos")
+        self.btn_pagos_abonos.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
+        self.btn_pagos_abonos.setCursor(Qt.PointingHandCursor)
+        self.btn_pagos_abonos.clicked.connect(self.abrir_ventana_pagos) # Conectar señal
+        self.btn_pagos_abonos.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.botones_intermedios_layout.addWidget(self.btn_pagos_abonos, 1)
+        self.botones_intermedios_layout.addStretch(1)         
         botones_intermedios_container = QWidget()
         botones_intermedios_container.setLayout(self.botones_intermedios_layout)
         layout_principal.addWidget(botones_intermedios_container, 6)
@@ -537,13 +549,11 @@ class NotasWindow(QDialog):
             # Preparar datos de la nota
             nota_data = {
                 'cliente_id': cliente_id,
-                'estado': 'Pagada',
-                'metodo_pago': 'Efectivo',
+                'metodo_pago': None,
                 'fecha': self.date_fecha.date().toPyDate(),
                 'observaciones': self.txt_referencia.text()
             }
             
-            # Preparar items (solo filas normales, no notas ni secciones)
             items = []
             for fila in range(self.tabla_model.rowCount()):
                 tipo = self.tipo_por_fila.get(fila, 'normal')
@@ -554,8 +564,7 @@ class NotasWindow(QDialog):
                 descripcion = self.tabla_model.item(fila, 1).text()
                 precio_texto = self.tabla_model.item(fila, 2).text().replace('$', '').replace(',', '')
                 precio_unitario = float(precio_texto)
-                importe_texto = self.tabla_model.item(fila, 4).text().replace('$', '').replace(',', '')
-                importe = float(importe_texto)
+                importe = cantidad * precio_unitario
                 iva_porcentaje = self.iva_por_fila.get(fila, 16.0)
                 
                 item_data = {
@@ -578,8 +587,7 @@ class NotasWindow(QDialog):
                 self.mostrar_exito(f"{mensaje}: {nota['folio']}")
                 self.txt_folio.setText(nota['folio'])
                 self.nota_actual_id = nota['id']
-                self.txt_estado.setText(nota.get('estado', 'Pagada'))
-                
+                self.txt_estado.setText(nota.get('estado', 'Registrado'))
                 if hasattr(self, 'botones') and len(self.botones) > 1:
                     self.botones[1].setText("Guardar")
                 
@@ -601,7 +609,8 @@ class NotasWindow(QDialog):
             self.modo_edicion = False
             self.txt_folio.clear()
             self.txt_folio.setPlaceholderText("NV-Auto")
-            self.txt_estado.clear() # <-- CAMBIO AÑADIDO
+            self.txt_estado.clear()
+            self.txt_estado.setPlaceholderText("Estado") # Placeholder
             
             # 2. Resetear datos del cliente
             self.date_fecha.setDate(QDate.currentDate())
@@ -658,7 +667,7 @@ class NotasWindow(QDialog):
         self.txt_folio.setText(nota['folio'])
         self.date_fecha.setDate(QDate.fromString(nota['fecha'], "dd/MM/yyyy"))
         self.txt_referencia.setText(nota['observaciones'])
-        self.txt_estado.setText(nota.get('estado', '')) # <-- CAMBIO AÑADIDO
+        self.txt_estado.setText(nota.get('estado', 'Registrado'))
         
         # Cargar cliente
         self.txt_cliente.clear()
@@ -680,7 +689,8 @@ class NotasWindow(QDialog):
                 precio_formateado = f"${item['precio_unitario']:.2f}"
                 iva_porcentaje = item['impuesto']
                 iva_texto = f"{iva_porcentaje:.1f} %"
-                importe_formateado = f"${item['importe']:.2f}"
+                importe_calculado = item['cantidad'] * item['precio_unitario']
+                importe_formateado = f"${importe_calculado:.2f}"
 
                 item_cantidad = QStandardItem(cantidad)
                 item_cantidad.setTextAlignment(Qt.AlignCenter)
@@ -731,11 +741,19 @@ class NotasWindow(QDialog):
         )
         
         if respuesta == QMessageBox.Yes:
-            if db_helper.cancelar_nota(self.nota_actual_id):
-                self.mostrar_exito("Nota cancelada")
-                self.nueva_nota()
-            else:
-                self.mostrar_error("No se pudo cancelar (puede estar ya cancelada)")
+            try:
+                if db_helper.cancelar_nota(self.nota_actual_id):
+                    self.mostrar_exito("Nota cancelada")
+                    # Recargar la nota para mostrar el estado "Cancelado"
+                    nota_actualizada = db_helper.get_nota(self.nota_actual_id)
+                    if nota_actualizada:
+                        self.cargar_nota_en_formulario(nota_actualizada)
+                    else:
+                        self.nueva_nota()
+                else:
+                    self.mostrar_error("No se pudo cancelar (puede estar ya cancelada o pagada)")
+            except Exception as e:
+                self.mostrar_error(f"Error al cancelar: {e}")
     
     def calcular_importe(self):
         """Calcular el importe basado en cantidad y precio"""
@@ -1225,6 +1243,9 @@ class NotasWindow(QDialog):
         if not self.nota_actual_id:
             self.mostrar_advertencia("No hay una nota cargada para editar")
             return
+        if self.txt_estado.text() == 'Cancelada':
+            self.mostrar_advertencia("No se puede editar una nota cancelada.")
+            return            
         self.modo_edicion = True
         self.controlar_estado_campos(True)
 
@@ -1263,22 +1284,67 @@ class NotasWindow(QDialog):
                 self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
     
     # ==================== UTILIDADES ====================
+
+    def abrir_ventana_pagos(self):
+        """Abre la nueva ventana de pagos y abonos"""
+        if PagosNotaDialog is None:
+            self.mostrar_error("Error Crítico: No se pudo cargar el módulo de pagos (PagosNotaDialog).")
+            return
+            
+        dialog = PagosNotaDialog(self)
+        
+        # Si hay una nota cargada, se la pasamos al diálogo de pagos
+        if self.nota_actual_id:
+            try:
+                nota_para_pago = db_helper.get_nota(self.nota_actual_id)
+                if nota_para_pago:
+                    dialog.cargar_nota(nota_para_pago)
+            except Exception as e:
+                self.mostrar_error(f"No se pudo cargar la nota para pagos: {e}")
+                
+        dialog.exec_()
+        
+        if self.nota_actual_id:
+            try:
+                # Volver a consultar la nota desde la BD
+                nota_actualizada = db_helper.get_nota(self.nota_actual_id)
+                if nota_actualizada:
+                    # Recargar los datos en el formulario
+                    self.cargar_nota_en_formulario(nota_actualizada)
+                    print(f"Nota {self.nota_actual_id} recargada después de pagos.")
+            except Exception as e:
+                print(f"Error al recargar nota tras pago: {e}")
+                self.mostrar_error(f"No se pudo recargar la nota: {e}")
     
     def validar_datos(self):
         """Valida que los datos necesarios estén completos"""
         cantidad_texto = self.txt_cantidad.text().strip()
-        if not cantidad_texto or float(cantidad_texto) <= 0:
-            self.mostrar_advertencia("Ingrese una cantidad válida.")
-            return False
-        
+        if not cantidad_texto:
+             self.mostrar_advertencia("Ingrese una cantidad.")
+             return False
+        try:
+             if float(cantidad_texto) <= 0:
+                 self.mostrar_advertencia("La cantidad debe ser mayor a 0.")
+                 return False
+        except ValueError:
+             self.mostrar_advertencia("Ingrese una cantidad numérica válida.")
+             return False
+
         if not self.txt_descripcion.text():
             self.mostrar_advertencia("Ingrese una descripción.")
             return False
         
         precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
-        if not precio_texto or float(precio_texto) <= 0:
-            self.mostrar_advertencia("Ingrese un precio válido.")
+        if not precio_texto:
+            self.mostrar_advertencia("Ingrese un precio.")
             return False
+        try:
+            if float(precio_texto) <= 0:
+                 self.mostrar_advertencia("El precio debe ser mayor a 0.")
+                 return False
+        except ValueError:
+             self.mostrar_advertencia("Ingrese un precio numérico válido.")
+             return False
         
         return True
     
