@@ -1,23 +1,18 @@
-# NUEVO ARCHIVO: cerm01/workshopsys/WorkshopSys-c449e3d330974e8d8a9db8730905785824a34fe9/gui/pagos_nota_dialog.py
-
 import sys
 import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
     QGridLayout, QGroupBox, QDoubleSpinBox, QMessageBox, QTableView,
     QHeaderView, QWidget, QDateEdit, QComboBox, QApplication,
-    QMenu, QAction  # Importar QMenu y QAction para el clic derecho
+    QMenu, QAction
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor
 from datetime import datetime
 
-# --- INICIO DE CORRECCIÓN DE IMPORTS ---
-# Ajustar la ruta para importar módulos desde el directorio 'gui' y 'dialogs'
-# Esto asume que 'gui' y 'dialogs' están al mismo nivel dentro del proyecto
 current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir) # Apunta a la carpeta 'WorkshopSys-...'
-sys.path.append(parent_dir) # Añadir la carpeta raíz del proyecto
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 
 try:
     from gui.db_helper import db_helper
@@ -37,8 +32,6 @@ except ImportError as e:
     TABLE_STYLE = "QTableView { background-color: white; }"
     FORM_BUTTON_STYLE = "QPushButton { background-color: #2CD5C4; color: white; padding: 8px; border-radius: 5px; }"
     MESSAGE_BOX_STYLE = "QMessageBox { background-color: white; }"
-# --- FIN DE CORRECCIÓN DE IMPORTS ---
-
 
 class PagosNotaDialog(QDialog):
     """
