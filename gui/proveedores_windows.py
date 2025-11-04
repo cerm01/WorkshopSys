@@ -16,6 +16,11 @@ from styles import (
 )
 
 from db_helper import db_helper
+try:
+    from gui.estado_cuenta_proveedor_dialog import EstadoCuentaProveedorDialog
+except ImportError as e:
+    print(f"Error al importar EstadoCuentaProveedorDialog: {e}")
+    EstadoCuentaProveedorDialog = None
 
 class ProveedoresWindow(QDialog):
     def __init__(self, parent=None):
@@ -411,6 +416,12 @@ class ProveedoresWindow(QDialog):
         scroll.setWidget(self.detalle_widget)
         
         layout.addWidget(scroll)
+        self.btn_estado_cuenta_prov = QPushButton("Ver Estado de Cuenta")
+        self.btn_estado_cuenta_prov.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
+        self.btn_estado_cuenta_prov.setCursor(Qt.PointingHandCursor)
+        self.btn_estado_cuenta_prov.clicked.connect(self.abrir_estado_cuenta_proveedor)
+        
+        layout.addWidget(self.btn_estado_cuenta_prov) # Añadir el botón al final del panel
         panel.setLayout(layout)
         parent_layout.addWidget(panel, 3)  # 30% del espacio
 
@@ -472,6 +483,30 @@ class ProveedoresWindow(QDialog):
 
         parent_layout.addLayout(layout)
 
+    def abrir_estado_cuenta_proveedor(self):
+        """
+        Abre el diálogo de estado de cuenta para el proveedor seleccionado.
+        """
+        if EstadoCuentaProveedorDialog is None:
+            self.mostrar_mensaje("Error", "No se pudo cargar el módulo de Estado de Cuenta de Proveedor.", QMessageBox.Critical)
+            return
+
+        indice = self.tabla_proveedores.currentIndex()
+        if not indice.isValid():
+            self.mostrar_mensaje("Advertencia", "Seleccione un proveedor para ver su estado de cuenta.", QMessageBox.Warning)
+            return
+        
+        fila = indice.row()
+        try:
+            proveedor_id = int(self.tabla_model.item(fila, 0).text())
+            nombre_proveedor = self.tabla_model.item(fila, 1).text()
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"No se pudo obtener la información del proveedor: {e}", QMessageBox.Critical)
+            return
+
+        # Abrir el diálogo de estado de cuenta
+        dialog = EstadoCuentaProveedorDialog(proveedor_id, nombre_proveedor, self)
+        dialog.exec_()
     
     def actualizar_panel_detalle(self):
         """Actualizar panel de detalles cuando se selecciona un proveedor"""
