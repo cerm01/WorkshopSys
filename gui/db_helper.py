@@ -336,10 +336,10 @@ class DatabaseHelper:
             return False
     # ==================== NOTAS DE VENTA ====================
     
-    def get_notas(self) -> List[Dict]:
+    def get_notas(self, estado: Optional[str] = None) -> List[Dict]:
         """Obtener todas las notas de venta"""
         db = self._get_session()
-        notas = crud.get_all_notas(db)
+        notas = crud.get_all_notas(db, estado=estado)
         return [self._nota_to_dict(n) for n in notas]
     
     def get_nota(self, nota_id: int) -> Optional[Dict]:

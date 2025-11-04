@@ -223,7 +223,10 @@ class OrdenesWindow(QDialog):
         botones_layout = QHBoxLayout()
         botones_layout.setSpacing(10)
         
-        textos_botones = ["Nueva", "Guardar", "Cancelar", "Buscar", "Editar", "Limpiar", "Imprimir"]
+        # --- INICIO DE MODIFICACIÓN: Añadir "Generar Nota" ---
+        textos_botones = ["Nueva", "Guardar", "Cancelar", "Buscar", "Editar", "Limpiar", "Imprimir", "Generar Nota"]
+        # --- FIN DE MODIFICACIÓN ---
+        
         self.botones = []
         
         for texto in textos_botones:
@@ -241,6 +244,7 @@ class OrdenesWindow(QDialog):
         self.btn_editar = self.botones[4]
         self.btn_limpiar = self.botones[5]
         self.btn_imprimir = self.botones[6]
+        self.btn_generar_nota = self.botones[7]
         
         parent_layout.addLayout(botones_layout)
 
@@ -282,6 +286,10 @@ class OrdenesWindow(QDialog):
         self.btn_buscar.clicked.connect(self.buscar_orden)
         self.btn_editar.clicked.connect(self.habilitar_edicion)
         self.btn_limpiar.clicked.connect(self.nueva_orden) 
+
+        # --- INICIO DE MODIFICACIÓN: Conectar nuevo botón ---
+        self.btn_generar_nota.clicked.connect(self.generar_nota_desde_orden)
+        # --- FIN DE MODIFICACIÓN ---
 
     # ==================================================
     # LÓGICA DE BASE DE DATOS Y ESTADO
@@ -378,7 +386,10 @@ class OrdenesWindow(QDialog):
             
             if tipo == 'normal':
                 try:
-                    cantidad = int(self.tabla_model.item(fila, 0).text())
+                    # --- FIX: Asegurar que la cantidad sea leída como texto y convertida a int ---
+                    cantidad_str = self.tabla_model.item(fila, 0).text()
+                    cantidad = int(float(cantidad_str)) # Usar float primero por si es "1.0"
+                    
                     if cantidad <= 0:
                         raise ValueError()
                         
@@ -538,6 +549,9 @@ class OrdenesWindow(QDialog):
         self.btn_editar.setEnabled(not habilitar and self.orden_actual_id is not None)
         self.btn_cancelar.setEnabled(not habilitar and self.orden_actual_id is not None)
 
+        # --- INICIO DE MODIFICACIÓN: Controlar nuevo botón ---
+        self.btn_generar_nota.setEnabled(not habilitar and self.orden_actual_id is not None)
+        # --- FIN DE MODIFICACIÓN ---
 
     # ==================================================
     # LÓGICA DE LA TABLA (Notas, Secciones, Items)
@@ -796,6 +810,88 @@ class OrdenesWindow(QDialog):
     # UTILIDADES (Validación y Mensajes)
     # ==================================================
 
+    # --- INICIO DE MODIFICACIÓN: Nueva función ---
+    def generar_nota_desde_orden(self):
+        """
+        Toma la orden actual y genera una Nota de Venta con precios en 0.
+        """
+        if not self.orden_actual_id:
+            self.mostrar_advertencia("No hay una orden cargada para generar una nota.")
+            return
+
+        # Confirmación
+        respuesta = QMessageBox.question(
+            self, "Confirmar", 
+            f"¿Generar una Nota de Venta para la Orden {self.txt_folio.text()}?\n\n"
+            "Los items se agregarán con precio $0.00 y la nota quedará en estado 'Registrado'.\n"
+            "Deberá editar la nota manualmente para agregar los precios.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if respuesta == QMessageBox.No:
+            return
+
+        # 1. Validar Cliente
+        nombre_cliente = self.txt_cliente.text()
+        cliente_id = self.clientes_dict.get(nombre_cliente, None)
+        
+        if not cliente_id:
+            self.mostrar_advertencia("El cliente seleccionado no es válido.")
+            return
+
+        # 2. Preparar Datos de la Nota
+        nota_data = {
+            'cliente_id': cliente_id,
+            'fecha': datetime.now().date(), # Fecha de hoy
+            'observaciones': f"Generada desde Orden: {self.txt_folio.text()}",
+            'metodo_pago': None 
+            # El estado será 'Registrado' por defecto (según crud.py)
+        }
+
+        # 3. Preparar Items
+        items_para_nota = []
+        for fila in range(self.tabla_model.rowCount()):
+            tipo = self.tipo_por_fila.get(fila, 'normal')
+            
+            if tipo == 'normal':
+                try:
+                    cantidad_str = self.tabla_model.item(fila, 0).text()
+                    cantidad = int(float(cantidad_str))
+                    descripcion = self.tabla_model.item(fila, 1).text()
+                    
+                    items_para_nota.append({
+                        'cantidad': cantidad,
+                        'descripcion': descripcion,
+                        'precio_unitario': 0.00, # Precio 0 por defecto
+                        'importe': 0.00,         # Importe 0 por defecto
+                        'impuesto': 16.0         # IVA 16% por defecto
+                    })
+                except Exception as e:
+                    print(f"Omitiendo fila {fila} por error al leer datos: {e}")
+
+        if not items_para_nota:
+            self.mostrar_advertencia("La orden no tiene items válidos para transferir a la nota.")
+            return
+        
+        # 4. Llamar a db_helper para crear la nota
+        try:
+            nueva_nota = db_helper.crear_nota(nota_data, items_para_nota)
+            
+            if nueva_nota and nueva_nota.get('folio'):
+                self.mostrar_exito(
+                    f"Nota generada: {nueva_nota['folio']}\n\n"
+                    f"Por favor, vaya al módulo de Notas, busque este folio y "
+                    f"edite los precios manualmente."
+                )
+            else:
+                self.mostrar_error("No se pudo crear la nota (respuesta nula de la BD).")
+                
+        except Exception as e:
+            self.mostrar_error(f"Error al crear la nota: {e}")
+            import traceback
+            traceback.print_exc()
+    # --- FIN DE MODIFICACIÓN ---
+
     def validar_datos_orden(self):
         """Validar datos generales de la orden"""
         if not self.clientes_dict.get(self.txt_cliente.text(), None):
@@ -809,7 +905,13 @@ class OrdenesWindow(QDialog):
     def validar_item_formulario(self):
         """Validar datos del formulario de item antes de agregar"""
         try:
-            cantidad = int(self.txt_cantidad.text())
+            # --- FIX: Permitir "1" o "1.0" ---
+            cantidad_str = self.txt_cantidad.text().strip()
+            if not cantidad_str:
+                self.mostrar_advertencia("Ingrese una cantidad.")
+                return False
+                
+            cantidad = float(cantidad_str)
             if cantidad <= 0:
                 self.mostrar_advertencia("Ingrese una cantidad válida (mayor a 0).")
                 return False

@@ -19,6 +19,14 @@ from styles import (
 )
 
 from dialogs.buscar_notas_dialog import BuscarNotasDialog
+# --- INICIO DE MODIFICACIÓN 1: Importar nuevo diálogo ---
+try:
+    from dialogs.buscar_ordenes_borrador_dialog import BuscarOrdenesBorradorDialog
+except ImportError as e:
+    print(f"Error al importar BuscarOrdenesBorradorDialog: {e}")
+    BuscarOrdenesBorradorDialog = None
+# --- FIN DE MODIFICACIÓN 1 ---
+
 # Importar la nueva ventana de pagos
 try:
     from gui.pagos_nota_dialog import PagosNotaDialog
@@ -329,25 +337,39 @@ class NotasWindow(QDialog):
         layout_principal = QHBoxLayout()
         layout_principal.setContentsMargins(0, 0, 0, 0)
 
+        # --- INICIO DE MODIFICACIÓN 2: Añadir botón "Ordenes" ---
         self.botones_intermedios_layout = QHBoxLayout()
         self.botones_intermedios_layout.setContentsMargins(0, 10, 0, 0) # Margen superior
         self.botones_intermedios_layout.setSpacing(10)
+
+        # Botón "Ordenes" (Nuevo)
+        self.btn_ver_ordenes = QPushButton("Ordenes")
+        self.btn_ver_ordenes.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
+        self.btn_ver_ordenes.setCursor(Qt.PointingHandCursor)
+        self.btn_ver_ordenes.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.botones_intermedios_layout.addWidget(self.btn_ver_ordenes, 1)
+
+        # Botón "Notas Emitidas"
         self.btn_ver_notas = QPushButton("Notas Emitidas")
         self.btn_ver_notas.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         self.btn_ver_notas.setCursor(Qt.PointingHandCursor)
         self.btn_ver_notas.clicked.connect(self.abrir_ventana_notas)
         self.btn_ver_notas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.botones_intermedios_layout.addWidget(self.btn_ver_notas, 1)
+        
+        # Botón "Pagos y Abonos"
         self.btn_pagos_abonos = QPushButton("Pagos y Abonos")
         self.btn_pagos_abonos.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         self.btn_pagos_abonos.setCursor(Qt.PointingHandCursor)
         self.btn_pagos_abonos.clicked.connect(self.abrir_ventana_pagos) # Conectar señal
         self.btn_pagos_abonos.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.botones_intermedios_layout.addWidget(self.btn_pagos_abonos, 1)
+
         self.botones_intermedios_layout.addStretch(1)         
         botones_intermedios_container = QWidget()
         botones_intermedios_container.setLayout(self.botones_intermedios_layout)
         layout_principal.addWidget(botones_intermedios_container, 6)
+        # --- FIN DE MODIFICACIÓN 2 ---
         
         # Crear un widget contenedor para el frame
         contenedor_frame = QWidget()
@@ -482,6 +504,10 @@ class NotasWindow(QDialog):
         self.botones[4].clicked.connect(self.editar_nota)      # <-- Editar
         self.botones[5].clicked.connect(self.nueva_nota)  # Limpiar
         # self.botones[6] (Imprimir) - Sin acción definida
+
+        # --- INICIO DE MODIFICACIÓN 3: Conectar nuevo botón ---
+        self.btn_ver_ordenes.clicked.connect(self.abrir_ventana_ordenes_borrador)
+        # --- FIN DE MODIFICACIÓN 3 ---
     
     # ==================== FUNCIONES DE BASE DE DATOS ====================
     
@@ -657,6 +683,18 @@ class NotasWindow(QDialog):
         dialog = BuscarNotasDialog(self)
         if dialog.exec_() == QDialog.Accepted and dialog.nota_seleccionada:
             self.cargar_nota_en_formulario(dialog.nota_seleccionada)
+    
+    # --- INICIO DE MODIFICACIÓN 4: Añadir nueva función ---
+    def abrir_ventana_ordenes_borrador(self):
+        """Abre ventana con notas en estado Borrador"""
+        if BuscarOrdenesBorradorDialog is None:
+            self.mostrar_error("Error Crítico: No se pudo cargar el módulo de 'BuscarOrdenesBorradorDialog'.")
+            return
+            
+        dialog = BuscarOrdenesBorradorDialog(self)
+        if dialog.exec_() == QDialog.Accepted and dialog.nota_seleccionada:
+            self.cargar_nota_en_formulario(dialog.nota_seleccionada)
+    # --- FIN DE MODIFICACIÓN 4 ---
     
     def cargar_nota_en_formulario(self, nota):
         """Cargar nota en el formulario"""

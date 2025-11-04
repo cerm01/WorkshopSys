@@ -444,9 +444,12 @@ def cancelar_cotizacion(db: Session, cotizacion_id: int) -> bool:
 
 # ==================== NOTAS DE VENTA ====================
 
-def get_all_notas(db: Session) -> List[NotaVenta]:
+def get_all_notas(db: Session, estado: Optional[str] = None) -> List[NotaVenta]:
     """Obtener todas las notas de venta"""
-    return db.query(NotaVenta).order_by(NotaVenta.fecha.desc()).all()
+    query = db.query(NotaVenta)
+    if estado:
+        query = query.filter(NotaVenta.estado == estado)
+    return query.order_by(NotaVenta.fecha.desc()).all()
 
 
 def get_nota(db: Session, nota_id: int) -> Optional[NotaVenta]:
