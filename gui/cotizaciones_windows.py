@@ -572,7 +572,7 @@ class CotizacionesWindow(QDialog):
                     item['impuesto']
                 )
             else:
-                # Cargar nota, sección o condiciones (formato antiguo)
+                # Cargar nota, sección o condiciones
                 item_especial = QStandardItem(item['descripcion'])
                 self.tabla_model.insertRow(fila)
                 self.tabla_model.setItem(fila, 0, item_especial)
@@ -598,11 +598,14 @@ class CotizacionesWindow(QDialog):
         self.calcular_totales()
         
         # Si la cotización ya fue Aceptada, deshabilitar "Generar Nota"
-        if cotizacion.get('estado') == 'Aceptada':
+        if cotizacion.get('estado') == 'Aceptada' or cotizacion.get('nota_folio'):
             self.botones[7].setEnabled(False)
-            self.botones[7].setToolTip("Esta cotización ya fue convertida a nota.")
+            if cotizacion.get('nota_folio'):
+                self.botones[7].setToolTip(f"Ya se generó la nota: {cotizacion['nota_folio']}")
+            else:
+                self.botones[7].setToolTip("Esta cotización ya fue convertida a nota.")
         else:
-             # Se habilita en controlar_estado_campos(False)
+            self.botones[7].setEnabled(True)
             self.botones[7].setToolTip("Generar Nota de Venta a partir de esta cotización.")
 
 
@@ -701,21 +704,13 @@ class CotizacionesWindow(QDialog):
         # Si estamos deshabilitando campos (ej. al cargar) Y hay una cotización
         if not habilitar and self.cotizacion_actual_id:
             try:
-                # Volver a checar el estado
                 cotizacion = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
-                if cotizacion.get('estado') == 'Aceptada':
-                    self.botones[7].setEnabled(False) # Deshabilitar si ya fue aceptada
-                    self.botones[7].setToolTip("Esta cotización ya fue convertida a nota.")
-                    self.botones[4].setEnabled(False) # Tampoco se puede editar
-                    self.botones[4].setToolTip("No se puede editar una cotización aceptada.")
-                    self.botones[2].setEnabled(False) # Tampoco se puede cancelar
-                    self.botones[2].setToolTip("No se puede cancelar una cotización aceptada.")
-                else:
-                    self.botones[7].setToolTip("Generar Nota de Venta a partir de esta cotización.")
-                    self.botones[4].setToolTip("Editar esta cotización.")
-                    self.botones[2].setToolTip("Cancelar esta cotización.")
-            except Exception as e:
-                print(f"Error al verificar estado de cotización: {e}")
+                if cotizacion.get('estado') == 'Aceptada' or cotizacion.get('nota_folio'):
+                    self.botones[7].setEnabled(False)
+                    if cotizacion.get('nota_folio'):
+                        self.botones[7].setToolTip(f"Ya se generó la nota: {cotizacion['nota_folio']}")
+            except:
+                pass
 
 
     def cargar_clientes_autocompletado(self):
@@ -770,12 +765,21 @@ class CotizacionesWindow(QDialog):
         """
         Toma la cotización actual y genera una Nota de Venta.
         """
-        # 1. Validar que hay una cotización cargada
+        # Validar que hay una cotización cargada
         if not self.cotizacion_actual_id:
             self.mostrar_advertencia("Cargue una cotización guardada antes de generar la nota.")
             return
+        
+        # Validar que no tenga ya una nota generada
+        cotizacion_actual = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
+        if cotizacion_actual.get('nota_folio'):
+            self.mostrar_advertencia(
+                f"Esta cotización ya generó la nota: {cotizacion_actual['nota_folio']}\n"
+                "No se puede generar otra nota."
+            )
+            return  
 
-        # 2. Validar el cliente
+        # Validar el cliente
         nombre_cliente = self.txt_cliente.text()
         cliente_id = self.clientes_dict.get(nombre_cliente)
         
@@ -783,7 +787,7 @@ class CotizacionesWindow(QDialog):
             self.mostrar_advertencia("Cliente no válido. Seleccione un cliente de la lista.")
             return
             
-        # 3. Preparar datos para la Nota de Venta
+        # Preparar datos para la Nota de Venta
         try:
             # Fecha: La del día actual
             fecha_hoy = QDate.currentDate().toPyDate()
@@ -797,7 +801,7 @@ class CotizacionesWindow(QDialog):
                 'metodo_pago': None # Las notas nuevas inician sin método de pago
             }
 
-            # 4. Preparar los items
+            # Preparar los items
             items_para_nota = []
             for fila in range(self.tabla_model.rowCount()):
                 tipo = self.tipo_por_fila.get(fila, 'normal')
@@ -822,37 +826,29 @@ class CotizacionesWindow(QDialog):
                 self.mostrar_advertencia("La cotización no tiene items para transferir a la nota.")
                 return
 
-            # 5. Llamar al db_helper para crear la nota
-            nueva_nota = db_helper.crear_nota(nota_data, items_para_nota)
+            # Llamar al db_helper para crear la nota
+            nueva_nota = db_helper.crear_nota(nota_data, items_para_nota, cotizacion_folio=self.txt_folio.text())
             
             if nueva_nota and nueva_nota.get('folio'):
-                # 6. Marcar la cotización como 'Aceptada'
-                try:
-                    cotizacion_data_update = {
-                        'cliente_id': cliente_id,
-                        'estado': 'Aceptada', # Marcar como aceptada
-                        'vigencia': self.date_vigencia.date().toString("dd/MM/yyyy"),
-                        'observaciones': self.txt_proyecto.text()
-                    }
-                    # Llamamos a actualizar cotización (que requiere los items de nuevo)
-                    db_helper.actualizar_cotizacion(self.cotizacion_actual_id, cotizacion_data_update, items_para_nota)
-                except Exception as e:
-                    self.mostrar_error(f"Error al actualizar estado de la cotización: {e}")
-                    # Continuar, la nota ya se creó
-
-                # 7. Mostrar mensaje de éxito con el nuevo folio de nota
-                self.mostrar_exito(
-                    f"La cotización ya pasó a ser nota.\n"
-                    f"Nuevo Folio de Nota: {nueva_nota['folio']}"
+                # Actualizar cotización con vinculación
+                cotizacion_data_update = {
+                    'cliente_id': cliente_id,
+                    'estado': 'Aceptada',
+                    'vigencia': self.date_vigencia.date().toString("dd/MM/yyyy"),
+                    'observaciones': self.txt_proyecto.text()
+                }
+                
+                db_helper.actualizar_cotizacion(
+                    self.cotizacion_actual_id, 
+                    cotizacion_data_update, 
+                    items_para_nota,
+                    nota_folio=nueva_nota['folio']  # ← Vincular
                 )
                 
-                # 8. Recargar la cotización en la vista para mostrar el estado 'Aceptada'
-                # y deshabilitar botones
-                cotizacion_actualizada = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
-                self.cargar_cotizacion_en_formulario(cotizacion_actualizada)
-
-            else:
-                self.mostrar_error("Ocurrió un error al generar la nota de venta.")
+                self.mostrar_exito(
+                    f"Nota generada: {nueva_nota['folio']}\n"
+                    f"Desde cotización: {self.txt_folio.text()}"
+                )
                 
         except Exception as e:
             self.mostrar_error(f"Error al crear la nota: {e}")

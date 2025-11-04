@@ -220,6 +220,9 @@ class Cotizacion(Base):
     # Relaciones
     items = relationship("CotizacionItem", back_populates="cotizacion", cascade="all, delete-orphan")
 
+    nota_folio = Column(String, nullable=True)  # ← AGREGAR
+
+
     def __repr__(self):
         return f"<Cotizacion(id={self.id}, folio='{self.folio}', total={self.total})>"
 
@@ -279,6 +282,9 @@ class NotaVenta(Base):
     
     # 3. Nueva relación con Pagos
     pagos = relationship("NotaVentaPago", back_populates="nota", cascade="all, delete-orphan")
+
+    cotizacion_folio = Column(String, nullable=True)  # ← AGREGAR
+
 
     def __repr__(self):
         # 4. Actualizado para mostrar el saldo

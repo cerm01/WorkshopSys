@@ -271,12 +271,11 @@ class DatabaseHelper:
         
         return [self._cotizacion_to_dict(c) for c in cotizaciones]
 
-    def actualizar_cotizacion(self, cotizacion_id: int, cotizacion_data: Dict, items: List[Dict]) -> Optional[Dict]:
-        """Actualizar cotización existente"""
+    def actualizar_cotizacion(self, cotizacion_id: int, cotizacion_data: Dict, items: List[Dict], nota_folio: str = None) -> Optional[Dict]:
+        """Actualizar cotización, opcionalmente vincular con nota"""
         try:
             db = self._get_session()
             
-            # Obtener cotización existente
             cotizacion = crud.get_cotizacion(db, cotizacion_id)
             if not cotizacion:
                 print(f"❌ No se encontró la cotización con ID {cotizacion_id}")
@@ -284,20 +283,23 @@ class DatabaseHelper:
             
             print(f"📝 Actualizando cotización {cotizacion.folio}...")
             
-            # Actualizar datos principales (mantener folio)
+            # Actualizar datos principales
             cotizacion.cliente_id = cotizacion_data.get('cliente_id', cotizacion.cliente_id)
             cotizacion.estado = cotizacion_data.get('estado', cotizacion.estado)
             cotizacion.vigencia = cotizacion_data.get('vigencia', cotizacion.vigencia)
             cotizacion.observaciones = cotizacion_data.get('observaciones', cotizacion.observaciones)
             
+            # Vincular con nota si se proporciona
+            if nota_folio:
+                cotizacion.nota_folio = nota_folio
+            
             # Eliminar items anteriores
             from server.models import CotizacionItem
-            
             for item in cotizacion.items:
                 db.delete(item)
             db.flush()
             
-            # Agregar nuevos items y recalcular totales
+            # Agregar nuevos items y recalcular
             subtotal = 0
             impuestos_total = 0
             
@@ -359,10 +361,15 @@ class DatabaseHelper:
         
         return [self._nota_to_dict(n) for n in notas]
     
-    def crear_nota(self, nota_data: Dict, items: List[Dict]) -> Optional[Dict]:
-        """Crear nueva nota de venta"""
+    def crear_nota(self, nota_data: Dict, items: List[Dict], cotizacion_folio: str = None) -> Optional[Dict]:
+        """Crear nueva nota de venta, opcionalmente vinculada a cotización"""
         try:
             db = self._get_session()
+            
+            # Agregar vinculación con cotización si existe
+            if cotizacion_folio:
+                nota_data['cotizacion_folio'] = cotizacion_folio
+            
             nota = crud.create_nota_venta(db, nota_data, items)
             return self._nota_to_dict(nota)
         except Exception as e:
