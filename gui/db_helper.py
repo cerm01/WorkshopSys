@@ -818,6 +818,9 @@ class DatabaseHelper:
             'total': nota.total,
             'total_pagado': nota.total_pagado,
             'saldo': nota.saldo,
+            # --- INICIO DE MODIFICACIÓN ---
+            'cotizacion_folio': nota.cotizacion_folio or None, # <-- AÑADIDO
+            # --- FIN DE MODIFICACIÓN ---
             'items': [{
                 'cantidad': i.cantidad,
                 'descripcion': i.descripcion,

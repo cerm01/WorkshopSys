@@ -32,7 +32,8 @@ class BuscarNotasDialog(QDialog):
         lbl_buscar.setStyleSheet(LABEL_STYLE)
         
         self.cmb_filtro = QComboBox()
-        self.cmb_filtro.addItems(["Folio", "Cliente", "Total"])
+        # --- MODIFICADO: Añadir "Origen" al filtro ---
+        self.cmb_filtro.addItems(["Folio", "Cliente", "Total", "Estado", "Origen"])
         self.cmb_filtro.setStyleSheet(INPUT_STYLE) 
         
         self.txt_buscar = QLineEdit()
@@ -51,12 +52,12 @@ class BuscarNotasDialog(QDialog):
         self.tabla.setSelectionBehavior(QTableView.SelectRows)
         self.tabla.doubleClicked.connect(self.seleccionar_nota)
         
-        # --- Configuración de Ordenamiento ---
         self.tabla.setSortingEnabled(True) 
         
         self.modelo = QStandardItemModel()
         self.modelo.setSortRole(Qt.UserRole)
-        self.modelo.setHorizontalHeaderLabels(["ID", "Folio", "Fecha", "Cliente", "Subtotal", "IVA", "Total", "Estado"])
+        # --- MODIFICADO: Añadir "Origen" a las cabeceras ---
+        self.modelo.setHorizontalHeaderLabels(["ID", "Folio", "Fecha", "Cliente", "Subtotal", "IVA", "Total", "Estado", "Origen"])
         self.tabla.setModel(self.modelo)
         
         header = self.tabla.horizontalHeader()
@@ -96,45 +97,55 @@ class BuscarNotasDialog(QDialog):
                 item_iva = QStandardItem()
                 item_total = QStandardItem()
                 item_estado = QStandardItem()
+                item_origen = QStandardItem() # <-- AÑADIDO
                 
                 # ID (Col 0)
                 item_id.setData(str(nota['id']), Qt.DisplayRole)
-                item_id.setData(nota['id'], Qt.UserRole) # Ordenar como número
+                item_id.setData(nota['id'], Qt.UserRole)
                 
                 # Folio (Col 1)
                 item_folio.setData(nota['folio'], Qt.DisplayRole)
-                item_folio.setData(nota['folio'], Qt.UserRole) # Ordenar como texto
+                item_folio.setData(nota['folio'], Qt.UserRole)
                 
                 # Fecha (Col 2)
                 fecha_obj = QDate.fromString(nota['fecha'], "dd/MM/yyyy")
-                item_fecha.setData(nota['fecha'], Qt.DisplayRole) # Mostrar "dd/MM/yyyy"
-                item_fecha.setData(fecha_obj, Qt.UserRole)    # Ordenar como objeto Fecha
+                item_fecha.setData(nota['fecha'], Qt.DisplayRole)
+                item_fecha.setData(fecha_obj, Qt.UserRole)
                 
                 # Cliente (Col 3)
                 cliente_nombre = nota.get('cliente_nombre', '')
                 item_cliente.setData(cliente_nombre, Qt.DisplayRole)
-                item_cliente.setData(cliente_nombre, Qt.UserRole) # Ordenar como texto
+                item_cliente.setData(cliente_nombre, Qt.UserRole)
                 
                 # Subtotal (Col 4)
                 item_subtotal.setData(f"${nota['subtotal']:.2f}", Qt.DisplayRole)
-                item_subtotal.setData(nota['subtotal'], Qt.UserRole) # Ordenar como número
+                item_subtotal.setData(nota['subtotal'], Qt.UserRole)
                 
                 # IVA (Col 5)
-                item_iva.setData(f"${nota['impuestos']:.2f}", Qt.DisplayRole) # <-- 'impuestos'
-                item_iva.setData(nota['impuestos'], Qt.UserRole) # Ordenar como número
+                item_iva.setData(f"${nota['impuestos']:.2f}", Qt.DisplayRole)
+                item_iva.setData(nota['impuestos'], Qt.UserRole)
                 
                 # Total (Col 6)
                 item_total.setData(f"${nota['total']:.2f}", Qt.DisplayRole)
-                item_total.setData(nota['total'], Qt.UserRole) # Ordenar como número
+                item_total.setData(nota['total'], Qt.UserRole)
                 
                 # Estado (Col 7)
-                item_estado.setData(nota['estado'], Qt.DisplayRole)
-                item_estado.setData(nota['estado'], Qt.UserRole) # Ordenar como texto
+                estado_val = nota['estado']
+                item_estado.setData(estado_val, Qt.DisplayRole)
+                item_estado.setData(estado_val, Qt.UserRole)
+                
+                # --- INICIO DE MODIFICACIÓN ---
+                # Origen (Col 8)
+                origen_val = nota.get('cotizacion_folio') or "-"
+                item_origen.setData(origen_val, Qt.DisplayRole)
+                item_origen.setData(origen_val, Qt.UserRole)
+                # --- FIN DE MODIFICACIÓN ---
 
                 # --- Añadir la fila ---
                 fila = [
                     item_id, item_folio, item_fecha, item_cliente,
-                    item_subtotal, item_iva, item_total, item_estado
+                    item_subtotal, item_iva, item_total, item_estado,
+                    item_origen # <-- AÑADIDO
                 ]
                 
                 # Mantener la alineación
@@ -150,7 +161,8 @@ class BuscarNotasDialog(QDialog):
         texto = self.txt_buscar.text().lower()
         criterio = self.cmb_filtro.currentText()
         
-        columnas = {"Folio": 1, "Cliente": 3, "Total": 6}
+        # --- MODIFICADO: Añadir "Origen" al diccionario de columnas ---
+        columnas = {"Folio": 1, "Cliente": 3, "Total": 6, "Estado": 7, "Origen": 8}
         col = columnas.get(criterio, 1)
         
         for fila in range(self.modelo.rowCount()):
@@ -165,7 +177,6 @@ class BuscarNotasDialog(QDialog):
             return
         
         fila = indices[0].row()
-        # Leemos el ID de la columna 0, usando los datos reales (UserRole)
         nota_id = int(self.modelo.item(fila, 0).data(Qt.UserRole))
         
         try:
