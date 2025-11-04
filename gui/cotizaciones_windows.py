@@ -850,6 +850,13 @@ class CotizacionesWindow(QDialog):
                     f"Desde cotización: {self.txt_folio.text()}"
                 )
                 
+                try:
+                    cotizacion_actualizada = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
+                    if cotizacion_actualizada:
+                        self.cargar_cotizacion_en_formulario(cotizacion_actualizada)
+                except Exception as e:
+                    print(f"Error al recargar cotización tras generar nota: {e}")
+                
         except Exception as e:
             self.mostrar_error(f"Error al crear la nota: {e}")
             import traceback
