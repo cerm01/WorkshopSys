@@ -1,4 +1,5 @@
 import sys
+import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, 
     QPushButton, QSizePolicy, QApplication,
@@ -10,6 +11,13 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QIcon, QColor, QFont
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from dialogs.buscar_cotizaciones_dialog import BuscarCotizacionesDialog
+except ImportError as e:
+    print(f"Error al importar BuscarCotizacionesDialog: {e}")
+    BuscarCotizacionesDialog = None
 
 # Import styles
 from styles import (
@@ -259,6 +267,8 @@ class CotizacionesWindow(QDialog):
         
         self.date_fecha.dateChanged.connect(self.validar_fechas)
         self.date_vigencia.dateChanged.connect(self.validar_fechas)
+
+        self.btn_ver_cotizaciones.clicked.connect(self.abrir_ventana_cotizaciones)
 
         # Conexiones de botones principales
         self.botones[0].clicked.connect(self.nueva_cotizacion)
@@ -1173,7 +1183,25 @@ class CotizacionesWindow(QDialog):
         contenedor_principal = QWidget()
         layout_principal = QHBoxLayout()
         layout_principal.setContentsMargins(0, 0, 0, 0)
-        layout_principal.addStretch(6)
+
+        self.botones_intermedios_layout = QHBoxLayout()
+        self.botones_intermedios_layout.setContentsMargins(0, 10, 0, 0) # Margen superior
+        self.botones_intermedios_layout.setSpacing(10)
+        
+        self.btn_ver_cotizaciones = QPushButton("Ver Cotizaciones") # <-- NUEVO BOTÓN
+        self.btn_ver_cotizaciones.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
+        self.btn_ver_cotizaciones.setCursor(Qt.PointingHandCursor)
+        self.btn_ver_cotizaciones.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.botones_intermedios_layout.addWidget(self.btn_ver_cotizaciones, 1)
+
+        self.botones_intermedios_layout.addStretch(1) # Empuja el botón a la izquierda
+        
+        botones_intermedios_container = QWidget()
+        botones_intermedios_container.setLayout(self.botones_intermedios_layout)
+        
+        layout_principal.addWidget(botones_intermedios_container, 6) # Añadir contenedor (reemplaza addStretch(6))
+
+        #layout_principal.addStretch(6)
         
         contenedor_frame = QWidget()
         contenedor_frame.setMaximumWidth(9999)
@@ -1422,6 +1450,16 @@ class CotizacionesWindow(QDialog):
         self.btn_agregar.clicked.connect(self.agregar_a_tabla)
         
         self.fila_en_edicion = -1
+
+    def abrir_ventana_cotizaciones(self):
+        """Abre ventana con todas las cotizaciones"""
+        if BuscarCotizacionesDialog is None:
+            self.mostrar_error("Error Crítico: No se pudo cargar el módulo de búsqueda (BuscarCotizacionesDialog).")
+            return
+            
+        dialog = BuscarCotizacionesDialog(self)
+        if dialog.exec_() == QDialog.Accepted and dialog.cotizacion_seleccionada:
+            self.cargar_cotizacion_en_formulario(dialog.cotizacion_seleccionada)
     
     def closeEvent(self, event):
         """Evento que se dispara al cerrar la ventana  """

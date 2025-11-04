@@ -783,6 +783,10 @@ class DatabaseHelper:
             'impuestos': cotizacion.impuestos,
             'total': cotizacion.total,
             'observaciones': cotizacion.observaciones or '',
+            # --- INICIO DE MODIFICACIÓN ---
+            'created_at': cotizacion.created_at.strftime("%d/%m/%Y") if cotizacion.created_at else '',
+            'nota_folio': cotizacion.nota_folio or None,
+            # --- FIN DE MODIFICACIÓN ---
             'items': [{
                 'cantidad': i.cantidad,
                 'descripcion': i.descripcion,
