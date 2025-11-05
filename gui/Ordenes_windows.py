@@ -27,6 +27,15 @@ except ImportError:
     print("Error: No se pudo importar 'db_helper'.")
     db_helper = None
 
+# --- INICIO DE MODIFICACIÓN (REQ 3) ---
+# Importar el nuevo diálogo de búsqueda
+try:
+    from dialogs.buscar_ordenes_dialog import BuscarOrdenesDialog
+except ImportError as e:
+    print(f"Error al importar BuscarOrdenesDialog: {e}")
+    BuscarOrdenesDialog = None
+# --- FIN DE MODIFICACIÓN ---
+
 class OrdenesWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -224,7 +233,12 @@ class OrdenesWindow(QDialog):
         botones_layout = QHBoxLayout()
         botones_layout.setSpacing(10)
         
-        textos_botones = ["Nueva", "Guardar", "Cancelar", "Buscar", "Editar", "Limpiar", "Imprimir", "Generar Nota"]
+        # --- INICIO DE MODIFICACIÓN (REQ 1 Y 2) ---
+        textos_botones = [
+            "Nueva", "Guardar", "Cancelar", "Buscar", "Editar", "Limpiar", "Imprimir", 
+            "Mostrar Órdenes", "Generar Nota"
+        ]
+        # --- FIN DE MODIFICACIÓN ---
         
         self.botones = []
         
@@ -236,6 +250,7 @@ class OrdenesWindow(QDialog):
             botones_layout.addWidget(boton)
             self.botones.append(boton)
         
+        # --- INICIO DE MODIFICACIÓN (Índices ajustados) ---
         self.btn_nueva = self.botones[0]
         self.btn_guardar = self.botones[1]
         self.btn_cancelar = self.botones[2]
@@ -243,7 +258,9 @@ class OrdenesWindow(QDialog):
         self.btn_editar = self.botones[4]
         self.btn_limpiar = self.botones[5]
         self.btn_imprimir = self.botones[6]
-        self.btn_generar_nota = self.botones[7]
+        self.btn_mostrar_ordenes = self.botones[7] # Botón nuevo
+        self.btn_generar_nota = self.botones[8] # Índice movido
+        # --- FIN DE MODIFICACIÓN ---
         
         parent_layout.addLayout(botones_layout)
 
@@ -285,11 +302,29 @@ class OrdenesWindow(QDialog):
         self.btn_buscar.clicked.connect(self.buscar_orden)
         self.btn_editar.clicked.connect(self.habilitar_edicion)
         self.btn_limpiar.clicked.connect(self.nueva_orden) 
+        
+        # --- INICIO DE MODIFICACIÓN (REQ 3) ---
+        self.btn_mostrar_ordenes.clicked.connect(self.abrir_ventana_ordenes)
+        # --- FIN DE MODIFICACIÓN ---
+        
         self.btn_generar_nota.clicked.connect(self.generar_nota_desde_orden)
 
     # ==================================================
     # LÓGICA DE BASE DE DATOS Y ESTADO
     # ==================================================
+
+    # --- INICIO DE MODIFICACIÓN (REQ 3) ---
+    def abrir_ventana_ordenes(self):
+        """Abre el diálogo para mostrar todas las órdenes."""
+        if BuscarOrdenesDialog is None:
+            self.mostrar_error("Error Crítico: No se pudo cargar el módulo de 'BuscarOrdenesDialog'.")
+            return
+            
+        dialog = BuscarOrdenesDialog(self)
+        if dialog.exec_() == QDialog.Accepted and dialog.orden_seleccionada:
+            # Si el usuario selecciona una, la cargamos
+            self.cargar_orden_en_formulario(dialog.orden_seleccionada)
+    # --- FIN DE MODIFICACIÓN ---
 
     def nueva_orden(self):
         """Prepara el formulario para una nueva orden."""
@@ -315,9 +350,7 @@ class OrdenesWindow(QDialog):
         self.controlar_estado_campos(True)
         self.btn_agregar.setText("Agregar")
         
-        # --- INICIO DE MODIFICACIÓN (PUNTO 5) ---
         self.btn_guardar.setText("Guardar")
-        # --- FIN DE MODIFICACIÓN ---
 
     def cargar_clientes_autocompletar(self):
         """Carga los clientes desde la BD y configura el QCompleter."""
@@ -428,10 +461,8 @@ class OrdenesWindow(QDialog):
                     self.orden_actual_id = orden['id']
                     self.orden_actual_obj = orden
             
-            # --- INICIO DE MODIFICACIÓN (PUNTO 4) ---
             if orden:
                 self.nueva_orden() # Limpiar todo el formulario
-            # --- FIN DE MODIFICACIÓN ---
             
         except Exception as e:
             self.mostrar_error(f"Error al guardar: {e}")
@@ -512,9 +543,7 @@ class OrdenesWindow(QDialog):
         self.controlar_estado_campos(True)
         self.mostrar_info("Modo edición activado.")
         
-        # --- INICIO DE MODIFICACIÓN (PUNTO 5) ---
         self.btn_guardar.setText("Actualizar")
-        # --- FIN DE MODIFICACIÓN ---
 
     def cancelar_orden(self):
         if not self.orden_actual_id:
@@ -558,6 +587,12 @@ class OrdenesWindow(QDialog):
         
         self.btn_editar.setEnabled(not habilitar and orden_cargada and not nota_generada)
         self.btn_cancelar.setEnabled(not habilitar and orden_cargada and not nota_generada)
+        
+        # --- INICIO DE MODIFICACIÓN ---
+        # El botón de mostrar órdenes siempre está habilitado, como "Buscar"
+        self.btn_mostrar_ordenes.setEnabled(True)
+        # --- FIN DE MODIFICACIÓN ---
+
         self.btn_generar_nota.setEnabled(not habilitar and orden_cargada and not nota_generada)
         
         if nota_generada:
