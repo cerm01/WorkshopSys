@@ -852,7 +852,7 @@ class DatabaseHelper:
             
             # Hash de contraseña
             if 'password' in datos:
-                datos['password_hash'] = self._generar_hash_password(datos['password'])
+                datos['password_hash'] = generar_hash_password(datos['password'])
                 del datos['password']
             
             nuevo_usuario = Usuario(**datos)
@@ -878,7 +878,7 @@ class DatabaseHelper:
             
             # Hash de contraseña si se proporciona
             if 'password' in datos and datos['password']:
-                datos['password_hash'] = self._generar_hash_password(datos['password'])
+                datos['password_hash'] = generar_hash_password(datos['password'])
                 del datos['password']
             elif 'password' in datos:
                 del datos['password']
@@ -896,7 +896,10 @@ class DatabaseHelper:
 
 
     def eliminar_usuario(self, usuario_id: int, soft_delete: bool = True) -> bool:
-        """Eliminar usuario (soft delete por defecto)"""
+        """
+        Eliminar usuario (soft delete por defecto)
+        --- MODIFICADO PARA SOPORTAR HARD DELETE ---
+        """
         try:
             from server.models import Usuario
             
@@ -910,6 +913,7 @@ class DatabaseHelper:
                 usuario.activo = False
                 db.commit()
             else:
+                # --- ESTE ES EL CAMBIO (HARD DELETE) ---
                 db.delete(usuario)
                 db.commit()
             
@@ -930,7 +934,7 @@ class DatabaseHelper:
         if not usuario['activo']:
             return None
         
-        password_hash = self._generar_hash_password(password)
+        password_hash = generar_hash_password(password)
         
         if usuario['password_hash'] == password_hash:
             # Actualizar último acceso

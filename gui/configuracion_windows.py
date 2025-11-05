@@ -1,6 +1,7 @@
 import sys
 import os
-import shutil
+import shutil 
+import re 
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFrame, QTabWidget, QWidget,
@@ -9,8 +10,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import (
-    QStandardItemModel, QStandardItem, QPixmap, 
-    # --- Imports añadidos ---
+    QStandardItemModel, QStandardItem, QPixmap,
     QPainter, QPainterPath, QBrush
 )
 
@@ -32,6 +32,17 @@ class ConfiguracionWindow(QDialog):
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
         
         self.usuario_en_edicion_id = None
+        
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.assets_dir = os.path.join(self.base_dir, "assets")
+        if not os.path.exists(self.assets_dir):
+            try:
+                os.makedirs(self.assets_dir)
+            except Exception as e:
+                print(f"Advertencia: No se pudo crear el directorio 'assets': {e}")
+        
+        self.logo_path = None
+        
         self.setup_ui()
         
     def setup_ui(self):
@@ -203,16 +214,10 @@ class ConfiguracionWindow(QDialog):
         grupo_contacto.setLayout(grid_contacto)
         layout.addWidget(grupo_contacto)
         
-        # --- INICIO DE MODIFICACIÓN DEL LOGO ---
+        # --- Sección de Logo (Sin QGroupBox) ---
         
-        # 1. Ya no creamos un QGroupBox
-        # grupo_logo = QGroupBox()
-        # grupo_logo.setStyleSheet(GROUP_BOX_STYLE)
-        
-        # 2. Creamos el layout del logo directamente
         logo_layout = QHBoxLayout()
-        # Añadimos márgenes para separarlo de otros elementos
-        logo_layout.setContentsMargins(10, 15, 10, 15) 
+        logo_layout.setContentsMargins(10, 15, 10, 15)
         
         self.lbl_logo_preview = QLabel("Sin logo")
         self.lbl_logo_preview.setFixedSize(150, 150) 
@@ -225,8 +230,6 @@ class ConfiguracionWindow(QDialog):
         """)
         self.lbl_logo_preview.setAlignment(Qt.AlignCenter)
         self.lbl_logo_preview.setScaledContents(False) 
-        
-        self.logo_path = None
         
         btn_cargar_logo = QPushButton("Cargar Logo")
         btn_cargar_logo.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
@@ -247,11 +250,9 @@ class ConfiguracionWindow(QDialog):
         logo_layout.addLayout(logo_btns)
         logo_layout.addStretch()
         
-        # 3. Añadimos el logo_layout directamente al layout principal de la pestaña
-        # grupo_logo.setLayout(logo_layout) <-- Eliminado
-        layout.addLayout(logo_layout) # <-- Añadido
+        layout.addLayout(logo_layout)
         
-        # --- FIN DE MODIFICACIÓN DEL LOGO ---
+        # --- Fin Sección de Logo ---
         
         # Botón Guardar
         layout.addStretch()
@@ -263,71 +264,76 @@ class ConfiguracionWindow(QDialog):
         
         tab.setLayout(layout)
         return tab
-
-    # --- INICIO: NUEVA FUNCIÓN HELPER ---
+    
     def _crear_pixmap_circular(self, ruta_pixmap, tamanio=150):
-        """
-        Toma una ruta de imagen y devuelve un QPixmap circular.
-        """
         pixmap_original = QPixmap(ruta_pixmap)
         if pixmap_original.isNull():
-            return QPixmap() # Devuelve pixmap nulo si la imagen no se puede cargar
+            return QPixmap()
 
-        # Escalar la imagen para que rellene el círculo
         pixmap_escalado = pixmap_original.scaled(
-            tamanio, 
-            tamanio, 
-            Qt.KeepAspectRatioByExpanding, # Rellena el espacio
-            Qt.SmoothTransformation
+            tamanio, tamanio, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
         )
 
-        # Crear el pixmap redondo de destino
         pixmap_redondo = QPixmap(tamanio, tamanio)
-        pixmap_redondo.fill(Qt.transparent) # Fondo transparente
+        pixmap_redondo.fill(Qt.transparent)
 
-        # Configurar el QPainter para dibujar
         painter = QPainter(pixmap_redondo)
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
 
-        # Crear el "camino" (path) circular
         path = QPainterPath()
         path.addEllipse(0, 0, tamanio, tamanio)
         
-        # Establecer el "camino" como un clip (máscara)
         painter.setClipPath(path)
 
-        # Dibujar la imagen escalada dentro del clip
-        # (Esto centra la imagen escalada por si no era cuadrada)
         x = (tamanio - pixmap_escalado.width()) / 2
         y = (tamanio - pixmap_escalado.height()) / 2
         painter.drawPixmap(int(x), int(y), pixmap_escalado)
         
-        painter.end() # Finalizar el dibujo
+        painter.end()
         
         return pixmap_redondo
-    # --- FIN: NUEVA FUNCIÓN HELPER ---
 
     def cargar_logo(self):
-        archivo, _ = QFileDialog.getOpenFileName(
+        archivo_origen, _ = QFileDialog.getOpenFileName(
             self, "Seleccionar Logo", "", "Imágenes (*.png *.jpg *.jpeg *.bmp)"
         )
-        if archivo:
-            self.logo_path = archivo
-            
-            # --- MODIFICADO ---
-            # Usar la nueva función para crear el pixmap circular
-            pixmap_circular = self._crear_pixmap_circular(archivo)
-            
-            if not pixmap_circular.isNull():
-                self.lbl_logo_preview.setPixmap(pixmap_circular)
-            else:
-                self.mostrar_mensaje("Error", "No se pudo cargar la imagen seleccionada.", QMessageBox.Critical)
-                self.quitar_logo()
-            # --- FIN MODIFICADO ---
+        if archivo_origen:
+            try:
+                if not os.path.exists(self.assets_dir):
+                    os.makedirs(self.assets_dir)
+                
+                extension = os.path.splitext(archivo_origen)[1]
+                nombre_archivo_destino = f"logo_empresa{extension}"
+                ruta_destino_absoluta = os.path.join(self.assets_dir, nombre_archivo_destino)
+                
+                shutil.copy2(archivo_origen, ruta_destino_absoluta)
+                
+                self.logo_path = os.path.join("..", "assets", nombre_archivo_destino).replace("\\", "/")
+                
+                pixmap_circular = self._crear_pixmap_circular(ruta_destino_absoluta)
+                
+                if not pixmap_circular.isNull():
+                    self.lbl_logo_preview.setPixmap(pixmap_circular)
+                else:
+                    self.mostrar_mensaje("Error", "No se pudo cargar la imagen copiada.", QMessageBox.Critical)
+                    self.quitar_logo()
+            except Exception as e:
+                self.mostrar_mensaje("Error", f"No se pudo guardar el logo: {e}", QMessageBox.Critical)
     
     def quitar_logo(self):
-        self.logo_path = None
+        if self.logo_path:
+            ruta_absoluta = os.path.abspath(os.path.join(
+                os.path.dirname(__file__),
+                self.logo_path
+            ))
+            if os.path.exists(ruta_absoluta):
+                try:
+                    os.remove(ruta_absoluta)
+                except Exception as e:
+                    print(f"No se pudo borrar el logo anterior ({ruta_absoluta}): {e}")
+        
+        self.logo_path = None 
         self.lbl_logo_preview.clear()
         self.lbl_logo_preview.setText("Sin logo")
     
@@ -347,15 +353,22 @@ class ConfiguracionWindow(QDialog):
             self.txt_email_empresa.setText(datos.get('email', ''))
             self.txt_web_empresa.setText(datos.get('sitio_web', ''))
             
-            if datos.get('logo_path') and os.path.exists(datos['logo_path']):
-                self.logo_path = datos['logo_path']
-                
-                # --- MODIFICADO ---
-                # Usar la nueva función para crear el pixmap circular
-                pixmap_circular = self._crear_pixmap_circular(self.logo_path)
-                if not pixmap_circular.isNull():
-                    self.lbl_logo_preview.setPixmap(pixmap_circular)
-                # --- FIN MODIFICADO ---
+            self.logo_path = datos.get('logo_path')
+            
+            if self.logo_path:
+                ruta_absoluta = os.path.abspath(os.path.join(
+                    os.path.dirname(__file__), 
+                    self.logo_path
+                ))
+
+                if os.path.exists(ruta_absoluta):
+                    pixmap_circular = self._crear_pixmap_circular(ruta_absoluta)
+                    if not pixmap_circular.isNull():
+                        self.lbl_logo_preview.setPixmap(pixmap_circular)
+                    else:
+                        self.quitar_logo()
+                else:
+                    self.quitar_logo()
     
     def guardar_empresa(self):
         nombre = self.txt_nombre_comercial.text().strip()
@@ -363,18 +376,58 @@ class ConfiguracionWindow(QDialog):
             self.mostrar_mensaje("Error", "El nombre comercial es obligatorio", QMessageBox.Critical)
             return
         
+        rfc = self.txt_rfc_empresa.text().strip().upper()
+        if rfc: 
+            patron_rfc = r'^[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}$'
+            if not re.match(patron_rfc, rfc):
+                self.mostrar_mensaje("Error", "El formato del RFC es inválido.", QMessageBox.Critical)
+                self.txt_rfc_empresa.setFocus()
+                return
+
+        cp = self.txt_cp_empresa.text().strip()
+        if cp:
+            patron_cp = r'^\d{5}$'
+            if not re.match(patron_cp, cp):
+                self.mostrar_mensaje("Error", "El Código Postal debe contener 5 dígitos.", QMessageBox.Critical)
+                self.txt_cp_empresa.setFocus()
+                return
+
+        tel1 = self.txt_tel1_empresa.text().strip()
+        if tel1:
+            patron_telefono = r'^[\d\s\(\)\-\+]+$'
+            if not re.match(patron_telefono, tel1) or len(re.sub(r'\D', '', tel1)) < 10:
+                self.mostrar_mensaje("Error", "Teléfono 1 inválido (mínimo 10 dígitos).", QMessageBox.Critical)
+                self.txt_tel1_empresa.setFocus()
+                return
+
+        tel2 = self.txt_tel2_empresa.text().strip()
+        if tel2:
+            patron_telefono = r'^[\d\s\(\)\-\+]+$'
+            if not re.match(patron_telefono, tel2) or len(re.sub(r'\D', '', tel2)) < 10:
+                self.mostrar_mensaje("Error", "Teléfono 2 inválido (mínimo 10 dígitos).", QMessageBox.Critical)
+                self.txt_tel2_empresa.setFocus()
+                return
+
+        email = self.txt_email_empresa.text().strip()
+        if email:
+            patron_email = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(patron_email, email):
+                self.mostrar_mensaje("Error", "El formato del Email es inválido.", QMessageBox.Critical)
+                self.txt_email_empresa.setFocus()
+                return
+        
         datos = {
             'nombre_comercial': nombre,
             'razon_social': self.txt_razon_social.text().strip(),
-            'rfc': self.txt_rfc_empresa.text().strip().upper(),
+            'rfc': rfc, 
             'calle': self.txt_calle_empresa.text().strip(),
             'colonia': self.txt_colonia_empresa.text().strip(),
             'ciudad': self.txt_ciudad_empresa.text().strip(),
             'estado': self.txt_estado_empresa.text().strip(),
-            'cp': self.txt_cp_empresa.text().strip(),
-            'telefono1': self.txt_tel1_empresa.text().strip(),
-            'telefono2': self.txt_tel2_empresa.text().strip(),
-            'email': self.txt_email_empresa.text().strip(),
+            'cp': cp, 
+            'telefono1': tel1, 
+            'telefono2': tel2, 
+            'email': email, 
             'sitio_web': self.txt_web_empresa.text().strip(),
             'logo_path': self.logo_path
         }
@@ -540,6 +593,32 @@ class ConfiguracionWindow(QDialog):
             'activo': self.chk_activo.isChecked()
         }
         
+        # --- INICIO DE CAMBIOS (CANDADO ADMIN - EDICIÓN) ---
+        if self.usuario_en_edicion_id:
+            # Es una edición, aplicar candado de admin
+            usuario_original = db_helper.get_usuario_by_id(self.usuario_en_edicion_id)
+            
+            # 1. El usuario ES admin
+            # 2. La intención es DESACTIVARLO (checkbox desmarcado)
+            if (usuario_original and
+                usuario_original['rol'] == 'Admin' and 
+                datos['activo'] is False):
+                
+                # Contar total de admins activos
+                usuarios = db_helper.get_usuarios()
+                conteo_admins_activos = sum(1 for u in usuarios if u['rol'] == 'Admin' and u['activo'])
+                
+                # 3. Si es el último admin activo
+                if conteo_admins_activos <= 1:
+                    self.mostrar_mensaje(
+                        "Acción Denegada",
+                        "No se puede desactivar al último administrador activo.",
+                        QMessageBox.Critical
+                    )
+                    self.chk_activo.setChecked(True) # Revertir el checkbox
+                    return # Detener el guardado
+        # --- FIN DE CAMBIOS (CANDADO ADMIN - EDICIÓN) ---
+        
         if password:
             datos['password'] = password
         
@@ -589,18 +668,42 @@ class ConfiguracionWindow(QDialog):
         usuario_id = int(self.tabla_usuarios_model.item(fila, 0).text())
         username = self.tabla_usuarios_model.item(fila, 1).text()
         
+        # --- INICIO DE CAMBIOS (CANDADO ADMIN - ELIMINACIÓN) ---
+        rol = self.tabla_usuarios_model.item(fila, 4).text()
+        estado_str = self.tabla_usuarios_model.item(fila, 5).text()
+        es_activo = (estado_str == "Activo")
+
+        # 1. Verificar si el usuario a eliminar es un Admin ACTIVO
+        if rol == "Admin" and es_activo:
+            # 2. Contar cuántos admins activos hay EN TOTAL
+            usuarios = db_helper.get_usuarios()
+            conteo_admins_activos = sum(1 for u in usuarios if u['rol'] == 'Admin' and u['activo'])
+            
+            # 3. Si es el último, bloquear
+            if conteo_admins_activos <= 1:
+                self.mostrar_mensaje(
+                    "Acción Denegada",
+                    "No se puede eliminar el último administrador activo del sistema.",
+                    QMessageBox.Critical
+                )
+                return
+        # 4. Los usuarios que no son Admin, o los Admin inactivos, pueden eliminarse (regla 5)
+        # --- FIN DE CAMBIOS (CANDADO ADMIN - ELIMINACIÓN) ---
+
         respuesta = QMessageBox.question(
-            self, "Confirmar", 
-            f"¿Desactivar usuario '{username}'?",
+            self, "Confirmar Eliminación", 
+            f"¿Está seguro de que desea ELIMINAR PERMANENTEMENTE al usuario '{username}'?\n\n"
+            "Esta acción no se puede deshacer.",
             QMessageBox.Yes | QMessageBox.No
         )
         
         if respuesta == QMessageBox.Yes:
-            if db_helper.eliminar_usuario(usuario_id):
-                self.mostrar_mensaje("Éxito", "Usuario desactivado", QMessageBox.Information)
+            # Llamar con soft_delete=False para borrado físico
+            if db_helper.eliminar_usuario(usuario_id, soft_delete=False):
+                self.mostrar_mensaje("Éxito", "Usuario eliminado permanentemente", QMessageBox.Information)
                 self.cargar_usuarios()
             else:
-                self.mostrar_mensaje("Error", "No se pudo desactivar", QMessageBox.Critical)
+                self.mostrar_mensaje("Error", "No se pudo eliminar el usuario", QMessageBox.Critical)
     
     def limpiar_form_usuario(self):
         self.usuario_en_edicion_id = None
@@ -621,7 +724,6 @@ class ConfiguracionWindow(QDialog):
         layout.setContentsMargins(70, 70, 70, 70)
         layout.setSpacing(80)
         
-        # Título
         lbl_titulo = QLabel("Sistema de Respaldo de Base de Datos")
         lbl_titulo.setStyleSheet("font-size: 44px; font-weight: bold; color: #333;")
         lbl_titulo.setAlignment(Qt.AlignCenter)
@@ -638,7 +740,6 @@ class ConfiguracionWindow(QDialog):
         
         layout.addStretch()
         
-        # Botones
         btn_crear_respaldo = QPushButton("Crear Respaldo Ahora")
         btn_crear_respaldo.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         btn_crear_respaldo.setFixedHeight(60)
@@ -659,6 +760,8 @@ class ConfiguracionWindow(QDialog):
     def crear_respaldo(self):
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            archivo_origen = os.path.join(self.base_dir, "taller.db")
+            
             archivo_destino, _ = QFileDialog.getSaveFileName(
                 self,
                 "Guardar Respaldo",
@@ -667,7 +770,6 @@ class ConfiguracionWindow(QDialog):
             )
             
             if archivo_destino:
-                archivo_origen = "taller.db"
                 if os.path.exists(archivo_origen):
                     shutil.copy2(archivo_origen, archivo_destino)
                     self.mostrar_mensaje(
@@ -676,7 +778,7 @@ class ConfiguracionWindow(QDialog):
                         QMessageBox.Information
                     )
                 else:
-                    self.mostrar_mensaje("Error", "No se encontró la base de datos", QMessageBox.Critical)
+                    self.mostrar_mensaje("Error", f"No se encontró la base de datos en: {archivo_origen}", QMessageBox.Critical)
         except Exception as e:
             self.mostrar_mensaje("Error", f"Error al crear respaldo: {str(e)}", QMessageBox.Critical)
     
@@ -685,6 +787,7 @@ class ConfiguracionWindow(QDialog):
             self,
             "⚠️ Advertencia",
             "Esta acción reemplazará TODA la base de datos actual.\n"
+            "La aplicación debe reiniciarse después de la restauración.\n"
             "¿Está seguro de continuar?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
@@ -702,15 +805,19 @@ class ConfiguracionWindow(QDialog):
             )
             
             if archivo_origen:
-                archivo_destino = "taller.db"
+                archivo_destino = os.path.join(self.base_dir, "taller.db")
+                db_helper.close()
                 shutil.copy2(archivo_origen, archivo_destino)
+                
                 self.mostrar_mensaje(
                     "Éxito",
-                    "Base de datos restaurada exitosamente.\nReinicie la aplicación.",
+                    "Base de datos restaurada exitosamente.\n"
+                    "Por favor, REINICIE la aplicación ahora.",
                     QMessageBox.Information
                 )
+                self.close()
         except Exception as e:
-            self.mostrar_mensaje("Error", f"Error al restaurar: {str(e)}", QMessageBox.Critical)
+            self.mostrar_mensaje("Error", f"Error al restaurar: {str(e)}.\nEs posible que deba reiniciar la aplicación.", QMessageBox.Critical)
     
     # ==================== UTILIDADES ====================
     
