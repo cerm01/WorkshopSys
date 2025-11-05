@@ -64,9 +64,9 @@ class ConfiguracionWindow(QDialog):
         """)
         
         # Crear pestañas
-        self.tabs.addTab(self.crear_tab_empresa(), "🏢  Datos de Empresa")
-        self.tabs.addTab(self.crear_tab_usuarios(), "👥  Usuarios")
-        self.tabs.addTab(self.crear_tab_respaldo(), "💾  Respaldo")
+        self.tabs.addTab(self.crear_tab_empresa(), "DATOS DE LA EMPRESA")
+        self.tabs.addTab(self.crear_tab_usuarios(), "USUARIOS")
+        self.tabs.addTab(self.crear_tab_respaldo(), "RESPALDO")
         
         main_layout.addWidget(self.tabs)
         self.setLayout(main_layout)
@@ -84,7 +84,7 @@ class ConfiguracionWindow(QDialog):
         layout.setSpacing(15)
         
         # Grupo: Datos Generales
-        grupo_general = QGroupBox("Datos Generales")
+        grupo_general = QGroupBox()
         grupo_general.setStyleSheet(GROUP_BOX_STYLE)
         grid_general = QGridLayout()
         grid_general.setSpacing(10)
@@ -116,7 +116,7 @@ class ConfiguracionWindow(QDialog):
         layout.addWidget(grupo_general)
         
         # Grupo: Dirección
-        grupo_direccion = QGroupBox("Dirección")
+        grupo_direccion = QGroupBox()
         grupo_direccion.setStyleSheet(GROUP_BOX_STYLE)
         grid_dir = QGridLayout()
         grid_dir.setSpacing(10)
@@ -162,7 +162,7 @@ class ConfiguracionWindow(QDialog):
         layout.addWidget(grupo_direccion)
         
         # Grupo: Contacto
-        grupo_contacto = QGroupBox("Contacto")
+        grupo_contacto = QGroupBox()
         grupo_contacto.setStyleSheet(GROUP_BOX_STYLE)
         grid_contacto = QGridLayout()
         grid_contacto.setSpacing(10)
@@ -200,7 +200,7 @@ class ConfiguracionWindow(QDialog):
         layout.addWidget(grupo_contacto)
         
         # Grupo: Logo
-        grupo_logo = QGroupBox("Logo de la Empresa")
+        grupo_logo = QGroupBox()
         grupo_logo.setStyleSheet(GROUP_BOX_STYLE)
         logo_layout = QHBoxLayout()
         
@@ -215,12 +215,12 @@ class ConfiguracionWindow(QDialog):
         btn_cargar_logo = QPushButton("Cargar Logo")
         btn_cargar_logo.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         btn_cargar_logo.clicked.connect(self.cargar_logo)
-        btn_cargar_logo.setFixedHeight(40)
+        btn_cargar_logo.setFixedHeight(60)
         
         btn_quitar_logo = QPushButton("Quitar Logo")
         btn_quitar_logo.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         btn_quitar_logo.clicked.connect(self.quitar_logo)
-        btn_quitar_logo.setFixedHeight(40)
+        btn_quitar_logo.setFixedHeight(60)
         
         logo_btns = QVBoxLayout()
         logo_btns.addWidget(btn_cargar_logo)
@@ -236,9 +236,9 @@ class ConfiguracionWindow(QDialog):
         
         # Botón Guardar
         layout.addStretch()
-        btn_guardar_empresa = QPushButton("💾 Guardar Configuración")
+        btn_guardar_empresa = QPushButton("Guardar Configuración")
         btn_guardar_empresa.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
-        btn_guardar_empresa.setFixedHeight(50)
+        btn_guardar_empresa.setFixedHeight(60)
         btn_guardar_empresa.clicked.connect(self.guardar_empresa)
         layout.addWidget(btn_guardar_empresa)
         
@@ -315,7 +315,7 @@ class ConfiguracionWindow(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         
         # Formulario
-        grupo_form = QGroupBox("Datos del Usuario")
+        grupo_form = QGroupBox()
         grupo_form.setStyleSheet(GROUP_BOX_STYLE)
         grid = QGridLayout()
         grid.setSpacing(10)
@@ -353,7 +353,7 @@ class ConfiguracionWindow(QDialog):
         
         self.chk_activo = QCheckBox("Usuario Activo")
         self.chk_activo.setChecked(True)
-        self.chk_activo.setStyleSheet("color: #333; font-size: 13px;")
+        self.chk_activo.setStyleSheet("color: #ffffff; font-size: 16px;")
         
         grid.addWidget(lbl_username, 0, 0)
         grid.addWidget(self.txt_username, 0, 1)
@@ -539,22 +539,24 @@ class ConfiguracionWindow(QDialog):
     
     def crear_tab_respaldo(self):
         tab = QWidget()
+        # Fondo blanco con transparencia y bordes redondeados ---
+        tab.setStyleSheet("background-color: rgba(255, 255, 255, 0.6); border-radius: 15px;")
+        
         layout = QVBoxLayout()
-        layout.setContentsMargins(50, 50, 50, 50)
-        layout.setSpacing(20)
+        layout.setContentsMargins(70, 70, 70, 70)
+        layout.setSpacing(80)
         
         # Título
-        lbl_titulo = QLabel("💾 Sistema de Respaldo de Base de Datos")
-        lbl_titulo.setStyleSheet("font-size: 18px; font-weight: bold; color: #333;")
+        lbl_titulo = QLabel("Sistema de Respaldo de Base de Datos")
+        lbl_titulo.setStyleSheet("font-size: 44px; font-weight: bold; color: #333;")
         lbl_titulo.setAlignment(Qt.AlignCenter)
         layout.addWidget(lbl_titulo)
-        
-        # Info
+
         lbl_info = QLabel(
             "Crea respaldos de tu base de datos para proteger tu información.\n"
             "Se recomienda hacer respaldos diarios."
         )
-        lbl_info.setStyleSheet("font-size: 13px; color: #666;")
+        lbl_info.setStyleSheet("font-size: 32px; color: #666;")
         lbl_info.setAlignment(Qt.AlignCenter)
         lbl_info.setWordWrap(True)
         layout.addWidget(lbl_info)
@@ -562,13 +564,13 @@ class ConfiguracionWindow(QDialog):
         layout.addStretch()
         
         # Botones
-        btn_crear_respaldo = QPushButton("📦 Crear Respaldo Ahora")
+        btn_crear_respaldo = QPushButton("Crear Respaldo Ahora")
         btn_crear_respaldo.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         btn_crear_respaldo.setFixedHeight(60)
         btn_crear_respaldo.clicked.connect(self.crear_respaldo)
         layout.addWidget(btn_crear_respaldo)
         
-        btn_restaurar = QPushButton("📥 Restaurar desde Respaldo")
+        btn_restaurar = QPushButton("Restaurar desde Respaldo")
         btn_restaurar.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         btn_restaurar.setFixedHeight(60)
         btn_restaurar.clicked.connect(self.restaurar_respaldo)
