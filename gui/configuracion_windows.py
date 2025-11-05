@@ -8,7 +8,11 @@ from PyQt5.QtWidgets import (
     QFileDialog, QComboBox, QCheckBox, QGroupBox, QGridLayout
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QStandardItemModel, QStandardItem, QPixmap
+from PyQt5.QtGui import (
+    QStandardItemModel, QStandardItem, QPixmap, 
+    # --- Imports añadidos ---
+    QPainter, QPainterPath, QBrush
+)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db_helper import db_helper
@@ -199,16 +203,28 @@ class ConfiguracionWindow(QDialog):
         grupo_contacto.setLayout(grid_contacto)
         layout.addWidget(grupo_contacto)
         
-        # Grupo: Logo
-        grupo_logo = QGroupBox()
-        grupo_logo.setStyleSheet(GROUP_BOX_STYLE)
+        # --- INICIO DE MODIFICACIÓN DEL LOGO ---
+        
+        # 1. Ya no creamos un QGroupBox
+        # grupo_logo = QGroupBox()
+        # grupo_logo.setStyleSheet(GROUP_BOX_STYLE)
+        
+        # 2. Creamos el layout del logo directamente
         logo_layout = QHBoxLayout()
+        # Añadimos márgenes para separarlo de otros elementos
+        logo_layout.setContentsMargins(10, 15, 10, 15) 
         
         self.lbl_logo_preview = QLabel("Sin logo")
-        self.lbl_logo_preview.setFixedSize(200, 150)
-        self.lbl_logo_preview.setStyleSheet("border: 2px dashed #ccc; background: white;")
+        self.lbl_logo_preview.setFixedSize(150, 150) 
+        self.lbl_logo_preview.setStyleSheet("""
+            QLabel {
+                background: white;
+                border-radius: 75px; 
+                border: 2px solid #00788E;
+            }
+        """)
         self.lbl_logo_preview.setAlignment(Qt.AlignCenter)
-        self.lbl_logo_preview.setScaledContents(True)
+        self.lbl_logo_preview.setScaledContents(False) 
         
         self.logo_path = None
         
@@ -231,8 +247,11 @@ class ConfiguracionWindow(QDialog):
         logo_layout.addLayout(logo_btns)
         logo_layout.addStretch()
         
-        grupo_logo.setLayout(logo_layout)
-        layout.addWidget(grupo_logo)
+        # 3. Añadimos el logo_layout directamente al layout principal de la pestaña
+        # grupo_logo.setLayout(logo_layout) <-- Eliminado
+        layout.addLayout(logo_layout) # <-- Añadido
+        
+        # --- FIN DE MODIFICACIÓN DEL LOGO ---
         
         # Botón Guardar
         layout.addStretch()
@@ -244,15 +263,68 @@ class ConfiguracionWindow(QDialog):
         
         tab.setLayout(layout)
         return tab
-    
+
+    # --- INICIO: NUEVA FUNCIÓN HELPER ---
+    def _crear_pixmap_circular(self, ruta_pixmap, tamanio=150):
+        """
+        Toma una ruta de imagen y devuelve un QPixmap circular.
+        """
+        pixmap_original = QPixmap(ruta_pixmap)
+        if pixmap_original.isNull():
+            return QPixmap() # Devuelve pixmap nulo si la imagen no se puede cargar
+
+        # Escalar la imagen para que rellene el círculo
+        pixmap_escalado = pixmap_original.scaled(
+            tamanio, 
+            tamanio, 
+            Qt.KeepAspectRatioByExpanding, # Rellena el espacio
+            Qt.SmoothTransformation
+        )
+
+        # Crear el pixmap redondo de destino
+        pixmap_redondo = QPixmap(tamanio, tamanio)
+        pixmap_redondo.fill(Qt.transparent) # Fondo transparente
+
+        # Configurar el QPainter para dibujar
+        painter = QPainter(pixmap_redondo)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+
+        # Crear el "camino" (path) circular
+        path = QPainterPath()
+        path.addEllipse(0, 0, tamanio, tamanio)
+        
+        # Establecer el "camino" como un clip (máscara)
+        painter.setClipPath(path)
+
+        # Dibujar la imagen escalada dentro del clip
+        # (Esto centra la imagen escalada por si no era cuadrada)
+        x = (tamanio - pixmap_escalado.width()) / 2
+        y = (tamanio - pixmap_escalado.height()) / 2
+        painter.drawPixmap(int(x), int(y), pixmap_escalado)
+        
+        painter.end() # Finalizar el dibujo
+        
+        return pixmap_redondo
+    # --- FIN: NUEVA FUNCIÓN HELPER ---
+
     def cargar_logo(self):
         archivo, _ = QFileDialog.getOpenFileName(
             self, "Seleccionar Logo", "", "Imágenes (*.png *.jpg *.jpeg *.bmp)"
         )
         if archivo:
             self.logo_path = archivo
-            pixmap = QPixmap(archivo)
-            self.lbl_logo_preview.setPixmap(pixmap)
+            
+            # --- MODIFICADO ---
+            # Usar la nueva función para crear el pixmap circular
+            pixmap_circular = self._crear_pixmap_circular(archivo)
+            
+            if not pixmap_circular.isNull():
+                self.lbl_logo_preview.setPixmap(pixmap_circular)
+            else:
+                self.mostrar_mensaje("Error", "No se pudo cargar la imagen seleccionada.", QMessageBox.Critical)
+                self.quitar_logo()
+            # --- FIN MODIFICADO ---
     
     def quitar_logo(self):
         self.logo_path = None
@@ -277,8 +349,13 @@ class ConfiguracionWindow(QDialog):
             
             if datos.get('logo_path') and os.path.exists(datos['logo_path']):
                 self.logo_path = datos['logo_path']
-                pixmap = QPixmap(self.logo_path)
-                self.lbl_logo_preview.setPixmap(pixmap)
+                
+                # --- MODIFICADO ---
+                # Usar la nueva función para crear el pixmap circular
+                pixmap_circular = self._crear_pixmap_circular(self.logo_path)
+                if not pixmap_circular.isNull():
+                    self.lbl_logo_preview.setPixmap(pixmap_circular)
+                # --- FIN MODIFICADO ---
     
     def guardar_empresa(self):
         nombre = self.txt_nombre_comercial.text().strip()
