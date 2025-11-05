@@ -1,5 +1,6 @@
 import sys
 import os
+import hashlib
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -8,6 +9,10 @@ from server import crud
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+@staticmethod
+def generar_hash_password(password: str) -> str:
+    """Generar hash SHA256 de contraseña"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 class DatabaseHelper:
     
@@ -450,7 +455,6 @@ class DatabaseHelper:
             nota.total = subtotal + total_impuestos
             nota.saldo = nota.total - nota.total_pagado
             
-            # --- INICIO DE MODIFICACIÓN (PUNTO 1) ---
             # Lógica de actualización de estado
             if nota.saldo <= 0.01 and nota.estado != 'Cancelada':
                 nota.saldo = 0.0
@@ -461,9 +465,6 @@ class DatabaseHelper:
                 # Si el estado original era Borrador, al actualizar pasa a Registrado
                 if estado_original == 'Borrador':
                     nota.estado = 'Registrado'
-                # Si ya era Registrado, se mantiene Registrado
-                # (nota.estado no se modifica si ya era 'Registrado')
-            # --- FIN DE MODIFICACIÓN ---
 
             nota.updated_at = datetime.now()
             
@@ -707,6 +708,252 @@ class DatabaseHelper:
         """Re-usando la función existente de inventario."""
         # Esta función ya existe en db_helper.py
         return self.get_productos_bajo_stock()
+    
+    # ==================== CONFIGURACIÓN EMPRESA ====================
+
+    def get_config_empresa(self) -> Optional[Dict]:
+        """Obtener configuración de la empresa"""
+        try:
+            from server.models import ConfigEmpresa
+            
+            db = self._get_session()
+            config = db.query(ConfigEmpresa).first()
+            
+            if config:
+                return {
+                    'id': config.id,
+                    'nombre_comercial': config.nombre_comercial,
+                    'razon_social': config.razon_social,
+                    'rfc': config.rfc,
+                    'calle': config.calle,
+                    'colonia': config.colonia,
+                    'ciudad': config.ciudad,
+                    'estado': config.estado,
+                    'cp': config.cp,
+                    'telefono1': config.telefono1,
+                    'telefono2': config.telefono2,
+                    'email': config.email,
+                    'sitio_web': config.sitio_web,
+                    'logo_path': config.logo_path
+                }
+            return None
+        except Exception as e:
+            print(f"Error get_config_empresa: {e}")
+            return None
+
+
+    def guardar_config_empresa(self, datos: Dict) -> bool:
+        """Guardar o actualizar configuración de empresa"""
+        try:
+            from server.models import ConfigEmpresa
+            
+            db = self._get_session()
+            config = db.query(ConfigEmpresa).first()
+            
+            if config:
+                # Actualizar
+                for key, value in datos.items():
+                    if hasattr(config, key):
+                        setattr(config, key, value)
+            else:
+                # Crear nueva
+                config = ConfigEmpresa(**datos)
+                db.add(config)
+            
+            db.commit()
+            return True
+        except Exception as e:
+            print(f"Error guardar_config_empresa: {e}")
+            db.rollback()
+            return False
+
+
+    # ==================== USUARIOS ====================
+
+    def get_usuarios(self) -> List[Dict]:
+        """Obtener todos los usuarios"""
+        try:
+            from server.models import Usuario
+            
+            db = self._get_session()
+            usuarios = db.query(Usuario).all()
+            
+            return [{
+                'id': u.id,
+                'username': u.username,
+                'nombre_completo': u.nombre_completo,
+                'email': u.email,
+                'rol': u.rol,
+                'activo': u.activo,
+                'ultimo_acceso': u.ultimo_acceso.strftime('%Y-%m-%d %H:%M') if u.ultimo_acceso else ''
+            } for u in usuarios]
+        except Exception as e:
+            print(f"Error get_usuarios: {e}")
+            return []
+
+
+    def get_usuario_by_id(self, usuario_id: int) -> Optional[Dict]:
+        """Obtener usuario por ID"""
+        try:
+            from server.models import Usuario
+            
+            db = self._get_session()
+            usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+            
+            if usuario:
+                return {
+                    'id': usuario.id,
+                    'username': usuario.username,
+                    'nombre_completo': usuario.nombre_completo,
+                    'email': usuario.email,
+                    'rol': usuario.rol,
+                    'activo': usuario.activo
+                }
+            return None
+        except Exception as e:
+            print(f"Error get_usuario_by_id: {e}")
+            return None
+
+
+    def get_usuario_by_username(self, username: str) -> Optional[Dict]:
+        """Obtener usuario por username (para login)"""
+        try:
+            from server.models import Usuario
+            
+            db = self._get_session()
+            usuario = db.query(Usuario).filter(Usuario.username == username).first()
+            
+            if usuario:
+                return {
+                    'id': usuario.id,
+                    'username': usuario.username,
+                    'password_hash': usuario.password_hash,
+                    'nombre_completo': usuario.nombre_completo,
+                    'rol': usuario.rol,
+                    'activo': usuario.activo
+                }
+            return None
+        except Exception as e:
+            print(f"Error get_usuario_by_username: {e}")
+            return None
+
+
+    def crear_usuario(self, datos: Dict) -> bool:
+        """Crear nuevo usuario"""
+        try:
+            from server.models import Usuario
+            
+            db = self._get_session()
+            
+            # Verificar si ya existe
+            existe = db.query(Usuario).filter(Usuario.username == datos['username']).first()
+            if existe:
+                return False
+            
+            # Hash de contraseña
+            if 'password' in datos:
+                datos['password_hash'] = self._generar_hash_password(datos['password'])
+                del datos['password']
+            
+            nuevo_usuario = Usuario(**datos)
+            db.add(nuevo_usuario)
+            db.commit()
+            return True
+        except Exception as e:
+            print(f"Error crear_usuario: {e}")
+            db.rollback()
+            return False
+
+
+    def actualizar_usuario(self, usuario_id: int, datos: Dict) -> bool:
+        """Actualizar usuario existente"""
+        try:
+            from server.models import Usuario
+            
+            db = self._get_session()
+            usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+            
+            if not usuario:
+                return False
+            
+            # Hash de contraseña si se proporciona
+            if 'password' in datos and datos['password']:
+                datos['password_hash'] = self._generar_hash_password(datos['password'])
+                del datos['password']
+            elif 'password' in datos:
+                del datos['password']
+            
+            for key, value in datos.items():
+                if hasattr(usuario, key):
+                    setattr(usuario, key, value)
+            
+            db.commit()
+            return True
+        except Exception as e:
+            print(f"Error actualizar_usuario: {e}")
+            db.rollback()
+            return False
+
+
+    def eliminar_usuario(self, usuario_id: int, soft_delete: bool = True) -> bool:
+        """Eliminar usuario (soft delete por defecto)"""
+        try:
+            from server.models import Usuario
+            
+            db = self._get_session()
+            usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+            
+            if not usuario:
+                return False
+            
+            if soft_delete:
+                usuario.activo = False
+                db.commit()
+            else:
+                db.delete(usuario)
+                db.commit()
+            
+            return True
+        except Exception as e:
+            print(f"Error eliminar_usuario: {e}")
+            db.rollback()
+            return False
+
+
+    def validar_login(self, username: str, password: str) -> Optional[Dict]:
+        """Validar credenciales de login"""
+        usuario = self.get_usuario_by_username(username)
+        
+        if not usuario:
+            return None
+        
+        if not usuario['activo']:
+            return None
+        
+        password_hash = self._generar_hash_password(password)
+        
+        if usuario['password_hash'] == password_hash:
+            # Actualizar último acceso
+            try:
+                from server.models import Usuario
+                from datetime import datetime
+                
+                db = self._get_session()
+                user = db.query(Usuario).filter(Usuario.id == usuario['id']).first()
+                if user:
+                    user.ultimo_acceso = datetime.now()
+                    db.commit()
+            except:
+                pass
+            
+            return {
+                'id': usuario['id'],
+                'username': usuario['username'],
+                'nombre_completo': usuario['nombre_completo'],
+                'rol': usuario['rol']
+            }
+        
+        return None
     
     # ==================== CONVERSORES (ORM -> Dict) ====================
     

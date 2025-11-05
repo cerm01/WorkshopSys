@@ -436,3 +436,35 @@ class Usuario(Base):
 
     def __repr__(self):
         return f"<Usuario(id={self.id}, username='{self.username}', rol='{self.rol}')>"
+
+class ConfigEmpresa(Base):
+    __tablename__ = "config_empresa"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    nombre_comercial = Column(String(200), nullable=False)
+    razon_social = Column(String(200), nullable=True)
+    rfc = Column(String(13), nullable=True)
+    
+    # Dirección
+    calle = Column(String(200), nullable=True)
+    colonia = Column(String(100), nullable=True)
+    ciudad = Column(String(100), nullable=True)
+    estado = Column(String(100), nullable=True)
+    cp = Column(String(10), nullable=True)
+    pais = Column(String(100), default="México")
+    
+    # Contacto
+    telefono1 = Column(String(20), nullable=True)
+    telefono2 = Column(String(20), nullable=True)
+    email = Column(String(150), nullable=True)
+    sitio_web = Column(String(200), nullable=True)
+    
+    # Logo (ruta al archivo)
+    logo_path = Column(String(500), nullable=True)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def __repr__(self):
+        return f"<ConfigEmpresa(nombre='{self.nombre_comercial}')>"
