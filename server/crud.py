@@ -828,16 +828,41 @@ def create_usuario(db: Session, usuario_data: Dict[str, Any]) -> Usuario:
 
 # ==================== ESTADÍSTICAS Y REPORTES ====================
 
-def get_estadisticas_dashboard(db: Session) -> Dict[str, Any]:
-    """Obtener estadísticas para dashboard"""
-    return {
-        'total_clientes': db.query(Cliente).filter(Cliente.activo == True).count(),
-        'total_proveedores': db.query(Proveedor).filter(Proveedor.activo == True).count(),
-        'total_productos': db.query(Producto).filter(Producto.activo == True).count(),
-        'productos_bajo_stock': db.query(Producto).filter(
-            Producto.stock_actual <= Producto.stock_min
-        ).count(),
-        'ordenes_pendientes': db.query(Orden).filter(Orden.estado == 'Pendiente').count(),
-        'ordenes_en_proceso': db.query(Orden).filter(Orden.estado == 'En Proceso').count(),
-        'cotizaciones_pendientes': db.query(Cotizacion).filter(Cotizacion.estado == 'Pendiente').count(),
-    }
+def get_reporte_ventas_por_periodo(db: Session, fecha_ini: datetime, fecha_fin: datetime) -> List[NotaVenta]:
+    """Obtiene notas de venta (no canceladas) dentro de un rango de fechas."""
+    return db.query(NotaVenta).filter(
+        NotaVenta.fecha.between(fecha_ini, fecha_fin),
+        NotaVenta.estado != 'Cancelada'
+    ).order_by(NotaVenta.fecha.asc()).all()
+
+def get_reporte_servicios_mas_solicitados(db: Session, fecha_ini: datetime, fecha_fin: datetime) -> List[Any]:
+    """Obtiene servicios (items de nota) más vendidos por cantidad en un periodo."""
+    return db.query(
+        NotaVentaItem.descripcion,
+        func.sum(NotaVentaItem.cantidad).label('total_vendido')
+    ).join(NotaVenta, NotaVenta.id == NotaVentaItem.nota_id).filter(
+        NotaVenta.fecha.between(fecha_ini, fecha_fin),
+        NotaVenta.estado != 'Cancelada'
+    ).group_by(NotaVentaItem.descripcion).order_by(
+        func.sum(NotaVentaItem.cantidad).desc()
+    ).limit(100).all()
+
+def get_reporte_clientes_frecuentes(db: Session, fecha_ini: datetime, fecha_fin: datetime) -> List[Any]:
+    """Obtiene clientes con más compras (por monto total) en el periodo."""
+    return db.query(
+        Cliente.nombre,
+        func.count(NotaVenta.id).label('total_notas'),
+        func.sum(NotaVenta.total).label('monto_total')
+    ).join(NotaVenta, Cliente.id == NotaVenta.cliente_id).filter(
+        NotaVenta.fecha.between(fecha_ini, fecha_fin),
+        NotaVenta.estado != 'Cancelada'
+    ).group_by(Cliente.nombre).order_by(
+        func.sum(NotaVenta.total).desc()
+    ).limit(100).all()
+
+def get_reporte_cuentas_por_cobrar(db: Session) -> List[NotaVenta]:
+    """Obtiene todas las notas de venta con saldo pendiente (no canceladas)."""
+    return db.query(NotaVenta).filter(
+        NotaVenta.saldo > 0.01,
+        NotaVenta.estado != 'Cancelada'
+    ).order_by(NotaVenta.fecha.asc()).all()

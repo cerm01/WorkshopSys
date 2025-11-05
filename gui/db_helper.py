@@ -675,10 +675,38 @@ class DatabaseHelper:
 
     # ==================== ESTADÍSTICAS ====================
     
-    def get_estadisticas(self) -> Dict:
-        """Obtener estadísticas del dashboard"""
+    def get_reporte_ventas(self, fecha_ini: datetime, fecha_fin: datetime) -> List[Dict]:
         db = self._get_session()
-        return crud.get_estadisticas_dashboard(db)
+        notas = crud.get_reporte_ventas_por_periodo(db, fecha_ini, fecha_fin)
+        return [self._nota_to_dict(n) for n in notas]
+
+    def get_reporte_servicios(self, fecha_ini: datetime, fecha_fin: datetime) -> List[Dict]:
+        db = self._get_session()
+        resultados = crud.get_reporte_servicios_mas_solicitados(db, fecha_ini, fecha_fin)
+        # Convertir resultados de consulta (tuplas) a dict
+        return [
+            {'descripcion': r.descripcion, 'total_vendido': int(r.total_vendido)}
+            for r in resultados
+        ]
+
+    def get_reporte_clientes(self, fecha_ini: datetime, fecha_fin: datetime) -> List[Dict]:
+        db = self._get_session()
+        resultados = crud.get_reporte_clientes_frecuentes(db, fecha_ini, fecha_fin)
+        # Convertir resultados de consulta (tuplas) a dict
+        return [
+            {'cliente': r.nombre, 'total_notas': int(r.total_notas), 'monto_total': r.monto_total}
+            for r in resultados
+        ]
+
+    def get_reporte_cuentas_por_cobrar(self) -> List[Dict]:
+        db = self._get_session()
+        notas = crud.get_reporte_cuentas_por_cobrar(db)
+        return [self._nota_to_dict(n) for n in notas]
+        
+    def get_reporte_inventario_bajo_stock(self) -> List[Dict]:
+        """Re-usando la función existente de inventario."""
+        # Esta función ya existe en db_helper.py
+        return self.get_productos_bajo_stock()
     
     # ==================== CONVERSORES (ORM -> Dict) ====================
     

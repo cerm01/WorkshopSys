@@ -11,6 +11,16 @@ from styles import (
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
 
+# === INICIO DE CAMBIOS: Importar db_helper ===
+from datetime import datetime
+try:
+    from db_helper import db_helper
+except ImportError:
+    print("Error: No se pudo importar 'db_helper'.")
+    # Fallback o salida
+    sys.exit(1) 
+# === FIN DE CAMBIOS ===
+
 
 class ReportesWindow(QDialog):
     def __init__(self, parent=None):
@@ -27,11 +37,15 @@ class ReportesWindow(QDialog):
         self.setWindowState(Qt.WindowMaximized)
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
 
-        # Datos de ejemplo para reportes
-        self.datos_reportes = []
+        # === INICIO DE CAMBIOS: Eliminar datos de ejemplo ===
+        # self.datos_reportes = [] # ELIMINADO
+        # === FIN DE CAMBIOS ===
         
         self.setup_ui()
-        self.cargar_datos_ejemplo()
+        
+        # === INICIO DE CAMBIOS: Eliminar carga de datos de ejemplo ===
+        # self.cargar_datos_ejemplo() # ELIMINADO
+        # === FIN DE CAMBIOS ===
 
     def setup_ui(self):
         """Configurar la interfaz de usuario"""
@@ -67,6 +81,8 @@ class ReportesWindow(QDialog):
             "Inventario Bajo Stock",
             "Cuentas por Cobrar"
         ])
+        # Conectar el combo para habilitar/deshabilitar fechas
+        self.combo_tipo.currentTextChanged.connect(self.actualizar_estado_fechas)
         layout.addLayout(self.crear_layout_campo("Tipo de Reporte:", self.combo_tipo))
 
         # Fecha Inicial
@@ -81,6 +97,9 @@ class ReportesWindow(QDialog):
 
         grupo.setLayout(layout)
         parent_layout.addWidget(grupo)
+        
+        # Estado inicial de fechas
+        self.actualizar_estado_fechas(self.combo_tipo.currentText())
 
     def crear_campo(self, etiqueta, tipo):
         """Crear un campo según el tipo"""
@@ -116,28 +135,26 @@ class ReportesWindow(QDialog):
         self.tabla_reportes.setAlternatingRowColors(True)
         self.tabla_reportes.setSelectionBehavior(QTableView.SelectRows)
         self.tabla_reportes.setSelectionMode(QTableView.SingleSelection)
+        self.tabla_reportes.setSortingEnabled(True) # Habilitar ordenamiento
 
         # Modelo de la tabla
         self.tabla_model = QStandardItemModel()
-        self.tabla_model.setHorizontalHeaderLabels([
-            "ID", "Fecha", "Cliente", "Concepto", "Monto", "Estado"
-        ])
+        # Headers iniciales (se cambiarán dinámicamente)
+        self.tabla_model.setHorizontalHeaderLabels(["...", "...", "..."])
 
         self.tabla_reportes.setModel(self.tabla_model)
 
         # Configuración de columnas
         header = self.tabla_reportes.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        # Permitir que las columnas se ajusten
+        header.setSectionResizeMode(QHeaderView.Interactive)
 
         self.tabla_reportes.verticalHeader().setVisible(False)
         self.tabla_reportes.setMinimumHeight(300)
 
         parent_layout.addWidget(self.tabla_reportes)
+
+        self.ajustar_columnas_tabla()
 
     def crear_botones_principales(self, parent_layout):
         """Crear botones de acciones"""
@@ -148,8 +165,7 @@ class ReportesWindow(QDialog):
             ("Generar Reporte", self.generar_reporte),
             ("Exportar PDF", self.exportar_pdf),
             ("Exportar Excel", self.exportar_excel),
-            ("Limpiar", self.limpiar_resultados),
-            ("Cerrar", self.close)
+            ("Limpiar", self.limpiar_resultados)
         ]
 
         for texto, funcion in botones:
@@ -163,47 +179,160 @@ class ReportesWindow(QDialog):
 
         parent_layout.addLayout(layout)
 
+    def showEvent(self, event):
+        """
+        Asegura que la ventana se muestre maximizada CADA VEZ que se abre.
+        Esto soluciona el problema de que aparezca pequeña la segunda vez.
+        """
+        self.setWindowState(Qt.WindowMaximized)
+        super().showEvent(event)
+    
+    def actualizar_estado_fechas(self, tipo_reporte):
+        """Habilita o deshabilita los selectores de fecha según el reporte."""
+        if tipo_reporte in ["Inventario Bajo Stock", "Cuentas por Cobrar"]:
+            self.fecha_inicial.setEnabled(False)
+            self.fecha_final.setEnabled(False)
+        else:
+            self.fecha_inicial.setEnabled(True)
+            self.fecha_final.setEnabled(True)
+
     def generar_reporte(self):
         """Generar el reporte según los filtros seleccionados"""
         tipo = self.combo_tipo.currentText()
-        fecha_ini = self.fecha_inicial.date().toString("dd/MM/yyyy")
-        fecha_fin = self.fecha_final.date().toString("dd/MM/yyyy")
+        
+        # Obtener fechas como objetos date de Python
+        fecha_ini = self.fecha_inicial.date().toPyDate()
+        fecha_fin = self.fecha_final.date().toPyDate()
+        
+        # Convertir a datetime (ini al inicio del día, fin al final del día)
+        fecha_ini_dt = datetime(fecha_ini.year, fecha_ini.month, fecha_ini.day, 0, 0, 0)
+        fecha_fin_dt = datetime(fecha_fin.year, fecha_fin.month, fecha_fin.day, 23, 59, 59)
+        self.tabla_model.clear() 
 
-        # Limpiar tabla
-        self.tabla_model.removeRows(0, self.tabla_model.rowCount())
+        try:
+            datos_filtrados = []
+            
+            if tipo == "Ventas por Periodo":
+                headers = ["Folio", "Fecha", "Cliente", "Total", "Saldo", "Estado"]
+                self.tabla_model.setHorizontalHeaderLabels(headers) # Restablecer headers
+                datos_filtrados = db_helper.get_reporte_ventas(fecha_ini_dt, fecha_fin_dt)
+                self.poblar_tabla_ventas(datos_filtrados)
+            
+            elif tipo == "Servicios Más Solicitados":
+                headers = ["Servicio/Producto", "Cantidad Vendida"]
+                self.tabla_model.setHorizontalHeaderLabels(headers) # Restablecer headers
+                datos_filtrados = db_helper.get_reporte_servicios(fecha_ini_dt, fecha_fin_dt)
+                self.poblar_tabla_servicios(datos_filtrados)
+            
+            elif tipo == "Clientes Frecuentes":
+                headers = ["Cliente", "Notas Emitidas", "Monto Total Comprado"]
+                self.tabla_model.setHorizontalHeaderLabels(headers) # Restablecer headers
+                datos_filtrados = db_helper.get_reporte_clientes(fecha_ini_dt, fecha_fin_dt)
+                self.poblar_tabla_clientes(datos_filtrados)
 
-        # Filtrar datos según el tipo de reporte
-        datos_filtrados = [
-            d for d in self.datos_reportes 
-            if self.fecha_inicial.date() <= QDate.fromString(d['fecha'], "dd/MM/yyyy") 
-            <= self.fecha_final.date()
-        ]
+            elif tipo == "Inventario Bajo Stock":
+                headers = ["Código", "Nombre", "Categoría", "Stock Actual", "Stock Mínimo"]
+                self.tabla_model.setHorizontalHeaderLabels(headers) # Restablecer headers
+                # Este reporte no usa fechas
+                datos_filtrados = db_helper.get_reporte_inventario_bajo_stock()
+                self.poblar_tabla_inventario(datos_filtrados)
 
-        # Llenar tabla con datos filtrados
-        for dato in datos_filtrados:
+            elif tipo == "Cuentas por Cobrar":
+                headers = ["Folio", "Fecha", "Cliente", "Total", "Pagado", "Saldo", "Estado"]
+                self.tabla_model.setHorizontalHeaderLabels(headers) # Restablecer headers
+                # Este reporte no usa fechas
+                datos_filtrados = db_helper.get_reporte_cuentas_por_cobrar()
+                self.poblar_tabla_cxc(datos_filtrados)
+
+            self.ajustar_columnas_tabla()
+            
+            self.mostrar_mensaje(
+                "Reporte Generado",
+                f"Se generó el reporte '{tipo}'\n"
+                f"Registros encontrados: {len(datos_filtrados)}",
+                QMessageBox.Information
+            )
+
+        except Exception as e:
+            self.mostrar_mensaje(
+                "Error de Base de Datos",
+                f"No se pudo generar el reporte: {e}",
+                QMessageBox.Critical
+            )
+            import traceback
+            traceback.print_exc()
+            
+    def ajustar_columnas_tabla(self):
+        """Ajusta las columnas para que se repartan el espacio equitativamente."""
+        for i in range(self.tabla_model.columnCount()):
+            self.tabla_reportes.horizontalHeader().setSectionResizeMode(i, QHeaderView.Stretch)
+
+    def poblar_tabla_ventas(self, datos):
+        for dato in datos:
             fila = [
-                QStandardItem(str(dato['id'])),
+                QStandardItem(dato['folio']),
                 QStandardItem(dato['fecha']),
-                QStandardItem(dato['cliente']),
-                QStandardItem(dato['concepto']),
-                QStandardItem(f"${dato['monto']:,.2f}"),
+                QStandardItem(dato['cliente_nombre']),
+                QStandardItem(f"${dato['total']:,.2f}"),
+                QStandardItem(f"${dato['saldo']:,.2f}"),
                 QStandardItem(dato['estado'])
             ]
-
-            fila[0].setTextAlignment(Qt.AlignCenter)
-            fila[1].setTextAlignment(Qt.AlignCenter)
+            # Alineaciones
+            fila[3].setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             fila[4].setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             fila[5].setTextAlignment(Qt.AlignCenter)
-
             self.tabla_model.appendRow(fila)
 
-        self.mostrar_mensaje(
-            "Reporte Generado",
-            f"Se generó el reporte '{tipo}'\n"
-            f"Periodo: {fecha_ini} - {fecha_fin}\n"
-            f"Registros encontrados: {len(datos_filtrados)}",
-            QMessageBox.Information
-        )
+    def poblar_tabla_servicios(self, datos):
+        for dato in datos:
+            fila = [
+                QStandardItem(dato['descripcion']),
+                QStandardItem(str(dato['total_vendido']))
+            ]
+            fila[1].setTextAlignment(Qt.AlignCenter)
+            self.tabla_model.appendRow(fila)
+
+    def poblar_tabla_clientes(self, datos):
+        for dato in datos:
+            fila = [
+                QStandardItem(dato['cliente']),
+                QStandardItem(str(dato['total_notas'])),
+                QStandardItem(f"${dato['monto_total']:,.2f}")
+            ]
+            fila[1].setTextAlignment(Qt.AlignCenter)
+            fila[2].setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.tabla_model.appendRow(fila)
+
+    def poblar_tabla_inventario(self, datos):
+        for dato in datos:
+            fila = [
+                QStandardItem(dato['codigo']),
+                QStandardItem(dato['nombre']),
+                QStandardItem(dato['categoria']),
+                QStandardItem(str(dato['stock_actual'])),
+                QStandardItem(str(dato['stock_min']))
+            ]
+            fila[3].setTextAlignment(Qt.AlignCenter)
+            fila[4].setTextAlignment(Qt.AlignCenter)
+            self.tabla_model.appendRow(fila)
+
+    def poblar_tabla_cxc(self, datos):
+        for dato in datos:
+            fila = [
+                QStandardItem(dato['folio']),
+                QStandardItem(dato['fecha']),
+                QStandardItem(dato['cliente_nombre']),
+                QStandardItem(f"${dato['total']:,.2f}"),
+                QStandardItem(f"${dato['total_pagado']:,.2f}"),
+                QStandardItem(f"${dato['saldo']:,.2f}"),
+                QStandardItem(dato['estado'])
+            ]
+            # Alineaciones
+            fila[3].setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            fila[4].setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            fila[5].setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            fila[6].setTextAlignment(Qt.AlignCenter)
+            self.tabla_model.appendRow(fila)
 
     def exportar_pdf(self):
         """Exportar reporte a PDF"""
@@ -238,38 +367,10 @@ class ReportesWindow(QDialog):
         )
 
     def limpiar_resultados(self):
-        """Limpiar los resultados de la tabla"""
-        self.tabla_model.removeRows(0, self.tabla_model.rowCount())
-
-    def cargar_datos_ejemplo(self):
-        """Cargar datos de ejemplo para los reportes"""
-        self.datos_reportes = [
-            {
-                'id': 1, 'fecha': '15/09/2025', 'cliente': 'Juan Pérez',
-                'concepto': 'Servicio de Mantenimiento', 'monto': 1500.00,
-                'estado': 'Pagado'
-            },
-            {
-                'id': 2, 'fecha': '20/09/2025', 'cliente': 'María López',
-                'concepto': 'Reparación de Motor', 'monto': 3200.00,
-                'estado': 'Pendiente'
-            },
-            {
-                'id': 3, 'fecha': '25/09/2025', 'cliente': 'Carlos Ramírez',
-                'concepto': 'Cambio de Aceite', 'monto': 450.00,
-                'estado': 'Pagado'
-            },
-            {
-                'id': 4, 'fecha': '01/10/2025', 'cliente': 'Ana Martínez',
-                'concepto': 'Revisión General', 'monto': 800.00,
-                'estado': 'Pagado'
-            },
-            {
-                'id': 5, 'fecha': '05/10/2025', 'cliente': 'Luis González',
-                'concepto': 'Cambio de Llantas', 'monto': 2100.00,
-                'estado': 'Pendiente'
-            }
-        ]
+            """Limpiar los resultados de la tabla"""
+            self.tabla_model.clear()
+            self.tabla_model.setHorizontalHeaderLabels(["...", "...", "..."])
+            self.ajustar_columnas_tabla()
 
     def mostrar_mensaje(self, titulo, mensaje, tipo):
         """Mostrar mensaje al usuario"""
