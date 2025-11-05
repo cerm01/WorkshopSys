@@ -85,7 +85,6 @@ class BuscarOrdenesBorradorDialog(QDialog):
         """Carga solo las notas en estado 'Borrador'."""
         self.modelo.setRowCount(0)
         try:
-            # --- MODIFICADO: Filtrar por estado "Borrador" ---
             notas = db_helper.get_notas(estado="Borrador")
             
             for nota in notas:
@@ -133,12 +132,9 @@ class BuscarOrdenesBorradorDialog(QDialog):
                 estado_val = nota['estado']
                 item_estado.setData(estado_val, Qt.DisplayRole)
                 item_estado.setData(estado_val, Qt.UserRole)
-                
-                # Origen (Col 8)
-                origen_val = nota.get('cotizacion_folio') or "-"
+                origen_val = nota.get('orden_folio') or nota.get('cotizacion_folio') or "-"
                 item_origen.setData(origen_val, Qt.DisplayRole)
                 item_origen.setData(origen_val, Qt.UserRole)
-
                 fila = [
                     item_id, item_folio, item_fecha, item_cliente,
                     item_subtotal, item_iva, item_total, item_estado,
@@ -156,7 +152,6 @@ class BuscarOrdenesBorradorDialog(QDialog):
         """Filtra notas según criterio"""
         texto = self.txt_buscar.text().lower()
         criterio = self.cmb_filtro.currentText()
-        
         columnas = {"Folio": 1, "Cliente": 3, "Total": 6, "Estado": 7, "Origen": 8}
         col = columnas.get(criterio, 1)
         
@@ -175,7 +170,6 @@ class BuscarOrdenesBorradorDialog(QDialog):
         nota_id = int(self.modelo.item(fila, 0).data(Qt.UserRole))
         
         try:
-            # --- MODIFICADO: Filtrar por estado "Borrador" ---
             notas = db_helper.get_notas(estado="Borrador") 
             self.nota_seleccionada = next((n for n in notas if n['id'] == nota_id), None)
             self.accept()

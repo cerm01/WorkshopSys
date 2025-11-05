@@ -44,6 +44,7 @@ class OrdenesWindow(QDialog):
 
         # Variables de control de Lógica/BD
         self.orden_actual_id = None
+        self.orden_actual_obj = None
         self.modo_edicion = False
         self.clientes_dict = {}
 
@@ -106,7 +107,7 @@ class OrdenesWindow(QDialog):
         lbl_estado.setStyleSheet(LABEL_STYLE)
         self.cmb_estado = QComboBox()
         self.cmb_estado.setStyleSheet(INPUT_STYLE)
-        self.cmb_estado.addItems(["Pendiente", "En Proceso", "Completada", "Cancelada"])
+        self.cmb_estado.addItems(["Pendiente", "En Proceso", "Completada", "Cancelada", "Facturada"])
         
         layout.addWidget(lbl_folio)
         layout.addWidget(self.txt_folio, 1)
@@ -223,9 +224,7 @@ class OrdenesWindow(QDialog):
         botones_layout = QHBoxLayout()
         botones_layout.setSpacing(10)
         
-        # --- INICIO DE MODIFICACIÓN: Añadir "Generar Nota" ---
         textos_botones = ["Nueva", "Guardar", "Cancelar", "Buscar", "Editar", "Limpiar", "Imprimir", "Generar Nota"]
-        # --- FIN DE MODIFICACIÓN ---
         
         self.botones = []
         
@@ -286,10 +285,7 @@ class OrdenesWindow(QDialog):
         self.btn_buscar.clicked.connect(self.buscar_orden)
         self.btn_editar.clicked.connect(self.habilitar_edicion)
         self.btn_limpiar.clicked.connect(self.nueva_orden) 
-
-        # --- INICIO DE MODIFICACIÓN: Conectar nuevo botón ---
         self.btn_generar_nota.clicked.connect(self.generar_nota_desde_orden)
-        # --- FIN DE MODIFICACIÓN ---
 
     # ==================================================
     # LÓGICA DE BASE DE DATOS Y ESTADO
@@ -298,6 +294,7 @@ class OrdenesWindow(QDialog):
     def nueva_orden(self):
         """Prepara el formulario para una nueva orden."""
         self.orden_actual_id = None
+        self.orden_actual_obj = None
         self.modo_edicion = True
         self.fila_en_edicion = -1
         self.tipo_por_fila.clear()
@@ -317,6 +314,10 @@ class OrdenesWindow(QDialog):
         
         self.controlar_estado_campos(True)
         self.btn_agregar.setText("Agregar")
+        
+        # --- INICIO DE MODIFICACIÓN (PUNTO 5) ---
+        self.btn_guardar.setText("Guardar")
+        # --- FIN DE MODIFICACIÓN ---
 
     def cargar_clientes_autocompletar(self):
         """Carga los clientes desde la BD y configura el QCompleter."""
@@ -386,9 +387,8 @@ class OrdenesWindow(QDialog):
             
             if tipo == 'normal':
                 try:
-                    # --- FIX: Asegurar que la cantidad sea leída como texto y convertida a int ---
                     cantidad_str = self.tabla_model.item(fila, 0).text()
-                    cantidad = int(float(cantidad_str)) # Usar float primero por si es "1.0"
+                    cantidad = int(float(cantidad_str))
                     
                     if cantidad <= 0:
                         raise ValueError()
@@ -420,16 +420,18 @@ class OrdenesWindow(QDialog):
                 orden = db_helper.actualizar_orden(self.orden_actual_id, orden_data, items_a_guardar)
                 if orden:
                     self.mostrar_exito("Orden actualizada")
-                    self.txt_folio.setText(orden['folio'])
+                    self.orden_actual_obj = orden
             else:
                 orden = db_helper.crear_orden(orden_data, items_a_guardar)
                 if orden:
                     self.mostrar_exito("Orden guardada")
-                    self.txt_folio.setText(orden['folio'])
                     self.orden_actual_id = orden['id']
+                    self.orden_actual_obj = orden
             
-            self.modo_edicion = False
-            self.controlar_estado_campos(False)
+            # --- INICIO DE MODIFICACIÓN (PUNTO 4) ---
+            if orden:
+                self.nueva_orden() # Limpiar todo el formulario
+            # --- FIN DE MODIFICACIÓN ---
             
         except Exception as e:
             self.mostrar_error(f"Error al guardar: {e}")
@@ -441,7 +443,6 @@ class OrdenesWindow(QDialog):
         folio, ok = QInputDialog.getText(self, "Buscar Orden", "Ingrese el folio (ej: ORD-2025-0001):")
         if ok and folio:
             try:
-                # Búsqueda parcial
                 ordenes = db_helper.buscar_ordenes(folio=folio.strip())
                 
                 if ordenes:
@@ -455,6 +456,7 @@ class OrdenesWindow(QDialog):
 
     def cargar_orden_en_formulario(self, orden):
         self.orden_actual_id = orden['id']
+        self.orden_actual_obj = orden
         self.modo_edicion = False
         self.tipo_por_fila.clear()
         
@@ -465,27 +467,25 @@ class OrdenesWindow(QDialog):
         self.txt_placa.setText(orden['vehiculo_placas'])
         self.cmb_estado.setCurrentText(orden['estado'])
         
-        # Cargar fecha
         try:
             fecha_dt = orden['fecha_recepcion']
             if isinstance(fecha_dt, str):
-                fecha_dt = datetime.strptime(fecha_dt, '%Y-%m-%d %H:%M:%S')
+                fecha_dt = datetime.fromisoformat(fecha_dt)
             
             if fecha_dt:
                 self.date_fecha.setDate(QDate(fecha_dt.year, fecha_dt.month, fecha_dt.day))
             else:
                 self.date_fecha.setDate(QDate.currentDate())
-        except:
+        except Exception as e:
+            print(f"Error al parsear fecha: {e}. Usando fecha actual.")
             self.date_fecha.setDate(QDate.currentDate())
 
-        # Cargar cliente
         self.txt_cliente.clear()
         for nombre, id_cliente in self.clientes_dict.items():
             if id_cliente == orden['cliente_id']:
                 self.txt_cliente.setText(nombre)
                 break
         
-        # Cargar items
         self.tabla_model.removeRows(0, self.tabla_model.rowCount())
         for item in orden['items']:
             cantidad = QStandardItem(str(item['cantidad']))
@@ -504,9 +504,17 @@ class OrdenesWindow(QDialog):
             self.mostrar_advertencia("No hay orden cargada.")
             return
         
+        if self.orden_actual_obj and self.orden_actual_obj.get('nota_folio'):
+            self.mostrar_advertencia(f"Esta orden ya generó la nota {self.orden_actual_obj['nota_folio']} y no puede ser modificada.")
+            return
+        
         self.modo_edicion = True
         self.controlar_estado_campos(True)
         self.mostrar_info("Modo edición activado.")
+        
+        # --- INICIO DE MODIFICACIÓN (PUNTO 5) ---
+        self.btn_guardar.setText("Actualizar")
+        # --- FIN DE MODIFICACIÓN ---
 
     def cancelar_orden(self):
         if not self.orden_actual_id:
@@ -530,7 +538,6 @@ class OrdenesWindow(QDialog):
                 self.mostrar_error(f"Error: {e}")
 
     def controlar_estado_campos(self, habilitar):
-        """Habilita o deshabilita los campos del formulario."""
         self.txt_cliente.setReadOnly(not habilitar)
         self.date_fecha.setEnabled(habilitar)
         self.cmb_estado.setEnabled(habilitar)
@@ -546,12 +553,17 @@ class OrdenesWindow(QDialog):
         self.btn_agregar.setEnabled(habilitar)
         self.btn_guardar.setEnabled(habilitar)
         
-        self.btn_editar.setEnabled(not habilitar and self.orden_actual_id is not None)
-        self.btn_cancelar.setEnabled(not habilitar and self.orden_actual_id is not None)
-
-        # --- INICIO DE MODIFICACIÓN: Controlar nuevo botón ---
-        self.btn_generar_nota.setEnabled(not habilitar and self.orden_actual_id is not None)
-        # --- FIN DE MODIFICACIÓN ---
+        orden_cargada = self.orden_actual_obj is not None
+        nota_generada = orden_cargada and bool(self.orden_actual_obj.get('nota_folio'))
+        
+        self.btn_editar.setEnabled(not habilitar and orden_cargada and not nota_generada)
+        self.btn_cancelar.setEnabled(not habilitar and orden_cargada and not nota_generada)
+        self.btn_generar_nota.setEnabled(not habilitar and orden_cargada and not nota_generada)
+        
+        if nota_generada:
+            self.btn_generar_nota.setToolTip(f"Nota ya generada: {self.orden_actual_obj.get('nota_folio')}")
+        else:
+            self.btn_generar_nota.setToolTip("Generar Nota de Venta a partir de esta orden")
 
     # ==================================================
     # LÓGICA DE LA TABLA (Notas, Secciones, Items)
@@ -810,28 +822,44 @@ class OrdenesWindow(QDialog):
     # UTILIDADES (Validación y Mensajes)
     # ==================================================
 
-    # --- INICIO DE MODIFICACIÓN: Nueva función ---
     def generar_nota_desde_orden(self):
         """
-        Toma la orden actual y genera una Nota de Venta con precios en 0.
+        Toma la orden actual y genera una Nota de Venta con precios en 0
+        y los datos del vehículo en observaciones.
+        Implementa Reglas 1, 2 y 3.
         """
-        if not self.orden_actual_id:
+        if not self.orden_actual_id or not self.orden_actual_obj:
             self.mostrar_advertencia("No hay una orden cargada para generar una nota.")
             return
 
-        # Confirmación
+        if self.cmb_estado.currentText() != "Completada":
+            self.mostrar_advertencia("Solo se puede generar una nota si el estado de la Orden es 'Completada'.")
+            return
+
+        if self.orden_actual_obj.get('nota_folio'):
+            self.mostrar_advertencia(f"Ya se generó una Nota de Venta para esta orden (Folio Nota: {self.orden_actual_obj['nota_folio']}).")
+            return
+        
+        try:
+            notas_existentes = db_helper.buscar_notas(orden_folio=self.txt_folio.text())
+            if notas_existentes:
+                self.mostrar_advertencia(f"Ya se generó una Nota de Venta para esta orden (Folio Nota: {notas_existentes[0]['folio']}).")
+                return
+        except Exception as e:
+            self.mostrar_error(f"Error al verificar notas existentes: {e}")
+            return
+
         respuesta = QMessageBox.question(
-            self, "Confirmar", 
+            self, "Confirmar Generación", 
             f"¿Generar una Nota de Venta para la Orden {self.txt_folio.text()}?\n\n"
-            "Los items se agregarán con precio $0.00 y la nota quedará en estado 'Registrado'.\n"
-            "Deberá editar la nota manualmente para agregar los precios.",
+            "Los items se agregarán con precio $0.00 y la nota quedará en estado 'Borrador'.\n"
+            "La orden cambiará a estado 'Facturada' y ya no se podrá modificar.",
             QMessageBox.Yes | QMessageBox.No
         )
         
         if respuesta == QMessageBox.No:
             return
 
-        # 1. Validar Cliente
         nombre_cliente = self.txt_cliente.text()
         cliente_id = self.clientes_dict.get(nombre_cliente, None)
         
@@ -839,16 +867,26 @@ class OrdenesWindow(QDialog):
             self.mostrar_advertencia("El cliente seleccionado no es válido.")
             return
 
-        # 2. Preparar Datos de la Nota
+        marca = self.txt_marca.text()
+        modelo = self.txt_modelo.text()
+        ano = self.txt_ano.text()
+        placa = self.txt_placa.text()
+        
+        observaciones_list = []
+        if marca: observaciones_list.append(f"Marca: {marca}")
+        if modelo: observaciones_list.append(f"Modelo: {modelo}")
+        if ano: observaciones_list.append(f"Año: {ano}")
+        if placa: observaciones_list.append(f"Placa: {placa}")
+        
+        observaciones_str = ", ".join(observaciones_list)
+        
         nota_data = {
             'cliente_id': cliente_id,
-            'fecha': datetime.now().date(), # Fecha de hoy
-            'observaciones': f"Generada desde Orden: {self.txt_folio.text()}",
+            'fecha': datetime.now().date(),
+            'observaciones': observaciones_str,
             'metodo_pago': None 
-            # El estado será 'Registrado' por defecto (según crud.py)
         }
 
-        # 3. Preparar Items
         items_para_nota = []
         for fila in range(self.tabla_model.rowCount()):
             tipo = self.tipo_por_fila.get(fila, 'normal')
@@ -862,9 +900,9 @@ class OrdenesWindow(QDialog):
                     items_para_nota.append({
                         'cantidad': cantidad,
                         'descripcion': descripcion,
-                        'precio_unitario': 0.00, # Precio 0 por defecto
-                        'importe': 0.00,         # Importe 0 por defecto
-                        'impuesto': 16.0         # IVA 16% por defecto
+                        'precio_unitario': 0.00,
+                        'importe': 0.00,
+                        'impuesto': 16.0
                     })
                 except Exception as e:
                     print(f"Omitiendo fila {fila} por error al leer datos: {e}")
@@ -873,16 +911,35 @@ class OrdenesWindow(QDialog):
             self.mostrar_advertencia("La orden no tiene items válidos para transferir a la nota.")
             return
         
-        # 4. Llamar a db_helper para crear la nota
         try:
-            nueva_nota = db_helper.crear_nota(nota_data, items_para_nota)
+            nueva_nota = db_helper.crear_nota(
+                nota_data, 
+                items_para_nota,
+                cotizacion_folio=None,
+                orden_folio=self.txt_folio.text(),
+                estado='Borrador'
+            )
             
             if nueva_nota and nueva_nota.get('folio'):
-                self.mostrar_exito(
-                    f"Nota generada: {nueva_nota['folio']}\n\n"
-                    f"Por favor, vaya al módulo de Notas, busque este folio y "
-                    f"edite los precios manualmente."
+                
+                datos_orden_update = {
+                    'estado': 'Facturada',
+                    'nota_folio': nueva_nota['folio']
+                }
+                orden_actualizada = db_helper.actualizar_orden_campos_simples(
+                    self.orden_actual_id, 
+                    datos_orden_update
                 )
+                
+                if orden_actualizada:
+                    self.cargar_orden_en_formulario(orden_actualizada)
+                    self.mostrar_exito(
+                        f"Nota generada: {nueva_nota['folio']} (en estado Borrador)\n"
+                        f"Orden {self.txt_folio.text()} actualizada a 'Facturada' y bloqueada."
+                    )
+                else:
+                    self.mostrar_error("Se creó la nota, pero no se pudo actualizar la orden.")
+
             else:
                 self.mostrar_error("No se pudo crear la nota (respuesta nula de la BD).")
                 
@@ -890,7 +947,6 @@ class OrdenesWindow(QDialog):
             self.mostrar_error(f"Error al crear la nota: {e}")
             import traceback
             traceback.print_exc()
-    # --- FIN DE MODIFICACIÓN ---
 
     def validar_datos_orden(self):
         """Validar datos generales de la orden"""
@@ -905,7 +961,6 @@ class OrdenesWindow(QDialog):
     def validar_item_formulario(self):
         """Validar datos del formulario de item antes de agregar"""
         try:
-            # --- FIX: Permitir "1" o "1.0" ---
             cantidad_str = self.txt_cantidad.text().strip()
             if not cantidad_str:
                 self.mostrar_advertencia("Ingrese una cantidad.")

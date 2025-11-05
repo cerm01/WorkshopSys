@@ -32,7 +32,6 @@ class BuscarNotasDialog(QDialog):
         lbl_buscar.setStyleSheet(LABEL_STYLE)
         
         self.cmb_filtro = QComboBox()
-        # --- MODIFICADO: Añadir "Origen" al filtro ---
         self.cmb_filtro.addItems(["Folio", "Cliente", "Total", "Estado", "Origen"])
         self.cmb_filtro.setStyleSheet(INPUT_STYLE) 
         
@@ -56,7 +55,6 @@ class BuscarNotasDialog(QDialog):
         
         self.modelo = QStandardItemModel()
         self.modelo.setSortRole(Qt.UserRole)
-        # --- MODIFICADO: Añadir "Origen" a las cabeceras ---
         self.modelo.setHorizontalHeaderLabels(["ID", "Folio", "Fecha", "Cliente", "Subtotal", "IVA", "Total", "Estado", "Origen"])
         self.tabla.setModel(self.modelo)
         
@@ -97,7 +95,7 @@ class BuscarNotasDialog(QDialog):
                 item_iva = QStandardItem()
                 item_total = QStandardItem()
                 item_estado = QStandardItem()
-                item_origen = QStandardItem() # <-- AÑADIDO
+                item_origen = QStandardItem()
                 
                 # ID (Col 0)
                 item_id.setData(str(nota['id']), Qt.DisplayRole)
@@ -133,19 +131,13 @@ class BuscarNotasDialog(QDialog):
                 estado_val = nota['estado']
                 item_estado.setData(estado_val, Qt.DisplayRole)
                 item_estado.setData(estado_val, Qt.UserRole)
-                
-                # --- INICIO DE MODIFICACIÓN ---
-                # Origen (Col 8)
-                origen_val = nota.get('cotizacion_folio') or "-"
+                origen_val = nota.get('orden_folio') or nota.get('cotizacion_folio') or "-"
                 item_origen.setData(origen_val, Qt.DisplayRole)
                 item_origen.setData(origen_val, Qt.UserRole)
-                # --- FIN DE MODIFICACIÓN ---
-
-                # --- Añadir la fila ---
                 fila = [
                     item_id, item_folio, item_fecha, item_cliente,
                     item_subtotal, item_iva, item_total, item_estado,
-                    item_origen # <-- AÑADIDO
+                    item_origen
                 ]
                 
                 # Mantener la alineación
@@ -161,7 +153,6 @@ class BuscarNotasDialog(QDialog):
         texto = self.txt_buscar.text().lower()
         criterio = self.cmb_filtro.currentText()
         
-        # --- MODIFICADO: Añadir "Origen" al diccionario de columnas ---
         columnas = {"Folio": 1, "Cliente": 3, "Total": 6, "Estado": 7, "Origen": 8}
         col = columnas.get(criterio, 1)
         

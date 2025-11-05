@@ -240,6 +240,17 @@ class DatabaseHelper:
             print(f"Error al cancelar orden: {e}")
             return False
     
+    def actualizar_orden_campos_simples(self, orden_id: int, datos: Dict) -> Optional[Dict]:
+        """Actualiza solo los campos principales de una orden (sin tocar items)"""
+        try:
+            db = self._get_session()
+            # crud.update_orden es seguro, no borra items
+            orden = crud.update_orden(db, orden_id, datos)
+            return self._orden_to_dict(orden) if orden else None
+        except Exception as e:
+            print(f"Error al actualizar campos de orden: {e}")
+            return None
+
     # ==================== COTIZACIONES ====================
     
     def get_cotizaciones(self, estado: Optional[str] = None) -> List[Dict]:
@@ -348,29 +359,32 @@ class DatabaseHelper:
         nota = crud.get_nota(db, nota_id)
         return self._nota_to_dict(nota) if nota else None
     
-    def buscar_notas(self, folio: str = None, cliente_id: int = None) -> List[Dict]:
-        """Buscar notas por folio o cliente"""
+    def buscar_notas(self, folio: str = None, cliente_id: int = None, orden_folio: str = None) -> List[Dict]:
+        """Buscar notas por folio, cliente_id u orden_folio"""
         db = self._get_session()
         notas = crud.get_all_notas(db)
         
-        # Filtrar según criterios
         if folio:
             notas = [n for n in notas if folio.upper() in n.folio.upper()]
         if cliente_id:
             notas = [n for n in notas if n.cliente_id == cliente_id]
+        if orden_folio:
+            notas = [n for n in notas if n.orden_folio == orden_folio]
         
         return [self._nota_to_dict(n) for n in notas]
     
-    def crear_nota(self, nota_data: Dict, items: List[Dict], cotizacion_folio: str = None) -> Optional[Dict]:
-        """Crear nueva nota de venta, opcionalmente vinculada a cotización"""
+    def crear_nota(self, nota_data: Dict, items: List[Dict], cotizacion_folio: str = None, orden_folio: str = None, estado: str = 'Registrado') -> Optional[Dict]:
+        """Crear nueva nota de venta, opcionalmente vinculada a cotización u orden, con estado específico"""
         try:
             db = self._get_session()
             
-            # Agregar vinculación con cotización si existe
             if cotizacion_folio:
                 nota_data['cotizacion_folio'] = cotizacion_folio
             
-            nota = crud.create_nota_venta(db, nota_data, items)
+            if orden_folio:
+                nota_data['orden_folio'] = orden_folio
+            
+            nota = crud.create_nota_venta(db, nota_data, items, estado=estado)
             return self._nota_to_dict(nota)
         except Exception as e:
             print(f"Error al crear nota: {e}")
@@ -382,7 +396,6 @@ class DatabaseHelper:
         try:
             db = self._get_session()
             
-            # 1. Obtener la nota existente
             nota = crud.get_nota(db, nota_id)
             if not nota:
                 print(f"❌ No se encontró la nota con ID {nota_id}")
@@ -390,21 +403,23 @@ class DatabaseHelper:
             
             print(f"📝 Actualizando nota {nota.folio}...")
             
-            # 2. Actualizar datos de la nota (mantener el folio original)
+            # --- INICIO DE MODIFICACIÓN (PUNTO 1) ---
+            # Guardar el estado original antes de cualquier cambio
+            estado_original = nota.estado
+            # --- FIN DE MODIFICACIÓN ---
+
             nota.cliente_id = nota_data.get('cliente_id', nota.cliente_id)
-            nota.estado = nota_data.get('estado', nota.estado)
+            # nota.estado = nota_data.get('estado', nota.estado) # <- No actualizar estado desde aquí
             nota.metodo_pago = nota_data.get('metodo_pago', nota.metodo_pago)
             nota.fecha = nota_data.get('fecha', nota.fecha)
             nota.observaciones = nota_data.get('observaciones', nota.observaciones)
             
-            # 3. Eliminar items anteriores
             from server.models import NotaVentaItem
             
             for item in nota.items:
                 db.delete(item)
-            db.flush()  # Ejecutar eliminación antes de agregar nuevos
+            db.flush()
             
-            # 4. Agregar nuevos items y calcular totales
             subtotal = 0
             total_impuestos = 0
             
@@ -413,11 +428,9 @@ class DatabaseHelper:
                 precio_unitario = item_data['precio_unitario']
                 impuesto_porcentaje = item_data.get('impuesto', 16.0)
                 
-                # Calcular importe
                 importe_sin_iva = cantidad * precio_unitario
                 iva_item = importe_sin_iva * (impuesto_porcentaje / 100)
                 
-                # Crear item
                 nuevo_item = NotaVentaItem(
                     nota_id=nota.id,
                     cantidad=cantidad,
@@ -429,27 +442,31 @@ class DatabaseHelper:
                 
                 db.add(nuevo_item)
                 
-                # Acumular totales
                 subtotal += importe_sin_iva
                 total_impuestos += iva_item
             
-            # 5. Actualizar totales en la nota
             nota.subtotal = subtotal
             nota.impuestos = total_impuestos
             nota.total = subtotal + total_impuestos
             nota.saldo = nota.total - nota.total_pagado
             
+            # --- INICIO DE MODIFICACIÓN (PUNTO 1) ---
+            # Lógica de actualización de estado
             if nota.saldo <= 0.01 and nota.estado != 'Cancelada':
                 nota.saldo = 0.0
                 nota.estado = 'Pagado'
             elif nota.total_pagado > 0 and nota.estado != 'Cancelada':
                 nota.estado = 'Pagado Parcialmente'
             elif nota.total_pagado == 0 and nota.estado != 'Cancelada':
-                nota.estado = 'Registrado'
+                # Si el estado original era Borrador, al actualizar pasa a Registrado
+                if estado_original == 'Borrador':
+                    nota.estado = 'Registrado'
+                # Si ya era Registrado, se mantiene Registrado
+                # (nota.estado no se modifica si ya era 'Registrado')
+            # --- FIN DE MODIFICACIÓN ---
 
             nota.updated_at = datetime.now()
             
-            # 8. Guardar cambios
             db.commit()
             db.refresh(nota)
             
@@ -764,6 +781,8 @@ class DatabaseHelper:
             'vehiculo_placas': orden.vehiculo_placas or '',
             'estado': orden.estado,
             'mecanico_asignado': orden.mecanico_asignado or '',
+            'fecha_recepcion': orden.fecha_recepcion,
+            'nota_folio': orden.nota_folio or None,
             'items': [{'cantidad': i.cantidad, 'descripcion': i.descripcion} for i in orden.items],
             'observaciones': orden.observaciones or ''
         }
@@ -783,10 +802,8 @@ class DatabaseHelper:
             'impuestos': cotizacion.impuestos,
             'total': cotizacion.total,
             'observaciones': cotizacion.observaciones or '',
-            # --- INICIO DE MODIFICACIÓN ---
             'created_at': cotizacion.created_at.strftime("%d/%m/%Y") if cotizacion.created_at else '',
             'nota_folio': cotizacion.nota_folio or None,
-            # --- FIN DE MODIFICACIÓN ---
             'items': [{
                 'cantidad': i.cantidad,
                 'descripcion': i.descripcion,
@@ -808,7 +825,7 @@ class DatabaseHelper:
             'folio': nota.folio,
             'cliente_id': nota.cliente_id,
             'cliente_nombre': nota.cliente.nombre if nota.cliente else 'Sin cliente',
-            'estado': nota.estado or 'Registrado', # Estado por defecto actualizado
+            'estado': nota.estado or 'Registrado',
             
             'metodo_pago': nota.metodo_pago or 'Efectivo',
             'fecha': nota.fecha.strftime("%d/%m/%Y") if nota.fecha else '',
@@ -818,14 +835,13 @@ class DatabaseHelper:
             'total': nota.total,
             'total_pagado': nota.total_pagado,
             'saldo': nota.saldo,
-            # --- INICIO DE MODIFICACIÓN ---
-            'cotizacion_folio': nota.cotizacion_folio or None, # <-- AÑADIDO
-            # --- FIN DE MODIFICACIÓN ---
+            'cotizacion_folio': nota.cotizacion_folio or None,
+            'orden_folio': nota.orden_folio or None,
             'items': [{
                 'cantidad': i.cantidad,
                 'descripcion': i.descripcion,
                 'precio_unitario': i.precio_unitario,
-                'importe': i.importe, # Este es el importe BASE (subtotal del item)
+                'importe': i.importe,
                 'impuesto': i.impuesto
             } for i in nota.items],
             'pagos': [DatabaseHelper._pago_to_dict(p) for p in nota.pagos]

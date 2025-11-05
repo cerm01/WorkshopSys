@@ -167,6 +167,7 @@ class Orden(Base):
     observaciones = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    nota_folio = Column(String, nullable=True)
     
     # Relaciones
     items = relationship("OrdenItem", back_populates="orden", cascade="all, delete-orphan")
@@ -282,8 +283,9 @@ class NotaVenta(Base):
     
     # 3. Nueva relación con Pagos
     pagos = relationship("NotaVentaPago", back_populates="nota", cascade="all, delete-orphan")
+    cotizacion_folio = Column(String, nullable=True)
+    orden_folio = Column(String, nullable=True)
 
-    cotizacion_folio = Column(String, nullable=True)  # ← AGREGAR
 
 
     def __repr__(self):

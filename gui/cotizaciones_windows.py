@@ -280,7 +280,6 @@ class CotizacionesWindow(QDialog):
         # Botón "Limpiar"
         self.botones[5].clicked.connect(self.nueva_cotizacion)
         # self.botones[6] (Imprimir)
-        # --- MODIFICACIÓN 2: Conectar el botón 7 ---
         self.botones[7].clicked.connect(self.generar_nota_desde_cotizacion) # Generar Nota
 
     def validar_fechas(self):
@@ -475,10 +474,9 @@ class CotizacionesWindow(QDialog):
             
             if cotizacion:
                 self.mostrar_exito(f"{mensaje}: {cotizacion['folio']}")
-                self.txt_folio.setText(cotizacion['folio'])
-                self.cotizacion_actual_id = cotizacion['id']
-                self.modo_edicion = False
-                self.controlar_estado_campos(False) # Deshabilita campos
+                # --- INICIO DE MODIFICACIÓN (PUNTOS 1, 2) ---
+                self.nueva_cotizacion()
+                # --- FIN DE MODIFICACIÓN ---
             else:
                 self.mostrar_error("No se pudo guardar")
             
@@ -505,7 +503,10 @@ class CotizacionesWindow(QDialog):
         self.limpiar_formulario_items()
         self.calcular_totales()
         self.controlar_estado_campos(True) # Habilita campos
-        self.modo_edicion = True # Modo edición se activa para una nueva
+        
+        # --- INICIO DE MODIFICACIÓN (PUNTO 3) ---
+        self.botones[1].setText("Guardar")
+        # --- FIN DE MODIFICACIÓN ---
 
     def buscar_cotizacion(self):
         """Buscar cotización  """
@@ -540,18 +541,19 @@ class CotizacionesWindow(QDialog):
         
         if cotizacion.get('created_at'): # Usar 'created_at' para la fecha de la cotización
              try:
-                 # Asumir formato ISO 8601 o similar si viene de BD
-                 fecha_dt = datetime.fromisoformat(cotizacion['created_at'])
+                 fecha_dt = datetime.strptime(cotizacion['created_at'], "%d/%m/%Y")
                  self.date_fecha.setDate(QDate(fecha_dt.year, fecha_dt.month, fecha_dt.day))
              except (ValueError, TypeError):
-                 # Fallback por si el formato es dd/MM/yyyy
                  try:
                      self.date_fecha.setDate(QDate.fromString(cotizacion['created_at'].split(' ')[0], "dd/MM/yyyy"))
                  except:
-                     self.date_fecha.setDate(QDate.currentDate()) # Fallback final
+                     self.date_fecha.setDate(QDate.currentDate())
         
         if cotizacion.get('vigencia'):
-            self.date_vigencia.setDate(QDate.fromString(cotizacion['vigencia'], "dd/MM/yyyy"))
+            try:
+                self.date_vigencia.setDate(QDate.fromString(cotizacion['vigencia'], "dd/MM/yyyy"))
+            except:
+                 self.date_vigencia.setDate(QDate.currentDate().addDays(30))
 
         # Cargar cliente por ID
         for nombre, id_cliente in self.clientes_dict.items():
@@ -566,7 +568,6 @@ class CotizacionesWindow(QDialog):
         # Reconstruir la tabla
         items_ordenados = cotizacion.get('items', [])
         
-        # Detectar si hay items con 'tipo'
         if any('tipo' in item for item in items_ordenados):
             items_ordenados = sorted(items_ordenados, key=lambda x: x.get('orden', 0))
         
@@ -607,7 +608,6 @@ class CotizacionesWindow(QDialog):
 
         self.calcular_totales()
         
-        # Si la cotización ya fue Aceptada, deshabilitar "Generar Nota"
         if cotizacion.get('estado') == 'Aceptada' or cotizacion.get('nota_folio'):
             self.botones[7].setEnabled(False)
             if cotizacion.get('nota_folio'):
@@ -615,7 +615,8 @@ class CotizacionesWindow(QDialog):
             else:
                 self.botones[7].setToolTip("Esta cotización ya fue convertida a nota.")
         else:
-            self.botones[7].setEnabled(True)
+            # Asegurarse de que esté habilitado si no está aceptada
+            self.botones[7].setEnabled(bool(self.cotizacion_actual_id) and not self.modo_edicion)
             self.botones[7].setToolTip("Generar Nota de Venta a partir de esta cotización.")
 
 
@@ -646,10 +647,13 @@ class CotizacionesWindow(QDialog):
             self.mostrar_advertencia("Primero busque y cargue una cotización para editar.")
             return
         
-        # No permitir editar una cotización ya Aceptada
-        cotizacion = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
-        if cotizacion.get('estado') == 'Aceptada':
-            self.mostrar_advertencia("No se puede editar una cotización que ya fue aceptada y convertida a nota.")
+        try:
+            cotizacion_reciente = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
+            if cotizacion_reciente.get('estado') == 'Aceptada' or cotizacion_reciente.get('nota_folio'):
+                self.mostrar_advertencia("No se puede editar una cotización que ya fue aceptada y/o convertida a nota.")
+                return
+        except Exception as e:
+            self.mostrar_error(f"Error al verificar estado de cotización: {e}")
             return
 
         self.modo_edicion = True
@@ -681,13 +685,11 @@ class CotizacionesWindow(QDialog):
                 
     def controlar_estado_campos(self, habilitar):
         """Habilitar/deshabilitar campos"""
-        # Campos de encabezado
         self.txt_cliente.setEnabled(habilitar)
         self.txt_proyecto.setEnabled(habilitar)
         self.date_fecha.setEnabled(habilitar)
         self.date_vigencia.setEnabled(habilitar)
 
-        # Campos de formulario de items
         self.txt_cantidad.setEnabled(habilitar)
         self.txt_descripcion.setEnabled(habilitar)
         self.txt_precio.setEnabled(habilitar)
@@ -699,24 +701,22 @@ class CotizacionesWindow(QDialog):
         else:
             self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
 
-        # Control de botones principales
-        self.botones[0].setEnabled(True) # Nueva (siempre activa)
-        self.botones[1].setEnabled(habilitar) # Guardar
-        self.botones[2].setEnabled(True) # Cancelar (ahora siempre activa, como en Notas)
-        self.botones[3].setEnabled(True) # Buscar (siempre activo)
-        # Editar solo se habilita si hay una cotización cargada Y no estamos en modo edición
+        self.botones[0].setEnabled(True) 
+        self.botones[1].setEnabled(habilitar) 
+        self.botones[2].setEnabled(True) 
+        self.botones[3].setEnabled(True) 
         self.botones[4].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) 
-        self.botones[5].setEnabled(True) # Limpiar (siempre activo)
-        # Imprimir/Generar Nota solo si hay una cotización cargada
-        self.botones[6].setEnabled(bool(self.cotizacion_actual_id)) # Imprimir
-        self.botones[7].setEnabled(bool(self.cotizacion_actual_id)) # Generar Nota
+        self.botones[5].setEnabled(True) 
+        self.botones[6].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) 
+        self.botones[7].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) 
 
-        # Si estamos deshabilitando campos (ej. al cargar) Y hay una cotización
         if not habilitar and self.cotizacion_actual_id:
             try:
                 cotizacion = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
                 if cotizacion.get('estado') == 'Aceptada' or cotizacion.get('nota_folio'):
                     self.botones[7].setEnabled(False)
+                    self.botones[4].setEnabled(False) # Tampoco editar si ya fue aceptada
+                    self.botones[2].setEnabled(False) # Tampoco cancelar si ya fue aceptada
                     if cotizacion.get('nota_folio'):
                         self.botones[7].setToolTip(f"Ya se generó la nota: {cotizacion['nota_folio']}")
             except:
@@ -775,12 +775,10 @@ class CotizacionesWindow(QDialog):
         """
         Toma la cotización actual y genera una Nota de Venta.
         """
-        # Validar que hay una cotización cargada
         if not self.cotizacion_actual_id:
             self.mostrar_advertencia("Cargue una cotización guardada antes de generar la nota.")
             return
         
-        # Validar que no tenga ya una nota generada
         cotizacion_actual = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
         if cotizacion_actual.get('nota_folio'):
             self.mostrar_advertencia(
@@ -789,7 +787,6 @@ class CotizacionesWindow(QDialog):
             )
             return  
 
-        # Validar el cliente
         nombre_cliente = self.txt_cliente.text()
         cliente_id = self.clientes_dict.get(nombre_cliente)
         
@@ -797,26 +794,21 @@ class CotizacionesWindow(QDialog):
             self.mostrar_advertencia("Cliente no válido. Seleccione un cliente de la lista.")
             return
             
-        # Preparar datos para la Nota de Venta
         try:
-            # Fecha: La del día actual
             fecha_hoy = QDate.currentDate().toPyDate()
-            # Referencia: Tomada del campo 'Proyecto'
             referencia = self.txt_proyecto.text()
 
             nota_data = {
                 'cliente_id': cliente_id,
                 'fecha': fecha_hoy,
-                'observaciones': referencia, # 'observaciones' en la nota
-                'metodo_pago': None # Las notas nuevas inician sin método de pago
+                'observaciones': referencia,
+                'metodo_pago': None
             }
 
-            # Preparar los items
             items_para_nota = []
             for fila in range(self.tabla_model.rowCount()):
                 tipo = self.tipo_por_fila.get(fila, 'normal')
                 
-                # Solo transferir items 'normales' (ignorar notas, secciones)
                 if tipo == 'normal':
                     cantidad = int(self.tabla_model.item(fila, 0).text())
                     descripcion = self.tabla_model.item(fila, 1).text()
@@ -836,11 +828,9 @@ class CotizacionesWindow(QDialog):
                 self.mostrar_advertencia("La cotización no tiene items para transferir a la nota.")
                 return
 
-            # Llamar al db_helper para crear la nota
             nueva_nota = db_helper.crear_nota(nota_data, items_para_nota, cotizacion_folio=self.txt_folio.text())
             
             if nueva_nota and nueva_nota.get('folio'):
-                # Actualizar cotización con vinculación
                 cotizacion_data_update = {
                     'cliente_id': cliente_id,
                     'estado': 'Aceptada',
@@ -852,7 +842,7 @@ class CotizacionesWindow(QDialog):
                     self.cotizacion_actual_id, 
                     cotizacion_data_update, 
                     items_para_nota,
-                    nota_folio=nueva_nota['folio']  # ← Vincular
+                    nota_folio=nueva_nota['folio']
                 )
                 
                 self.mostrar_exito(
@@ -878,7 +868,6 @@ class CotizacionesWindow(QDialog):
     
     def mostrar_menu_contextual(self, position):
         """Muestra un menú contextual al hacer clic derecho en una fila de la tabla  """
-        # Solo mostrar menú si estamos en modo edición
         if not self.modo_edicion:
             return
             
@@ -886,7 +875,6 @@ class CotizacionesWindow(QDialog):
         
         menu = QMenu(self)
         
-        # Opciones de insertar (siempre disponibles en modo edición)
         menu.addSection("Insertar")
         action_nota = QAction("➕ Agregar Nota", self)
         action_nota.triggered.connect(self.insertar_nota)
@@ -908,7 +896,6 @@ class CotizacionesWindow(QDialog):
             
             menu.addSection("Acciones de Fila")
             
-            # Opción de editar (para items 'normal' se usa doble clic)
             if tipo_fila in ['nota', 'seccion', 'condiciones']:
                 action_editar = QAction("✏️ Editar", self)
                 action_editar.triggered.connect(lambda: self.editar_elemento_especial(fila))
@@ -1200,8 +1187,6 @@ class CotizacionesWindow(QDialog):
         botones_intermedios_container.setLayout(self.botones_intermedios_layout)
         
         layout_principal.addWidget(botones_intermedios_container, 6) # Añadir contenedor (reemplaza addStretch(6))
-
-        #layout_principal.addStretch(6)
         
         contenedor_frame = QWidget()
         contenedor_frame.setMaximumWidth(9999)

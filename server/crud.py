@@ -457,7 +457,7 @@ def get_nota(db: Session, nota_id: int) -> Optional[NotaVenta]:
     return db.query(NotaVenta).filter(NotaVenta.id == nota_id).first()
 
 
-def create_nota_venta(db: Session, nota_data: Dict[str, Any], items: List[Dict[str, Any]]) -> NotaVenta:
+def create_nota_venta(db: Session, nota_data: Dict[str, Any], items: List[Dict[str, Any]], estado: Optional[str] = 'Registrado') -> NotaVenta:
     """Crear nueva nota de venta con items"""
     # Generar folio único si no existe
     if 'folio' not in nota_data:
@@ -465,7 +465,7 @@ def create_nota_venta(db: Session, nota_data: Dict[str, Any], items: List[Dict[s
         numero = 1 if not ultimo_folio else ultimo_folio.id + 1
         nota_data['folio'] = f"NV-{datetime.now().year}-{numero:05d}"
     
-    nota_data['estado'] = 'Registrado'
+    nota_data['estado'] = estado
     nota_data['total_pagado'] = 0.0
     # Crear nota
     nueva_nota = NotaVenta(**nota_data)
@@ -597,7 +597,10 @@ def eliminar_pago_nota(db: Session, pago_id: int) -> Optional[NotaVenta]:
     # 4. Re-evaluar el estado de la nota
     # Tolerancia para floats
     if nota.total_pagado <= 0.01:
-        nota.estado = 'Registrado'
+        # Si el estado era 'Borrador', no debe cambiar a 'Registrado'
+        if nota.estado != 'Borrador':
+            nota.estado = 'Registrado'
+            
         nota.total_pagado = 0.0 # Asegurar 0
         nota.saldo = nota.total # Asegurar saldo completo
     else:
