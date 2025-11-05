@@ -44,11 +44,12 @@ class ConfiguracionWindow(QDialog):
             QTabBar::tab {
                 background: rgba(255, 255, 255, 150);
                 color: #333;
-                padding: 12px 25px;
+                padding: 15px 30px;
                 margin-right: 2px;
                 border-radius: 5px 5px 0 0;
                 font-weight: bold;
-                font-size: 13px;
+                font-size: 16px;
+                min-width: 280px;
             }
             QTabBar::tab:selected {
                 background: qlineargradient(
@@ -57,12 +58,15 @@ class ConfiguracionWindow(QDialog):
                 );
                 color: white;
             }
+            QTabBar::tab:hover {
+                background: rgba(44, 213, 196, 0.3);
+            }
         """)
         
         # Crear pestañas
-        self.tabs.addTab(self.crear_tab_empresa(), "🏢 Datos de Empresa")
-        self.tabs.addTab(self.crear_tab_usuarios(), "👥 Usuarios")
-        self.tabs.addTab(self.crear_tab_respaldo(), "💾 Respaldo")
+        self.tabs.addTab(self.crear_tab_empresa(), "🏢  Datos de Empresa")
+        self.tabs.addTab(self.crear_tab_usuarios(), "👥  Usuarios")
+        self.tabs.addTab(self.crear_tab_respaldo(), "💾  Respaldo")
         
         main_layout.addWidget(self.tabs)
         self.setLayout(main_layout)
