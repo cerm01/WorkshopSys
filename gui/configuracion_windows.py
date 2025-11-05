@@ -82,7 +82,7 @@ class ConfiguracionWindow(QDialog):
         self.cargar_datos_empresa()
         self.cargar_usuarios()
     
-    # ==================== TAB EMPRESA ====================
+    # ==================== TAB EMPRESA (MODIFICADO) ====================
     
     def crear_tab_empresa(self):
         tab = QWidget()
@@ -90,13 +90,9 @@ class ConfiguracionWindow(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
-        # Scroll Area
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-        
-        scroll_widget = QWidget()
-        scroll_layout = QVBoxLayout(scroll_widget)
+        # --- INICIO DE CAMBIOS: QScrollArea ELIMINADO ---
+        # No hay QScrollArea ni scroll_widget
+        # Los widgets se añaden directamente a 'layout'
         
         # Grupo: Datos Generales
         grupo_general = QGroupBox()
@@ -128,7 +124,7 @@ class ConfiguracionWindow(QDialog):
         grid_general.addWidget(self.txt_rfc_empresa, 2, 1)
         
         grupo_general.setLayout(grid_general)
-        scroll_layout.addWidget(grupo_general)
+        layout.addWidget(grupo_general) # <-- Directo a 'layout'
         
         # Grupo: Dirección
         grupo_direccion = QGroupBox()
@@ -174,7 +170,7 @@ class ConfiguracionWindow(QDialog):
         grid_dir.addWidget(self.txt_cp_empresa, 2, 1)
         
         grupo_direccion.setLayout(grid_dir)
-        scroll_layout.addWidget(grupo_direccion)
+        layout.addWidget(grupo_direccion) # <-- Directo a 'layout'
         
         # Grupo: Contacto
         grupo_contacto = QGroupBox()
@@ -212,7 +208,7 @@ class ConfiguracionWindow(QDialog):
         grid_contacto.addWidget(self.txt_web_empresa, 1, 3)
         
         grupo_contacto.setLayout(grid_contacto)
-        scroll_layout.addWidget(grupo_contacto)
+        layout.addWidget(grupo_contacto) # <-- Directo a 'layout'
         
         # Sección Logo
         logo_layout = QHBoxLayout()
@@ -249,22 +245,26 @@ class ConfiguracionWindow(QDialog):
         logo_layout.addLayout(logo_btns)
         logo_layout.addStretch()
         
-        scroll_layout.addLayout(logo_layout)
-        scroll_layout.addStretch()
-        
-        scroll.setWidget(scroll_widget)
-        layout.addWidget(scroll)
+        layout.addLayout(logo_layout) # <-- Directo a 'layout'
         
         # Botón Guardar
+        layout.addStretch() # <-- Se añade el stretch aquí (como en el archivo viejo)
         btn_guardar_empresa = QPushButton("Guardar Configuración")
         btn_guardar_empresa.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         btn_guardar_empresa.setFixedHeight(60)
         btn_guardar_empresa.clicked.connect(self.guardar_empresa)
         layout.addWidget(btn_guardar_empresa)
         
+        # --- FIN DE CAMBIOS ---
+        
         tab.setLayout(layout)
         return tab
     
+    # ====================================================
+    # === EL RESTO DEL ARCHIVO ES IDÉNTICO AL NUEVO =====
+    # === (Se mantiene la lógica de logo_data, hash, etc.)
+    # ====================================================
+
     def _crear_pixmap_circular(self, pixmap_o_bytes, tamanio=150):
         """Crear pixmap circular desde QPixmap o bytes"""
         if isinstance(pixmap_o_bytes, bytes):
@@ -509,7 +509,7 @@ class ConfiguracionWindow(QDialog):
         
         self.tabla_usuarios_model = QStandardItemModel()
         self.tabla_usuarios_model.setHorizontalHeaderLabels(
-            ["ID", "Usuario", "Nombre", "Email", "Rol", "Estado", "Último Acceso"]
+            ["ID", "Usuario", "Nombre", "Email", "Rol", "Estado", "Último AccGceso"]
         )
         self.tabla_usuarios.setModel(self.tabla_usuarios_model)
         
