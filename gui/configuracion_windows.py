@@ -1,21 +1,21 @@
 import sys
 import os
-import shutil 
-import re 
+import shutil
+import re
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFrame, QTabWidget, QWidget,
     QLabel, QLineEdit, QPushButton, QTableView, QHeaderView, QMessageBox,
-    QFileDialog, QComboBox, QCheckBox, QGroupBox, QGridLayout
+    QFileDialog, QComboBox, QCheckBox, QGroupBox, QGridLayout, QScrollArea
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QByteArray, QBuffer, QIODevice
 from PyQt5.QtGui import (
     QStandardItemModel, QStandardItem, QPixmap,
-    QPainter, QPainterPath, QBrush
+    QPainter, QPainterPath, QImage
 )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from db_helper import db_helper
+from db_helper import db_helper, generar_hash_password
 from styles import (
     SECONDARY_WINDOW_GRADIENT, GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE,
     BUTTON_STYLE_2, TABLE_STYLE, MESSAGE_BOX_STYLE
@@ -32,16 +32,8 @@ class ConfiguracionWindow(QDialog):
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
         
         self.usuario_en_edicion_id = None
-        
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.assets_dir = os.path.join(self.base_dir, "assets")
-        if not os.path.exists(self.assets_dir):
-            try:
-                os.makedirs(self.assets_dir)
-            except Exception as e:
-                print(f"Advertencia: No se pudo crear el directorio 'assets': {e}")
-        
-        self.logo_path = None
+        self.logo_data = None  # Guardamos bytes en lugar de path
         
         self.setup_ui()
         
@@ -68,7 +60,7 @@ class ConfiguracionWindow(QDialog):
             }
             QTabBar::tab:selected {
                 background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 0,
+                   x1: 0, y1: 0, x2: 1, y2: 0,
                     stop: 0 #2CD5C4, stop: 1 #00788E
                 );
                 color: white;
@@ -97,6 +89,14 @@ class ConfiguracionWindow(QDialog):
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
+        
+        # Scroll Area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
         
         # Grupo: Datos Generales
         grupo_general = QGroupBox()
@@ -128,7 +128,7 @@ class ConfiguracionWindow(QDialog):
         grid_general.addWidget(self.txt_rfc_empresa, 2, 1)
         
         grupo_general.setLayout(grid_general)
-        layout.addWidget(grupo_general)
+        scroll_layout.addWidget(grupo_general)
         
         # Grupo: Dirección
         grupo_direccion = QGroupBox()
@@ -174,7 +174,7 @@ class ConfiguracionWindow(QDialog):
         grid_dir.addWidget(self.txt_cp_empresa, 2, 1)
         
         grupo_direccion.setLayout(grid_dir)
-        layout.addWidget(grupo_direccion)
+        scroll_layout.addWidget(grupo_direccion)
         
         # Grupo: Contacto
         grupo_contacto = QGroupBox()
@@ -212,24 +212,23 @@ class ConfiguracionWindow(QDialog):
         grid_contacto.addWidget(self.txt_web_empresa, 1, 3)
         
         grupo_contacto.setLayout(grid_contacto)
-        layout.addWidget(grupo_contacto)
+        scroll_layout.addWidget(grupo_contacto)
         
-        # --- Sección de Logo (Sin QGroupBox) ---
-        
+        # Sección Logo
         logo_layout = QHBoxLayout()
         logo_layout.setContentsMargins(10, 15, 10, 15)
         
         self.lbl_logo_preview = QLabel("Sin logo")
-        self.lbl_logo_preview.setFixedSize(150, 150) 
+        self.lbl_logo_preview.setFixedSize(150, 150)
         self.lbl_logo_preview.setStyleSheet("""
             QLabel {
                 background: white;
-                border-radius: 75px; 
+                border-radius: 75px;
                 border: 2px solid #00788E;
             }
         """)
         self.lbl_logo_preview.setAlignment(Qt.AlignCenter)
-        self.lbl_logo_preview.setScaledContents(False) 
+        self.lbl_logo_preview.setScaledContents(False)
         
         btn_cargar_logo = QPushButton("Cargar Logo")
         btn_cargar_logo.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
@@ -250,12 +249,13 @@ class ConfiguracionWindow(QDialog):
         logo_layout.addLayout(logo_btns)
         logo_layout.addStretch()
         
-        layout.addLayout(logo_layout)
+        scroll_layout.addLayout(logo_layout)
+        scroll_layout.addStretch()
         
-        # --- Fin Sección de Logo ---
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll)
         
         # Botón Guardar
-        layout.addStretch()
         btn_guardar_empresa = QPushButton("Guardar Configuración")
         btn_guardar_empresa.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         btn_guardar_empresa.setFixedHeight(60)
@@ -265,8 +265,16 @@ class ConfiguracionWindow(QDialog):
         tab.setLayout(layout)
         return tab
     
-    def _crear_pixmap_circular(self, ruta_pixmap, tamanio=150):
-        pixmap_original = QPixmap(ruta_pixmap)
+    def _crear_pixmap_circular(self, pixmap_o_bytes, tamanio=150):
+        """Crear pixmap circular desde QPixmap o bytes"""
+        if isinstance(pixmap_o_bytes, bytes):
+            # Convertir bytes a QPixmap
+            qimage = QImage()
+            qimage.loadFromData(pixmap_o_bytes)
+            pixmap_original = QPixmap.fromImage(qimage)
+        else:
+            pixmap_original = pixmap_o_bytes
+            
         if pixmap_original.isNull():
             return QPixmap()
 
@@ -283,61 +291,46 @@ class ConfiguracionWindow(QDialog):
 
         path = QPainterPath()
         path.addEllipse(0, 0, tamanio, tamanio)
-        
         painter.setClipPath(path)
 
         x = (tamanio - pixmap_escalado.width()) / 2
         y = (tamanio - pixmap_escalado.height()) / 2
         painter.drawPixmap(int(x), int(y), pixmap_escalado)
-        
         painter.end()
         
         return pixmap_redondo
 
     def cargar_logo(self):
-        archivo_origen, _ = QFileDialog.getOpenFileName(
+        """Cargar logo y convertir a bytes"""
+        archivo, _ = QFileDialog.getOpenFileName(
             self, "Seleccionar Logo", "", "Imágenes (*.png *.jpg *.jpeg *.bmp)"
         )
-        if archivo_origen:
+        if archivo:
             try:
-                if not os.path.exists(self.assets_dir):
-                    os.makedirs(self.assets_dir)
+                # Leer archivo como bytes
+                with open(archivo, 'rb') as f:
+                    self.logo_data = f.read()
                 
-                extension = os.path.splitext(archivo_origen)[1]
-                nombre_archivo_destino = f"logo_empresa{extension}"
-                ruta_destino_absoluta = os.path.join(self.assets_dir, nombre_archivo_destino)
-                
-                shutil.copy2(archivo_origen, ruta_destino_absoluta)
-                
-                self.logo_path = os.path.join("..", "assets", nombre_archivo_destino).replace("\\", "/")
-                
-                pixmap_circular = self._crear_pixmap_circular(ruta_destino_absoluta)
-                
+                # Mostrar preview
+                pixmap_circular = self._crear_pixmap_circular(self.logo_data)
                 if not pixmap_circular.isNull():
                     self.lbl_logo_preview.setPixmap(pixmap_circular)
                 else:
-                    self.mostrar_mensaje("Error", "No se pudo cargar la imagen copiada.", QMessageBox.Critical)
-                    self.quitar_logo()
+                    self.mostrar_mensaje("Error", "No se pudo cargar la imagen", QMessageBox.Critical)
+                    self.logo_data = None
+                    
             except Exception as e:
-                self.mostrar_mensaje("Error", f"No se pudo guardar el logo: {e}", QMessageBox.Critical)
+                self.mostrar_mensaje("Error", f"Error al cargar logo: {e}", QMessageBox.Critical)
+                self.logo_data = None
     
     def quitar_logo(self):
-        if self.logo_path:
-            ruta_absoluta = os.path.abspath(os.path.join(
-                os.path.dirname(__file__),
-                self.logo_path
-            ))
-            if os.path.exists(ruta_absoluta):
-                try:
-                    os.remove(ruta_absoluta)
-                except Exception as e:
-                    print(f"No se pudo borrar el logo anterior ({ruta_absoluta}): {e}")
-        
-        self.logo_path = None 
+        """Quitar logo"""
+        self.logo_data = None
         self.lbl_logo_preview.clear()
         self.lbl_logo_preview.setText("Sin logo")
     
     def cargar_datos_empresa(self):
+        """Cargar datos de la empresa desde BD"""
         datos = db_helper.get_config_empresa()
         if datos:
             self.txt_nombre_comercial.setText(datos.get('nombre_comercial', ''))
@@ -353,83 +346,69 @@ class ConfiguracionWindow(QDialog):
             self.txt_email_empresa.setText(datos.get('email', ''))
             self.txt_web_empresa.setText(datos.get('sitio_web', ''))
             
-            self.logo_path = datos.get('logo_path')
-            
-            if self.logo_path:
-                ruta_absoluta = os.path.abspath(os.path.join(
-                    os.path.dirname(__file__), 
-                    self.logo_path
-                ))
-
-                if os.path.exists(ruta_absoluta):
-                    pixmap_circular = self._crear_pixmap_circular(ruta_absoluta)
-                    if not pixmap_circular.isNull():
-                        self.lbl_logo_preview.setPixmap(pixmap_circular)
-                    else:
-                        self.quitar_logo()
+            # Cargar logo desde bytes
+            self.logo_data = datos.get('logo_data')
+            if self.logo_data:
+                pixmap_circular = self._crear_pixmap_circular(self.logo_data)
+                if not pixmap_circular.isNull():
+                    self.lbl_logo_preview.setPixmap(pixmap_circular)
                 else:
                     self.quitar_logo()
     
     def guardar_empresa(self):
+        """Guardar configuración de la empresa"""
         nombre = self.txt_nombre_comercial.text().strip()
         if not nombre:
             self.mostrar_mensaje("Error", "El nombre comercial es obligatorio", QMessageBox.Critical)
             return
         
         rfc = self.txt_rfc_empresa.text().strip().upper()
-        if rfc: 
+        if rfc:
             patron_rfc = r'^[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}$'
             if not re.match(patron_rfc, rfc):
-                self.mostrar_mensaje("Error", "El formato del RFC es inválido.", QMessageBox.Critical)
-                self.txt_rfc_empresa.setFocus()
+                self.mostrar_mensaje("Error", "El formato del RFC es inválido", QMessageBox.Critical)
                 return
-
+        
         cp = self.txt_cp_empresa.text().strip()
-        if cp:
-            patron_cp = r'^\d{5}$'
-            if not re.match(patron_cp, cp):
-                self.mostrar_mensaje("Error", "El Código Postal debe contener 5 dígitos.", QMessageBox.Critical)
-                self.txt_cp_empresa.setFocus()
-                return
-
+        if cp and not re.match(r'^\d{5}$', cp):
+            self.mostrar_mensaje("Error", "El CP debe tener 5 dígitos", QMessageBox.Critical)
+            return
+        
         tel1 = self.txt_tel1_empresa.text().strip()
         if tel1:
-            patron_telefono = r'^[\d\s\(\)\-\+]+$'
-            if not re.match(patron_telefono, tel1) or len(re.sub(r'\D', '', tel1)) < 10:
-                self.mostrar_mensaje("Error", "Teléfono 1 inválido (mínimo 10 dígitos).", QMessageBox.Critical)
-                self.txt_tel1_empresa.setFocus()
+            patron_tel = r'^[\d\s\(\)\-\+]+$'
+            if not re.match(patron_tel, tel1) or len(re.sub(r'\D', '', tel1)) < 10:
+                self.mostrar_mensaje("Error", "Formato de teléfono 1 inválido", QMessageBox.Critical)
                 return
-
+        
         tel2 = self.txt_tel2_empresa.text().strip()
         if tel2:
-            patron_telefono = r'^[\d\s\(\)\-\+]+$'
-            if not re.match(patron_telefono, tel2) or len(re.sub(r'\D', '', tel2)) < 10:
-                self.mostrar_mensaje("Error", "Teléfono 2 inválido (mínimo 10 dígitos).", QMessageBox.Critical)
-                self.txt_tel2_empresa.setFocus()
+            patron_tel = r'^[\d\s\(\)\-\+]+$'
+            if not re.match(patron_tel, tel2) or len(re.sub(r'\D', '', tel2)) < 10:
+                self.mostrar_mensaje("Error", "Formato de teléfono 2 inválido", QMessageBox.Critical)
                 return
 
         email = self.txt_email_empresa.text().strip()
         if email:
             patron_email = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
             if not re.match(patron_email, email):
-                self.mostrar_mensaje("Error", "El formato del Email es inválido.", QMessageBox.Critical)
-                self.txt_email_empresa.setFocus()
+                self.mostrar_mensaje("Error", "Formato de email inválido", QMessageBox.Critical)
                 return
         
         datos = {
             'nombre_comercial': nombre,
             'razon_social': self.txt_razon_social.text().strip(),
-            'rfc': rfc, 
+            'rfc': rfc,
             'calle': self.txt_calle_empresa.text().strip(),
             'colonia': self.txt_colonia_empresa.text().strip(),
             'ciudad': self.txt_ciudad_empresa.text().strip(),
             'estado': self.txt_estado_empresa.text().strip(),
-            'cp': cp, 
-            'telefono1': tel1, 
-            'telefono2': tel2, 
-            'email': email, 
+            'cp': cp,
+            'telefono1': tel1,
+            'telefono2': tel2,
+            'email': email,
             'sitio_web': self.txt_web_empresa.text().strip(),
-            'logo_path': self.logo_path
+            'logo_data': self.logo_data  # Guardamos bytes
         }
         
         if db_helper.guardar_config_empresa(datos):
@@ -463,7 +442,6 @@ class ConfiguracionWindow(QDialog):
         self.txt_password = QLineEdit()
         self.txt_password.setStyleSheet(INPUT_STYLE)
         self.txt_password.setEchoMode(QLineEdit.Password)
-        self.txt_password.setPlaceholderText("Dejar vacío para no cambiar")
         
         lbl_nombre = QLabel("Nombre Completo *")
         lbl_nombre.setStyleSheet(LABEL_STYLE)
@@ -478,12 +456,13 @@ class ConfiguracionWindow(QDialog):
         lbl_rol = QLabel("Rol *")
         lbl_rol.setStyleSheet(LABEL_STYLE)
         self.cmb_rol = QComboBox()
-        self.cmb_rol.addItems(["Admin", "Mecánico", "Vendedor", "Usuario"])
         self.cmb_rol.setStyleSheet(INPUT_STYLE)
+        self.cmb_rol.addItems(["Usuario", "Vendedor", "Mecánico", "Admin"])
         
-        self.chk_activo = QCheckBox("Usuario Activo")
+        lbl_activo = QLabel("Activo")
+        lbl_activo.setStyleSheet(LABEL_STYLE)
+        self.chk_activo = QCheckBox()
         self.chk_activo.setChecked(True)
-        self.chk_activo.setStyleSheet("color: #ffffff; font-size: 16px; font-weight: bold;")
         
         grid.addWidget(lbl_username, 0, 0)
         grid.addWidget(self.txt_username, 0, 1)
@@ -495,15 +474,14 @@ class ConfiguracionWindow(QDialog):
         grid.addWidget(self.txt_email_usuario, 1, 3)
         grid.addWidget(lbl_rol, 2, 0)
         grid.addWidget(self.cmb_rol, 2, 1)
-        grid.addWidget(self.chk_activo, 2, 2)
+        grid.addWidget(lbl_activo, 2, 2)
+        grid.addWidget(self.chk_activo, 2, 3)
         
         grupo_form.setLayout(grid)
         layout.addWidget(grupo_form)
         
         # Botones
         btns_layout = QHBoxLayout()
-        btns_layout.setSpacing(10)
-        
         btn_nuevo = QPushButton("Nuevo")
         btn_guardar = QPushButton("Guardar")
         btn_editar = QPushButton("Editar")
@@ -593,34 +571,28 @@ class ConfiguracionWindow(QDialog):
             'activo': self.chk_activo.isChecked()
         }
         
-        # --- INICIO DE CAMBIOS (CANDADO ADMIN - EDICIÓN) ---
+        # Validar candado de admin
         if self.usuario_en_edicion_id:
-            # Es una edición, aplicar candado de admin
-            usuario_original = db_helper.get_usuario_by_id(self.usuario_en_edicion_id)
+            usuario_original = db_helper.get_usuario(self.usuario_en_edicion_id)
             
-            # 1. El usuario ES admin
-            # 2. La intención es DESACTIVARLO (checkbox desmarcado)
             if (usuario_original and
                 usuario_original['rol'] == 'Admin' and 
                 datos['activo'] is False):
                 
-                # Contar total de admins activos
                 usuarios = db_helper.get_usuarios()
                 conteo_admins_activos = sum(1 for u in usuarios if u['rol'] == 'Admin' and u['activo'])
                 
-                # 3. Si es el último admin activo
                 if conteo_admins_activos <= 1:
                     self.mostrar_mensaje(
                         "Acción Denegada",
                         "No se puede desactivar al último administrador activo.",
                         QMessageBox.Critical
                     )
-                    self.chk_activo.setChecked(True) # Revertir el checkbox
-                    return # Detener el guardado
-        # --- FIN DE CAMBIOS (CANDADO ADMIN - EDICIÓN) ---
+                    self.chk_activo.setChecked(True)
+                    return
         
         if password:
-            datos['password'] = password
+            datos['password_hash'] = generar_hash_password(password)
         
         if self.usuario_en_edicion_id:
             if db_helper.actualizar_usuario(self.usuario_en_edicion_id, datos):
@@ -630,6 +602,8 @@ class ConfiguracionWindow(QDialog):
             else:
                 self.mostrar_mensaje("Error", "No se pudo actualizar", QMessageBox.Critical)
         else:
+            if password:
+                datos['password_hash'] = generar_hash_password(password)
             if db_helper.crear_usuario(datos):
                 self.mostrar_mensaje("Éxito", "Usuario creado", QMessageBox.Information)
                 self.cargar_usuarios()
@@ -646,7 +620,7 @@ class ConfiguracionWindow(QDialog):
         fila = indice.row()
         usuario_id = int(self.tabla_usuarios_model.item(fila, 0).text())
         
-        usuario = db_helper.get_usuario_by_id(usuario_id)
+        usuario = db_helper.get_usuario(usuario_id)
         if usuario:
             self.usuario_en_edicion_id = usuario_id
             self.txt_id_usuario.setText(str(usuario['id']))
@@ -667,19 +641,15 @@ class ConfiguracionWindow(QDialog):
         fila = indice.row()
         usuario_id = int(self.tabla_usuarios_model.item(fila, 0).text())
         username = self.tabla_usuarios_model.item(fila, 1).text()
-        
-        # --- INICIO DE CAMBIOS (CANDADO ADMIN - ELIMINACIÓN) ---
         rol = self.tabla_usuarios_model.item(fila, 4).text()
         estado_str = self.tabla_usuarios_model.item(fila, 5).text()
         es_activo = (estado_str == "Activo")
 
-        # 1. Verificar si el usuario a eliminar es un Admin ACTIVO
+        # Validar candado de admin
         if rol == "Admin" and es_activo:
-            # 2. Contar cuántos admins activos hay EN TOTAL
             usuarios = db_helper.get_usuarios()
             conteo_admins_activos = sum(1 for u in usuarios if u['rol'] == 'Admin' and u['activo'])
             
-            # 3. Si es el último, bloquear
             if conteo_admins_activos <= 1:
                 self.mostrar_mensaje(
                     "Acción Denegada",
@@ -687,20 +657,16 @@ class ConfiguracionWindow(QDialog):
                     QMessageBox.Critical
                 )
                 return
-        # 4. Los usuarios que no son Admin, o los Admin inactivos, pueden eliminarse (regla 5)
-        # --- FIN DE CAMBIOS (CANDADO ADMIN - ELIMINACIÓN) ---
 
         respuesta = QMessageBox.question(
             self, "Confirmar Eliminación", 
-            f"¿Está seguro de que desea ELIMINAR PERMANENTEMENTE al usuario '{username}'?\n\n"
-            "Esta acción no se puede deshacer.",
+            f"¿Está seguro de eliminar al usuario '{username}'?\n\nEsta acción no se puede deshacer.",
             QMessageBox.Yes | QMessageBox.No
         )
         
         if respuesta == QMessageBox.Yes:
-            # Llamar con soft_delete=False para borrado físico
-            if db_helper.eliminar_usuario(usuario_id, soft_delete=False):
-                self.mostrar_mensaje("Éxito", "Usuario eliminado permanentemente", QMessageBox.Information)
+            if db_helper.eliminar_usuario(usuario_id):
+                self.mostrar_mensaje("Éxito", "Usuario eliminado", QMessageBox.Information)
                 self.cargar_usuarios()
             else:
                 self.mostrar_mensaje("Error", "No se pudo eliminar el usuario", QMessageBox.Critical)
@@ -719,7 +685,6 @@ class ConfiguracionWindow(QDialog):
     
     def crear_tab_respaldo(self):
         tab = QWidget()
-        
         layout = QVBoxLayout()
         layout.setContentsMargins(70, 70, 70, 70)
         layout.setSpacing(80)
@@ -817,7 +782,7 @@ class ConfiguracionWindow(QDialog):
                 )
                 self.close()
         except Exception as e:
-            self.mostrar_mensaje("Error", f"Error al restaurar: {str(e)}.\nEs posible que deba reiniciar la aplicación.", QMessageBox.Critical)
+            self.mostrar_mensaje("Error", f"Error al restaurar: {str(e)}.\nDebe reiniciar la aplicación.", QMessageBox.Critical)
     
     # ==================== UTILIDADES ====================
     

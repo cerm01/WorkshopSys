@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean, LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -70,7 +70,6 @@ class Proveedor(Base):
     
     # Relaciones
     productos = relationship("Producto", back_populates="proveedor")
-    # Relación con NotaProveedor
     notas = relationship("NotaProveedor", back_populates="proveedor", cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -217,12 +216,10 @@ class Cotizacion(Base):
     observaciones = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    nota_folio = Column(String, nullable=True)
     
     # Relaciones
     items = relationship("CotizacionItem", back_populates="cotizacion", cascade="all, delete-orphan")
-
-    nota_folio = Column(String, nullable=True)  # ← AGREGAR
-
 
     def __repr__(self):
         return f"<Cotizacion(id={self.id}, folio='{self.folio}', total={self.total})>"
@@ -259,8 +256,8 @@ class NotaVenta(Base):
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     cliente = relationship("Cliente", back_populates="notas")
     
-    # 1. Estado por defecto actualizado
-    estado = Column(String(50), default="Registrado") # Opciones: Registrado, Pagado Parcialmente, Pagado, Cancelado
+    # Estado
+    estado = Column(String(50), default="Registrado")  # Registrado, Pagado Parcialmente, Pagado, Cancelado
     metodo_pago = Column(String(50), nullable=True)
     
     # Totales
@@ -268,7 +265,7 @@ class NotaVenta(Base):
     impuestos = Column(Float, default=0.0)
     total = Column(Float, default=0.0)
     
-    # 2. Columnas para Cuentas por Cobrar
+    # Cuentas por Cobrar
     total_pagado = Column(Float, default=0.0)
     saldo = Column(Float, default=0.0)
     
@@ -277,19 +274,14 @@ class NotaVenta(Base):
     fecha = Column(DateTime, default=datetime.now)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    cotizacion_folio = Column(String, nullable=True)
+    orden_folio = Column(String, nullable=True)
     
     # Relaciones
     items = relationship("NotaVentaItem", back_populates="nota", cascade="all, delete-orphan")
-    
-    # 3. Nueva relación con Pagos
     pagos = relationship("NotaVentaPago", back_populates="nota", cascade="all, delete-orphan")
-    cotizacion_folio = Column(String, nullable=True)
-    orden_folio = Column(String, nullable=True)
-
-
 
     def __repr__(self):
-        # 4. Actualizado para mostrar el saldo
         return f"<NotaVenta(id={self.id}, folio='{self.folio}', total={self.total}, saldo={self.saldo})>"
 
 
@@ -311,7 +303,6 @@ class NotaVentaItem(Base):
     def __repr__(self):
         return f"<NotaVentaItem(id={self.id}, descripcion='{self.descripcion[:30]}')>"
 
-# 5. NotaVentaPago
 
 class NotaVentaPago(Base):
     __tablename__ = "notas_venta_pagos"
@@ -334,7 +325,9 @@ class NotaVentaPago(Base):
     def __repr__(self):
         return f"<NotaVentaPago(id={self.id}, nota_id={self.nota_id}, monto={self.monto})>"
 
+
 # ==================== NOTAS DE PROVEEDOR ====================
+
 class NotaProveedor(Base):
     __tablename__ = "notas_proveedor"
     
@@ -346,7 +339,7 @@ class NotaProveedor(Base):
     proveedor = relationship("Proveedor", back_populates="notas")
     
     # Estado
-    estado = Column(String(50), default="Registrado") # Registrado, Pagado Parcialmente, Pagado, Cancelado
+    estado = Column(String(50), default="Registrado")  # Registrado, Pagado Parcialmente, Pagado, Cancelado
     metodo_pago = Column(String(50), nullable=True)
     
     # Totales
@@ -359,7 +352,7 @@ class NotaProveedor(Base):
     saldo = Column(Float, default=0.0)
     
     # Metadata
-    observaciones = Column(Text, nullable=True) # Usado para 'Referencia' en la GUI
+    observaciones = Column(Text, nullable=True)
     fecha = Column(DateTime, default=datetime.now)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -383,7 +376,7 @@ class NotaProveedorItem(Base):
     descripcion = Column(Text, nullable=False)
     precio_unitario = Column(Float, default=0.0)
     importe = Column(Float, default=0.0)
-    impuesto = Column(Float, default=0.0) # Porcentaje
+    impuesto = Column(Float, default=0.0)
     
     created_at = Column(DateTime, default=datetime.now)
 
@@ -412,7 +405,8 @@ class NotaProveedorPago(Base):
     def __repr__(self):
         return f"<NotaProveedorPago(id={self.id}, nota_id={self.nota_id}, monto={self.monto})>"
 
-# ==================== USUARIOS (Para sistema distribuido) ====================
+
+# ==================== USUARIOS ====================
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -437,6 +431,9 @@ class Usuario(Base):
     def __repr__(self):
         return f"<Usuario(id={self.id}, username='{self.username}', rol='{self.rol}')>"
 
+
+# ==================== CONFIGURACIÓN EMPRESA ====================
+
 class ConfigEmpresa(Base):
     __tablename__ = "config_empresa"
     
@@ -459,8 +456,8 @@ class ConfigEmpresa(Base):
     email = Column(String(150), nullable=True)
     sitio_web = Column(String(200), nullable=True)
     
-    # Logo (ruta al archivo)
-    logo_path = Column(String(500), nullable=True)
+    # Logo (BLOB - guardado en base de datos)
+    logo_data = Column(LargeBinary, nullable=True)  # Bytes de la imagen
     
     # Metadata
     created_at = Column(DateTime, default=datetime.now)
