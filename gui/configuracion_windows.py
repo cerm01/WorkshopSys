@@ -353,7 +353,7 @@ class ConfiguracionWindow(QDialog):
         
         self.chk_activo = QCheckBox("Usuario Activo")
         self.chk_activo.setChecked(True)
-        self.chk_activo.setStyleSheet("color: #ffffff; font-size: 16px;")
+        self.chk_activo.setStyleSheet("color: #ffffff; font-size: 16px; font-weight: bold;")
         
         grid.addWidget(lbl_username, 0, 0)
         grid.addWidget(self.txt_username, 0, 1)
@@ -382,7 +382,7 @@ class ConfiguracionWindow(QDialog):
         
         for btn in [btn_nuevo, btn_guardar, btn_editar, btn_eliminar, btn_limpiar]:
             btn.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
-            btn.setFixedHeight(45)
+            btn.setFixedHeight(60)
             btns_layout.addWidget(btn)
         
         btn_nuevo.clicked.connect(self.nuevo_usuario)
@@ -539,8 +539,6 @@ class ConfiguracionWindow(QDialog):
     
     def crear_tab_respaldo(self):
         tab = QWidget()
-        # Fondo blanco con transparencia y bordes redondeados ---
-        tab.setStyleSheet("background-color: rgba(255, 255, 255, 0.6); border-radius: 15px;")
         
         layout = QVBoxLayout()
         layout.setContentsMargins(70, 70, 70, 70)
