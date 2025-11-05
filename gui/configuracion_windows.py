@@ -642,25 +642,23 @@ class ConfiguracionWindow(QDialog):
         usuario_id = int(self.tabla_usuarios_model.item(fila, 0).text())
         username = self.tabla_usuarios_model.item(fila, 1).text()
         rol = self.tabla_usuarios_model.item(fila, 4).text()
-        estado_str = self.tabla_usuarios_model.item(fila, 5).text()
-        es_activo = (estado_str == "Activo")
 
-        # Validar candado de admin
-        if rol == "Admin" and es_activo:
-            usuarios = db_helper.get_usuarios()
-            conteo_admins_activos = sum(1 for u in usuarios if u['rol'] == 'Admin' and u['activo'])
+        # Validación: Admin activo
+        if rol == "Admin":
+            admins_activos = db_helper.contar_admins_activos()
             
-            if conteo_admins_activos <= 1:
+            if admins_activos <= 1:
                 self.mostrar_mensaje(
                     "Acción Denegada",
-                    "No se puede eliminar el último administrador activo del sistema.",
+                    "No se puede eliminar el único administrador activo del sistema.",
                     QMessageBox.Critical
                 )
                 return
 
         respuesta = QMessageBox.question(
-            self, "Confirmar Eliminación", 
-            f"¿Está seguro de eliminar al usuario '{username}'?\n\nEsta acción no se puede deshacer.",
+            self, 
+            "Confirmar Eliminación", 
+            f"¿Eliminar usuario '{username}' permanentemente?\n\nEsta acción no se puede deshacer.",
             QMessageBox.Yes | QMessageBox.No
         )
         

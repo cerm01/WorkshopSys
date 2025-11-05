@@ -74,11 +74,17 @@ class DatabaseHelper:
             return False
     
     # ==================== PROVEEDORES ====================
-  
+    
     def get_proveedores(self) -> List[Dict]:
         """Obtener todos los proveedores"""
         db = self._get_session()
         proveedores = crud.get_all_proveedores(db)
+        return [self._proveedor_to_dict(p) for p in proveedores]
+    
+    def buscar_proveedores(self, texto: str) -> List[Dict]:
+        """Buscar proveedores por texto"""
+        db = self._get_session()
+        proveedores = crud.search_proveedores(db, texto)
         return [self._proveedor_to_dict(p) for p in proveedores]
     
     def crear_proveedor(self, datos: Dict) -> Optional[Dict]:
@@ -92,7 +98,7 @@ class DatabaseHelper:
             return None
     
     def actualizar_proveedor(self, proveedor_id: int, datos: Dict) -> Optional[Dict]:
-        """Actualizar proveedor"""
+        """Actualizar proveedor existente"""
         try:
             db = self._get_session()
             proveedor = crud.update_proveedor(db, proveedor_id, datos)
@@ -102,21 +108,15 @@ class DatabaseHelper:
             return None
     
     def eliminar_proveedor(self, proveedor_id: int) -> bool:
-        """Eliminar proveedor"""
+        """Eliminar proveedor (soft delete)"""
         try:
             db = self._get_session()
             return crud.delete_proveedor(db, proveedor_id, soft_delete=True)
         except Exception as e:
             print(f"Error al eliminar proveedor: {e}")
             return False
-        
-    def buscar_proveedores(self, texto: str) -> List[Dict]:
-        """Buscar proveedores"""
-        db = self._get_session()
-        proveedores = crud.search_proveedores(db, texto)
-        return [self._proveedor_to_dict(p) for p in proveedores]
     
-    # ==================== INVENTARIO ====================
+    # ==================== PRODUCTOS ====================
     
     def get_productos(self) -> List[Dict]:
         """Obtener todos los productos"""
@@ -124,22 +124,16 @@ class DatabaseHelper:
         productos = crud.get_all_productos(db)
         return [self._producto_to_dict(p) for p in productos]
     
-    def get_productos_bajo_stock(self) -> List[Dict]:
-        """Obtener productos con stock bajo"""
-        db = self._get_session()
-        productos = crud.get_productos_bajo_stock(db)
-        return [self._producto_to_dict(p) for p in productos]
-    
-    def get_productos_sin_stock(self) -> List[Dict]:
-        """Obtener productos sin stock"""
-        db = self._get_session()
-        productos = crud.get_productos_sin_stock(db)
-        return [self._producto_to_dict(p) for p in productos]
-    
     def buscar_productos(self, texto: str) -> List[Dict]:
-        """Buscar productos"""
+        """Buscar productos por texto"""
         db = self._get_session()
         productos = crud.search_productos(db, texto)
+        return [self._producto_to_dict(p) for p in productos]
+    
+    def get_productos_bajo_stock(self) -> List[Dict]:
+        """Obtener productos bajo stock mínimo"""
+        db = self._get_session()
+        productos = crud.get_productos_bajo_stock(db)
         return [self._producto_to_dict(p) for p in productos]
     
     def crear_producto(self, datos: Dict) -> Optional[Dict]:
@@ -153,7 +147,7 @@ class DatabaseHelper:
             return None
     
     def actualizar_producto(self, producto_id: int, datos: Dict) -> Optional[Dict]:
-        """Actualizar producto"""
+        """Actualizar producto existente"""
         try:
             db = self._get_session()
             producto = crud.update_producto(db, producto_id, datos)
@@ -163,7 +157,7 @@ class DatabaseHelper:
             return None
     
     def eliminar_producto(self, producto_id: int) -> bool:
-        """Eliminar producto"""
+        """Eliminar producto (soft delete)"""
         try:
             db = self._get_session()
             return crud.delete_producto(db, producto_id, soft_delete=True)
@@ -171,12 +165,40 @@ class DatabaseHelper:
             print(f"Error al eliminar producto: {e}")
             return False
     
+    # ==================== MOVIMIENTOS ====================
+    
+    def registrar_movimiento(self, datos: Dict) -> bool:
+        """Registrar movimiento de inventario"""
+        try:
+            db = self._get_session()
+            crud.registrar_movimiento_inventario(db, datos)
+            return True
+        except Exception as e:
+            print(f"Error al registrar movimiento: {e}")
+            return False
+    
+    def get_movimientos(self, producto_id: Optional[int] = None) -> List[Dict]:
+        """Obtener movimientos de inventario"""
+        db = self._get_session()
+        movimientos = crud.get_movimientos_inventario(db, producto_id)
+        return [self._movimiento_to_dict(m) for m in movimientos]
+    
     # ==================== ÓRDENES ====================
     
-    def get_ordenes(self) -> List[Dict]:
-        """Obtener todas las órdenes"""
+    def crear_orden(self, datos: Dict) -> Optional[int]:
+        """Crear nueva orden"""
+        try:
+            db = self._get_session()
+            orden = crud.create_orden(db, datos)
+            return orden.id if orden else None
+        except Exception as e:
+            print(f"Error al crear orden: {e}")
+            return None
+    
+    def buscar_ordenes(self, **filtros) -> List[Dict]:
+        """Buscar órdenes con filtros"""
         db = self._get_session()
-        ordenes = crud.get_all_ordenes(db)
+        ordenes = crud.search_ordenes(db, **filtros)
         return [self._orden_to_dict(o) for o in ordenes]
     
     def get_orden(self, orden_id: int) -> Optional[Dict]:
@@ -185,38 +207,42 @@ class DatabaseHelper:
         orden = crud.get_orden(db, orden_id)
         return self._orden_to_dict(orden) if orden else None
     
-    def crear_orden(self, datos: Dict) -> Optional[Dict]:
-        """Crear nueva orden"""
-        try:
-            db = self._get_session()
-            orden = crud.create_orden(db, datos)
-            return self._orden_to_dict(orden)
-        except Exception as e:
-            print(f"Error al crear orden: {e}")
-            return None
-    
-    def actualizar_orden(self, orden_id: int, datos: Dict) -> Optional[Dict]:
+    def actualizar_orden(self, orden_id: int, datos: Dict) -> bool:
         """Actualizar orden"""
         try:
             db = self._get_session()
-            orden = crud.update_orden(db, orden_id, datos)
-            return self._orden_to_dict(orden) if orden else None
+            crud.update_orden(db, orden_id, datos)
+            return True
         except Exception as e:
             print(f"Error al actualizar orden: {e}")
-            return None
+            return False
     
-    def buscar_ordenes(self, texto: str) -> List[Dict]:
-        """Buscar órdenes"""
-        db = self._get_session()
-        ordenes = crud.search_ordenes(db, texto)
-        return [self._orden_to_dict(o) for o in ordenes]
+    def cancelar_orden(self, orden_id: int) -> bool:
+        """Cancelar orden"""
+        try:
+            db = self._get_session()
+            crud.cancel_orden(db, orden_id)
+            return True
+        except Exception as e:
+            print(f"Error al cancelar orden: {e}")
+            return False
     
     # ==================== COTIZACIONES ====================
     
-    def get_cotizaciones(self) -> List[Dict]:
-        """Obtener todas las cotizaciones"""
+    def crear_cotizacion(self, datos: Dict) -> Optional[int]:
+        """Crear nueva cotización"""
+        try:
+            db = self._get_session()
+            cotizacion = crud.create_cotizacion(db, datos)
+            return cotizacion.id if cotizacion else None
+        except Exception as e:
+            print(f"Error al crear cotización: {e}")
+            return None
+    
+    def buscar_cotizaciones(self, **filtros) -> List[Dict]:
+        """Buscar cotizaciones con filtros"""
         db = self._get_session()
-        cotizaciones = crud.get_all_cotizaciones(db)
+        cotizaciones = crud.search_cotizaciones(db, **filtros)
         return [self._cotizacion_to_dict(c) for c in cotizaciones]
     
     def get_cotizacion(self, cotizacion_id: int) -> Optional[Dict]:
@@ -225,92 +251,79 @@ class DatabaseHelper:
         cotizacion = crud.get_cotizacion(db, cotizacion_id)
         return self._cotizacion_to_dict(cotizacion) if cotizacion else None
     
-    def crear_cotizacion(self, datos: Dict) -> Optional[Dict]:
-        """Crear nueva cotización"""
-        try:
-            db = self._get_session()
-            cotizacion = crud.create_cotizacion(db, datos)
-            return self._cotizacion_to_dict(cotizacion)
-        except Exception as e:
-            print(f"Error al crear cotización: {e}")
-            return None
-    
-    def actualizar_cotizacion(self, cotizacion_id: int, datos: Dict) -> Optional[Dict]:
+    def actualizar_cotizacion(self, cotizacion_id: int, datos: Dict) -> bool:
         """Actualizar cotización"""
         try:
             db = self._get_session()
-            cotizacion = crud.update_cotizacion(db, cotizacion_id, datos)
-            return self._cotizacion_to_dict(cotizacion) if cotizacion else None
+            crud.update_cotizacion(db, cotizacion_id, datos)
+            return True
         except Exception as e:
             print(f"Error al actualizar cotización: {e}")
-            return None
+            return False
     
-    def buscar_cotizaciones(self, texto: str) -> List[Dict]:
-        """Buscar cotizaciones"""
-        db = self._get_session()
-        cotizaciones = crud.search_cotizaciones(db, texto)
-        return [self._cotizacion_to_dict(c) for c in cotizaciones]
+    def cancelar_cotizacion(self, cotizacion_id: int) -> bool:
+        """Cancelar cotización"""
+        try:
+            db = self._get_session()
+            crud.cancel_cotizacion(db, cotizacion_id)
+            return True
+        except Exception as e:
+            print(f"Error al cancelar cotización: {e}")
+            return False
+    
+    def convertir_cotizacion_a_nota(self, cotizacion_id: int) -> Optional[int]:
+        """Convertir cotización a nota de venta"""
+        try:
+            db = self._get_session()
+            nota = crud.convertir_cotizacion_a_nota(db, cotizacion_id)
+            return nota.id if nota else None
+        except Exception as e:
+            print(f"Error al convertir cotización: {e}")
+            return None
     
     # ==================== NOTAS DE VENTA ====================
     
-    def get_notas(self) -> List[Dict]:
-        """Obtener todas las notas de venta"""
+    def crear_nota(self, datos: Dict) -> Optional[int]:
+        """Crear nueva nota de venta"""
+        try:
+            db = self._get_session()
+            nota = crud.create_nota_venta(db, datos)
+            return nota.id if nota else None
+        except Exception as e:
+            print(f"Error al crear nota: {e}")
+            return None
+    
+    def buscar_notas(self, **filtros) -> List[Dict]:
+        """Buscar notas con filtros"""
         db = self._get_session()
-        notas = crud.get_all_notas(db)
+        notas = crud.search_notas_venta(db, **filtros)
         return [self._nota_to_dict(n) for n in notas]
     
     def get_nota(self, nota_id: int) -> Optional[Dict]:
         """Obtener nota por ID"""
         db = self._get_session()
-        nota = crud.get_nota(db, nota_id)
+        nota = crud.get_nota_venta(db, nota_id)
         return self._nota_to_dict(nota) if nota else None
     
-    def crear_nota(self, datos: Dict) -> Optional[Dict]:
-        """Crear nueva nota de venta"""
+    def actualizar_nota(self, nota_id: int, datos: Dict) -> bool:
+        """Actualizar nota"""
         try:
             db = self._get_session()
-            nota = crud.create_nota(db, datos)
-            return self._nota_to_dict(nota)
-        except Exception as e:
-            print(f"Error al crear nota: {e}")
-            return None
-    
-    def actualizar_nota(self, nota_id: int, datos: Dict) -> Optional[Dict]:
-        """Actualizar nota de venta"""
-        try:
-            db = self._get_session()
-            nota = crud.get_nota(db, nota_id)
-            if not nota:
-                return None
-            
-            for key, value in datos.items():
-                if hasattr(nota, key):
-                    setattr(nota, key, value)
-            
-            db.commit()
-            db.refresh(nota)
-            
-            return self._nota_to_dict(nota)
-            
+            crud.update_nota_venta(db, nota_id, datos)
+            return True
         except Exception as e:
             print(f"Error al actualizar nota: {e}")
-            db.rollback()
-            return None
-        
+            return False
+    
     def cancelar_nota(self, nota_id: int) -> bool:
-        """Cancelar una nota de venta"""
+        """Cancelar nota"""
         try:
             db = self._get_session()
-            return crud.cancelar_nota(db, nota_id)
+            crud.cancel_nota_venta(db, nota_id)
+            return True
         except Exception as e:
             print(f"Error al cancelar nota: {e}")
             return False
-    
-    def buscar_notas(self, texto: str) -> List[Dict]:
-        """Buscar notas"""
-        db = self._get_session()
-        notas = crud.search_notas(db, texto)
-        return [self._nota_to_dict(n) for n in notas]
     
     # ==================== PAGOS DE NOTAS ====================
     
@@ -327,8 +340,8 @@ class DatabaseHelper:
             nota_actualizada = crud.registrar_pago_nota(db, nota_id, monto, fecha_pago, metodo_pago, memo)
             return self._nota_to_dict(nota_actualizada) if nota_actualizada else None
         except Exception as e:
-            print(f"Error al registrar pago: {e}")
-            raise e 
+            print(f"Error en db_helper al registrar pago: {e}")
+            raise e
     
     def eliminar_pago(self, pago_id: int) -> Optional[Dict]:
         """Elimina un pago y devuelve la nota actualizada"""
@@ -337,15 +350,25 @@ class DatabaseHelper:
             nota_actualizada = crud.eliminar_pago_nota(db, pago_id)
             return self._nota_to_dict(nota_actualizada)
         except Exception as e:
-            print(f"Error al eliminar pago: {e}")
+            print(f"Error en db_helper al eliminar pago: {e}")
             raise e
     
     # ==================== NOTAS DE PROVEEDOR ====================
     
-    def get_notas_proveedor(self) -> List[Dict]:
-        """Obtener todas las notas de proveedor"""
+    def crear_nota_proveedor(self, datos: Dict) -> Optional[int]:
+        """Crear nueva nota de proveedor"""
+        try:
+            db = self._get_session()
+            nota = crud.create_nota_proveedor(db, datos)
+            return nota.id if nota else None
+        except Exception as e:
+            print(f"Error al crear nota proveedor: {e}")
+            return None
+    
+    def buscar_notas_proveedor(self, **filtros) -> List[Dict]:
+        """Buscar notas de proveedor con filtros"""
         db = self._get_session()
-        notas = crud.get_all_notas_proveedor(db)
+        notas = crud.search_notas_proveedor(db, **filtros)
         return [self._nota_proveedor_to_dict(n) for n in notas]
     
     def get_nota_proveedor(self, nota_id: int) -> Optional[Dict]:
@@ -354,52 +377,25 @@ class DatabaseHelper:
         nota = crud.get_nota_proveedor(db, nota_id)
         return self._nota_proveedor_to_dict(nota) if nota else None
     
-    def crear_nota_proveedor(self, datos: Dict) -> Optional[Dict]:
-        """Crear nueva nota de proveedor"""
-        try:
-            db = self._get_session()
-            nota = crud.create_nota_proveedor(db, datos)
-            return self._nota_proveedor_to_dict(nota)
-        except Exception as e:
-            print(f"Error al crear nota proveedor: {e}")
-            return None
-    
-    def actualizar_nota_proveedor(self, nota_id: int, datos: Dict) -> Optional[Dict]:
+    def actualizar_nota_proveedor(self, nota_id: int, datos: Dict) -> bool:
         """Actualizar nota de proveedor"""
         try:
             db = self._get_session()
-            nota = crud.get_nota_proveedor(db, nota_id)
-            if not nota:
-                return None
-            
-            for key, value in datos.items():
-                if hasattr(nota, key):
-                    setattr(nota, key, value)
-            
-            db.commit()
-            db.refresh(nota)
-            
-            return self._nota_proveedor_to_dict(nota)
-            
+            crud.update_nota_proveedor(db, nota_id, datos)
+            return True
         except Exception as e:
             print(f"Error al actualizar nota proveedor: {e}")
-            db.rollback()
-            return None
-        
+            return False
+    
     def cancelar_nota_proveedor(self, nota_id: int) -> bool:
-        """Cancelar una nota de proveedor"""
+        """Cancelar nota de proveedor"""
         try:
             db = self._get_session()
-            return crud.cancelar_nota_proveedor(db, nota_id)
+            crud.cancel_nota_proveedor(db, nota_id)
+            return True
         except Exception as e:
             print(f"Error al cancelar nota proveedor: {e}")
             return False
-    
-    def buscar_notas_proveedor(self, texto: str) -> List[Dict]:
-        """Buscar notas de proveedor"""
-        db = self._get_session()
-        notas = crud.search_notas_proveedor(db, texto)
-        return [self._nota_proveedor_to_dict(n) for n in notas]
     
     # ==================== PAGOS DE NOTAS PROVEEDOR ====================
     
@@ -410,53 +406,54 @@ class DatabaseHelper:
         return [self._pago_proveedor_to_dict(p) for p in pagos]
 
     def registrar_pago_proveedor(self, nota_id: int, monto: float, fecha_pago: datetime, metodo_pago: str, memo: str) -> Optional[Dict]:
-        """Registrar un pago a proveedor"""
+        """Registrar un pago a proveedor y devolver la nota actualizada"""
         try:
             db = self._get_session()
             nota_actualizada = crud.registrar_pago_nota_proveedor(db, nota_id, monto, fecha_pago, metodo_pago, memo)
             return self._nota_proveedor_to_dict(nota_actualizada) if nota_actualizada else None
         except Exception as e:
-            print(f"Error al registrar pago proveedor: {e}")
-            raise e 
+            print(f"Error en db_helper al registrar pago proveedor: {e}")
+            raise e
     
     def eliminar_pago_proveedor(self, pago_id: int) -> Optional[Dict]:
-        """Eliminar un pago a proveedor"""
+        """Elimina un pago a proveedor y devuelve la nota actualizada"""
         try:
             db = self._get_session()
             nota_actualizada = crud.eliminar_pago_nota_proveedor(db, pago_id)
             return self._nota_proveedor_to_dict(nota_actualizada)
         except Exception as e:
-            print(f"Error al eliminar pago proveedor: {e}")
+            print(f"Error en db_helper al eliminar pago proveedor: {e}")
             raise e
-
+    
     # ==================== CONFIGURACIÓN EMPRESA ====================
-
+    
     def get_config_empresa(self) -> Optional[Dict]:
-        """Obtener configuración de la empresa"""
+        """Obtener configuración de empresa"""
         try:
             from server.models import ConfigEmpresa
-            
             db = self._get_session()
             config = db.query(ConfigEmpresa).first()
             
-            if config:
-                return {
-                    'id': config.id,
-                    'nombre_comercial': config.nombre_comercial,
-                    'razon_social': config.razon_social,
-                    'rfc': config.rfc,
-                    'calle': config.calle,
-                    'colonia': config.colonia,
-                    'ciudad': config.ciudad,
-                    'estado': config.estado,
-                    'cp': config.cp,
-                    'telefono1': config.telefono1,
-                    'telefono2': config.telefono2,
-                    'email': config.email,
-                    'sitio_web': config.sitio_web,
-                    'logo_data': config.logo_data  # Bytes del logo
-                }
-            return None
+            if not config:
+                return None
+            
+            return {
+                'id': config.id,
+                'nombre_comercial': config.nombre_comercial,
+                'razon_social': config.razon_social or '',
+                'rfc': config.rfc or '',
+                'calle': config.calle or '',
+                'colonia': config.colonia or '',
+                'ciudad': config.ciudad or '',
+                'estado': config.estado or '',
+                'cp': config.cp or '',
+                'pais': config.pais or 'México',
+                'telefono1': config.telefono1 or '',
+                'telefono2': config.telefono2 or '',
+                'email': config.email or '',
+                'sitio_web': config.sitio_web or '',
+                'logo_data': config.logo_data
+            }
         except Exception as e:
             print(f"Error get_config_empresa: {e}")
             return None
@@ -465,17 +462,14 @@ class DatabaseHelper:
         """Guardar o actualizar configuración de empresa"""
         try:
             from server.models import ConfigEmpresa
-            
             db = self._get_session()
             config = db.query(ConfigEmpresa).first()
             
             if config:
-                # Actualizar
                 for key, value in datos.items():
                     if hasattr(config, key):
                         setattr(config, key, value)
             else:
-                # Crear nueva
                 config = ConfigEmpresa(**datos)
                 db.add(config)
             
@@ -492,7 +486,6 @@ class DatabaseHelper:
         """Obtener todos los usuarios"""
         try:
             from server.models import Usuario
-            
             db = self._get_session()
             usuarios = db.query(Usuario).all()
             return [self._usuario_to_dict(u) for u in usuarios]
@@ -504,7 +497,6 @@ class DatabaseHelper:
         """Obtener usuario por ID"""
         try:
             from server.models import Usuario
-            
             db = self._get_session()
             usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
             return self._usuario_to_dict(usuario) if usuario else None
@@ -516,7 +508,6 @@ class DatabaseHelper:
         """Obtener usuario por username"""
         try:
             from server.models import Usuario
-            
             db = self._get_session()
             usuario = db.query(Usuario).filter(Usuario.username == username).first()
             return self._usuario_to_dict(usuario) if usuario else None
@@ -528,10 +519,9 @@ class DatabaseHelper:
         """Crear nuevo usuario"""
         try:
             from server.models import Usuario
-            
             db = self._get_session()
             
-            # Validar que no exista el username
+            # Validar username único
             existe = db.query(Usuario).filter(Usuario.username == datos['username']).first()
             if existe:
                 return False
@@ -539,7 +529,6 @@ class DatabaseHelper:
             nuevo_usuario = Usuario(**datos)
             db.add(nuevo_usuario)
             db.commit()
-            
             return True
         except Exception as e:
             print(f"Error crear_usuario: {e}")
@@ -550,7 +539,6 @@ class DatabaseHelper:
         """Actualizar usuario existente"""
         try:
             from server.models import Usuario
-            
             db = self._get_session()
             usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
             
@@ -568,20 +556,31 @@ class DatabaseHelper:
             db.rollback()
             return False
 
-    def eliminar_usuario(self, usuario_id: int) -> bool:
-        """Eliminar usuario (soft delete)"""
+    def contar_admins_activos(self) -> int:
+        """Contar admins activos en el sistema"""
         try:
             from server.models import Usuario
-            
+            db = self._get_session()
+            return db.query(Usuario).filter(
+                Usuario.rol == 'Admin',
+                Usuario.activo == True
+            ).count()
+        except Exception as e:
+            print(f"Error contar_admins_activos: {e}")
+            return 0
+
+    def eliminar_usuario(self, usuario_id: int) -> bool:
+        """Eliminar usuario (hard delete)"""
+        try:
+            from server.models import Usuario
             db = self._get_session()
             usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
             
             if not usuario:
                 return False
             
-            usuario.activo = False
+            db.delete(usuario)
             db.commit()
-            
             return True
         except Exception as e:
             print(f"Error eliminar_usuario: {e}")
@@ -592,19 +591,14 @@ class DatabaseHelper:
         """Validar credenciales de login"""
         usuario = self.get_usuario_by_username(username)
         
-        if not usuario:
-            return None
-        
-        if not usuario['activo']:
+        if not usuario or not usuario['activo']:
             return None
         
         password_hash = generar_hash_password(password)
         
         if usuario['password_hash'] == password_hash:
-            # Actualizar último acceso
             try:
                 from server.models import Usuario
-                
                 db = self._get_session()
                 user = db.query(Usuario).filter(Usuario.id == usuario['id']).first()
                 if user:
@@ -612,46 +606,16 @@ class DatabaseHelper:
                     db.commit()
             except:
                 pass
-            
-            return {
-                'id': usuario['id'],
-                'username': usuario['username'],
-                'nombre_completo': usuario['nombre_completo'],
-                'rol': usuario['rol']
-            }
+            return usuario
         
         return None
     
-    # ==================== REPORTES ====================
+    # ==================== ESTADÍSTICAS ====================
     
-    def get_reporte_ventas(self, fecha_ini: datetime, fecha_fin: datetime) -> List[Dict]:
+    def get_estadisticas(self) -> Dict:
+        """Obtener estadísticas del dashboard"""
         db = self._get_session()
-        notas = crud.get_reporte_ventas_por_periodo(db, fecha_ini, fecha_fin)
-        return [self._nota_to_dict(n) for n in notas]
-
-    def get_reporte_servicios(self, fecha_ini: datetime, fecha_fin: datetime) -> List[Dict]:
-        db = self._get_session()
-        resultados = crud.get_reporte_servicios_mas_solicitados(db, fecha_ini, fecha_fin)
-        return [
-            {'descripcion': r.descripcion, 'total_vendido': int(r.total_vendido)}
-            for r in resultados
-        ]
-
-    def get_reporte_clientes(self, fecha_ini: datetime, fecha_fin: datetime) -> List[Dict]:
-        db = self._get_session()
-        resultados = crud.get_reporte_clientes_frecuentes(db, fecha_ini, fecha_fin)
-        return [
-            {'cliente': r.nombre, 'total_notas': int(r.total_notas), 'monto_total': r.monto_total}
-            for r in resultados
-        ]
-
-    def get_reporte_cuentas_por_cobrar(self) -> List[Dict]:
-        db = self._get_session()
-        notas = crud.get_reporte_cuentas_por_cobrar(db)
-        return [self._nota_to_dict(n) for n in notas]
-        
-    def get_reporte_inventario_bajo_stock(self) -> List[Dict]:
-        return self.get_productos_bajo_stock()
+        return crud.get_estadisticas_dashboard(db)
     
     # ==================== CONVERSORES (ORM -> Dict) ====================
     
@@ -701,15 +665,29 @@ class DatabaseHelper:
             'id': producto.id,
             'codigo': producto.codigo,
             'nombre': producto.nombre,
-            'categoria': producto.categoria,
-            'stock_actual': producto.stock_actual,
-            'stock_min': producto.stock_min,
+            'categoria': producto.categoria or '',
             'ubicacion': producto.ubicacion or '',
+            'proveedor': producto.proveedor.nombre if producto.proveedor else '',
+            'proveedor_id': producto.proveedor_id,
             'precio_compra': producto.precio_compra,
             'precio_venta': producto.precio_venta,
-            'proveedor_id': producto.proveedor_id,
-            'proveedor_nombre': producto.proveedor.nombre if producto.proveedor else '',
+            'stock_actual': producto.stock_actual,
+            'stock_min': producto.stock_min,
             'descripcion': producto.descripcion or ''
+        }
+    
+    @staticmethod
+    def _movimiento_to_dict(movimiento) -> Dict:
+        """Convertir MovimientoInventario ORM a diccionario"""
+        if not movimiento: return {}
+        return {
+            'id': movimiento.id,
+            'fecha': movimiento.created_at.strftime("%d/%m/%Y %H:%M"),
+            'tipo': movimiento.tipo,
+            'producto': movimiento.producto.nombre,
+            'cantidad': movimiento.cantidad,
+            'usuario': movimiento.usuario,
+            'motivo': movimiento.motivo
         }
     
     @staticmethod
@@ -721,24 +699,17 @@ class DatabaseHelper:
             'folio': orden.folio,
             'cliente_id': orden.cliente_id,
             'cliente_nombre': orden.cliente.nombre if orden.cliente else '',
-            'vehiculo_marca': orden.vehiculo_marca or '',
-            'vehiculo_modelo': orden.vehiculo_modelo or '',
-            'vehiculo_ano': orden.vehiculo_ano or '',
-            'vehiculo_placas': orden.vehiculo_placas or '',
-            'vehiculo_vin': orden.vehiculo_vin or '',
-            'vehiculo_color': orden.vehiculo_color or '',
-            'vehiculo_kilometraje': orden.vehiculo_kilometraje or '',
+            'vehiculo': orden.vehiculo or '',
             'estado': orden.estado,
-            'mecanico_asignado': orden.mecanico_asignado or '',
-            'fecha_recepcion': orden.fecha_recepcion.strftime("%d/%m/%Y") if orden.fecha_recepcion else '',
+            'fecha_entrada': orden.fecha_entrada.strftime("%d/%m/%Y %H:%M"),
             'fecha_promesa': orden.fecha_promesa.strftime("%d/%m/%Y") if orden.fecha_promesa else '',
-            'fecha_entrega': orden.fecha_entrega.strftime("%d/%m/%Y") if orden.fecha_entrega else '',
+            'fecha_salida': orden.fecha_salida.strftime("%d/%m/%Y %H:%M") if orden.fecha_salida else '',
+            'mecanico': orden.mecanico or '',
             'observaciones': orden.observaciones or '',
-            'nota_folio': orden.nota_folio or '',
-            'items': [{
-                'cantidad': i.cantidad,
-                'descripcion': i.descripcion
-            } for i in orden.items]
+            'subtotal': orden.subtotal,
+            'impuestos': orden.impuestos,
+            'total': orden.total,
+            'servicios': [s.descripcion for s in orden.servicios]
         }
     
     @staticmethod
@@ -750,19 +721,19 @@ class DatabaseHelper:
             'folio': cotizacion.folio,
             'cliente_id': cotizacion.cliente_id,
             'cliente_nombre': cotizacion.cliente.nombre if cotizacion.cliente else '',
+            'proyecto': cotizacion.proyecto or '',
             'estado': cotizacion.estado,
-            'vigencia': cotizacion.vigencia,
+            'fecha': cotizacion.fecha.strftime("%d/%m/%Y"),
+            'vigencia': cotizacion.vigencia.strftime("%d/%m/%Y") if cotizacion.vigencia else '',
             'subtotal': cotizacion.subtotal,
             'impuestos': cotizacion.impuestos,
             'total': cotizacion.total,
-            'observaciones': cotizacion.observaciones or '',
-            'nota_folio': cotizacion.nota_folio or '',
+            'nota_folio': cotizacion.nota_folio,
             'items': [{
                 'cantidad': i.cantidad,
                 'descripcion': i.descripcion,
                 'precio_unitario': i.precio_unitario,
-                'importe': i.importe,
-                'impuesto': i.impuesto
+                'importe': i.importe
             } for i in cotizacion.items]
         }
     
@@ -778,7 +749,7 @@ class DatabaseHelper:
             'metodo_pago': pago.metodo_pago,
             'memo': pago.memo or ''
         }
-    
+
     @staticmethod
     def _nota_to_dict(nota) -> Dict:
         """Convertir NotaVenta ORM a diccionario"""
@@ -797,8 +768,6 @@ class DatabaseHelper:
             'total': nota.total,
             'total_pagado': nota.total_pagado,
             'saldo': nota.saldo,
-            'cotizacion_folio': nota.cotizacion_folio or '',
-            'orden_folio': nota.orden_folio or '',
             'items': [{
                 'cantidad': i.cantidad,
                 'descripcion': i.descripcion,
