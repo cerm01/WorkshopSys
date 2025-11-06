@@ -501,7 +501,7 @@ class NotasProveedoresWindow(QDialog):
             nota_data = {
                 'proveedor_id': proveedor_id,
                 'metodo_pago': None, 
-                'fecha': self.date_fecha.date().toPyDate(),
+                'fecha': self.date_fecha.date().toPyDate().isoformat(),
                 'observaciones': self.txt_referencia.text()
             }
             

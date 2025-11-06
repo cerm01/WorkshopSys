@@ -397,7 +397,7 @@ class NotasWindow(QDialog):
             nota_data = {
                 'cliente_id': cliente_id,
                 'metodo_pago': None,
-                'fecha': self.date_fecha.date().toPyDate(),
+                'fecha': self.date_fecha.date().toPyDate().isoformat(),
                 'observaciones': self.txt_referencia.text()
             }
             
@@ -729,27 +729,41 @@ class NotasWindow(QDialog):
             self.tabla_items.selectRow(fila + 1)
     
     def intercambiar_filas(self, fila1, fila2):
-        # Limpiar spans
-        self.tabla_items.setSpan(fila1, 0, 1, 1)
-        self.tabla_items.setSpan(fila2, 0, 1, 1)
+        # Usar takeItem para tomar posesión de los items y evitar que se eliminen
+        items_fila1 = []
+        items_fila2 = []
         
-        # Intercambiar items
         for col in range(self.tabla_model.columnCount()):
-            item1 = self.tabla_model.item(fila1, col)
-            item2 = self.tabla_model.item(fila2, col)
-            self.tabla_model.setItem(fila1, col, item2.clone() if item2 else QStandardItem(""))
-            self.tabla_model.setItem(fila2, col, item1.clone() if item1 else QStandardItem(""))
+            items_fila1.append(self.tabla_model.takeItem(fila1, col))
+            items_fila2.append(self.tabla_model.takeItem(fila2, col))
+
+        # Colocar los items en sus nuevas filas
+        for col, item in enumerate(items_fila2):
+            self.tabla_model.setItem(fila1, col, item if item else QStandardItem(""))
         
+        for col, item in enumerate(items_fila1):
+            self.tabla_model.setItem(fila2, col, item if item else QStandardItem(""))
+
         # Intercambiar metadatos
-        self.tipo_por_fila[fila1], self.tipo_por_fila[fila2] = \
-            self.tipo_por_fila.get(fila2, 'normal'), self.tipo_por_fila.get(fila1, 'normal')
-        self.iva_por_fila[fila1], self.iva_por_fila[fila2] = \
-            self.iva_por_fila.get(fila2, 16.0), self.iva_por_fila.get(fila1, 16.0)
+        tipo1 = self.tipo_por_fila.get(fila1, 'normal')
+        tipo2 = self.tipo_por_fila.get(fila2, 'normal')
+        self.tipo_por_fila[fila1] = tipo2
+        self.tipo_por_fila[fila2] = tipo1
         
-        # Restaurar spans
+        iva1 = self.iva_por_fila.get(fila1, 16.0)
+        iva2 = self.iva_por_fila.get(fila2, 16.0)
+        self.iva_por_fila[fila1] = iva2
+        self.iva_por_fila[fila2] = iva1
+        
+        # Restaurar spans para ambas filas (AQUÍ ESTÁ LA CORRECCIÓN)
         for f in [fila1, fila2]:
-            if self.tipo_por_fila.get(f, 'normal') in ['nota', 'seccion']:
+            tipo = self.tipo_por_fila.get(f, 'normal')
+            if tipo in ['nota', 'seccion']:
+                # Asignar span de 5 columnas para notas/secciones
                 self.tabla_items.setSpan(f, 0, 1, 5)
+            else:
+                # Restaurar span normal (1 por columna)
+                self.tabla_items.setSpan(f, 0, 1, 1)
     
     def eliminar_fila(self, fila):
         if QMessageBox.question(self, 'Confirmar', '¿Eliminar este item?',

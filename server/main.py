@@ -198,10 +198,38 @@ def get_notas(db: Session = Depends(get_db)):
 
 @app.post("/notas")
 async def crear_nota(datos: Dict[str, Any], db: Session = Depends(get_db)):
-    nota = crud.create_nota_venta(db, datos)
+    items = datos.pop('items', [])
+    estado = datos.pop('estado', 'Registrado')
+    cotizacion_folio = datos.pop('cotizacion_folio', None)
+    orden_folio = datos.pop('orden_folio', None)
+
+    if 'fecha' in datos and isinstance(datos['fecha'], str):
+        try:
+            # El cliente envía 'date' (YYYY-MM-DD)
+            fecha_obj = datetime.strptime(datos['fecha'], '%Y-%m-%d')
+            datos['fecha'] = fecha_obj
+        except ValueError:
+            datos['fecha'] = datetime.now() # Fallback
+
+    nota = crud.create_nota_venta(
+        db, 
+        nota_data=datos, 
+        items=items, 
+        estado=estado
+    )
+
+    if cotizacion_folio:
+        nota.cotizacion_folio = cotizacion_folio
+    if orden_folio:
+        nota.orden_folio = orden_folio
+    
+    if cotizacion_folio or orden_folio:
+        db.commit()
+        db.refresh(nota)
+
     await manager.broadcast({
         "type": "nota_creada",
-        "data": {"id": nota.id}
+        "data": {"id": nota.id} 
     })
     return _nota_to_dict(nota)
 

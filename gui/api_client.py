@@ -156,9 +156,12 @@ class TallerAPIClient:
     def get_all_notas_venta(self) -> List[Dict]:
         return self._get("/notas") or []
     
-    def crear_nota(self, datos: Dict) -> Optional[int]:
-        result = self._post("/notas", datos)
-        return result['id'] if result else None
+    def crear_nota(self, datos: Dict, items: List[Dict], **kwargs) -> Optional[Dict]:
+        datos_completos = datos.copy()
+        datos_completos['items'] = items
+        datos_completos.update(kwargs)
+        
+        return self._post("/notas", datos_completos)
     
     def buscar_notas(self, **filtros) -> List[Dict]:
         notas = self.get_all_notas_venta()
