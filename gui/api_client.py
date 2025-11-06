@@ -19,11 +19,13 @@ class TallerAPIClient:
             return None
     
     def _post(self, endpoint: str, data: dict):
-        """POST request"""
         try:
             response = self.session.post(f"{self.base_url}{endpoint}", json=data)
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            print(f"Error {e.response.status_code} POST {endpoint}: {e.response.text}")
+            return None
         except Exception as e:
             print(f"Error POST {endpoint}: {e}")
             return None

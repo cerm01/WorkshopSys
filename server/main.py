@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 import sys
 import os
+import traceback
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from server.database import get_db_sync, SessionLocal
@@ -20,7 +21,6 @@ from server.models import (
 
 app = FastAPI(title="Taller API Distribuida")
 
-# CORS para permitir conexiones
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -41,7 +41,6 @@ class ConnectionManager:
         self.active_connections.remove(websocket)
     
     async def broadcast(self, message: dict):
-        """Enviar mensaje a todos los clientes conectados"""
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
@@ -50,19 +49,16 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# ==================== WEBSOCKET ENDPOINT ====================
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
             data = await websocket.receive_text()
-            # Mantener conexión viva
             await websocket.send_json({"status": "connected"})
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-# ==================== HELPER ====================
 def get_db():
     db = SessionLocal()
     try:
@@ -190,48 +186,66 @@ async def crear_cotizacion(datos: Dict[str, Any], db: Session = Depends(get_db))
     })
     return _cotizacion_to_dict(cotizacion)
 
-# ==================== NOTAS DE VENTA ====================
+# ==================== NOTAS DE VENTA (CON DEBUG) ====================
+@app.post("/notas")
+async def crear_nota(datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        print("\n" + "="*60)
+        print("📥 DATOS RECIBIDOS DEL CLIENTE:")
+        print(f"   Datos completos: {datos}")
+        print(f"   Tipo de datos: {type(datos)}")
+        print("="*60 + "\n")
+        
+        items = datos.pop('items', [])
+        estado = datos.pop('estado', 'Registrado')
+        cotizacion_folio = datos.pop('cotizacion_folio', None)
+        orden_folio = datos.pop('orden_folio', None)
+
+        print(f"📦 Items extraídos: {items}")
+        print(f"🏷️  Estado: {estado}")
+        print(f"📋 Datos nota: {datos}")
+        
+        if 'fecha' in datos:
+            print(f"📅 Fecha recibida: '{datos['fecha']}' (tipo: {type(datos['fecha'])})")
+            if isinstance(datos['fecha'], str):
+                try:
+                    fecha_obj = datetime.strptime(datos['fecha'], '%Y-%m-%d')
+                    datos['fecha'] = fecha_obj
+                    print(f"✅ Fecha convertida: {fecha_obj}")
+                except ValueError as ve:
+                    print(f"⚠️  Error convirtiendo fecha: {ve}")
+                    datos['fecha'] = datetime.now()
+
+        print(f"\n🔧 Llamando crud.create_nota_venta...")
+        nota = crud.create_nota_venta(db, nota_data=datos, items=items, estado=estado)
+        print(f"✅ Nota creada: ID={nota.id}, Folio={nota.folio}")
+
+        if cotizacion_folio or orden_folio:
+            nota.cotizacion_folio = cotizacion_folio
+            nota.orden_folio = orden_folio
+            db.commit()
+            db.refresh(nota)
+
+        await manager.broadcast({"type": "nota_creada", "data": {"id": nota.id}})
+        
+        resultado = _nota_to_dict(nota)
+        print(f"📤 Retornando: {resultado}\n")
+        return resultado
+        
+    except Exception as e:
+        print("\n" + "="*60)
+        print("❌ ERROR AL CREAR NOTA:")
+        print(f"   Mensaje: {str(e)}")
+        print(f"   Tipo: {type(e).__name__}")
+        print("\n📜 TRACEBACK COMPLETO:")
+        print(traceback.format_exc())
+        print("="*60 + "\n")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/notas")
 def get_notas(db: Session = Depends(get_db)):
     notas = crud.get_all_notas_venta(db)
     return [_nota_to_dict(n) for n in notas]
-
-@app.post("/notas")
-async def crear_nota(datos: Dict[str, Any], db: Session = Depends(get_db)):
-    items = datos.pop('items', [])
-    estado = datos.pop('estado', 'Registrado')
-    cotizacion_folio = datos.pop('cotizacion_folio', None)
-    orden_folio = datos.pop('orden_folio', None)
-
-    if 'fecha' in datos and isinstance(datos['fecha'], str):
-        try:
-            # El cliente envía 'date' (YYYY-MM-DD)
-            fecha_obj = datetime.strptime(datos['fecha'], '%Y-%m-%d')
-            datos['fecha'] = fecha_obj
-        except ValueError:
-            datos['fecha'] = datetime.now() # Fallback
-
-    nota = crud.create_nota_venta(
-        db, 
-        nota_data=datos, 
-        items=items, 
-        estado=estado
-    )
-
-    if cotizacion_folio:
-        nota.cotizacion_folio = cotizacion_folio
-    if orden_folio:
-        nota.orden_folio = orden_folio
-    
-    if cotizacion_folio or orden_folio:
-        db.commit()
-        db.refresh(nota)
-
-    await manager.broadcast({
-        "type": "nota_creada",
-        "data": {"id": nota.id} 
-    })
-    return _nota_to_dict(nota)
 
 # ==================== MOVIMIENTOS INVENTARIO ====================
 @app.post("/inventario/movimiento")
@@ -312,13 +326,12 @@ def _orden_to_dict(o):
         'id': o.id,
         'folio': o.folio,
         'cliente_id': o.cliente_id,
-        # Campos añadidos/corregidos que necesita el diálogo:
         'cliente_nombre': o.cliente.nombre if o.cliente else 'N/A',
         'vehiculo_marca': o.vehiculo_marca or '',
         'vehiculo_modelo': o.vehiculo_modelo or '',
         'vehiculo_ano': o.vehiculo_ano or '', 
         'estado': o.estado,
-        'fecha_recepcion': o.fecha_recepcion.isoformat() if o.fecha_recepcion else '', # Nombre corregido
+        'fecha_recepcion': o.fecha_recepcion.isoformat() if o.fecha_recepcion else '',
         'mecanico_asignado': o.mecanico_asignado or '',
         'nota_folio': o.nota_folio or ''
     }
@@ -343,10 +356,33 @@ def _nota_to_dict(n):
         'id': n.id,
         'folio': n.folio,
         'cliente_id': n.cliente_id,
+        'cliente_nombre': n.cliente.nombre if n.cliente else '',
+        'estado': n.estado,
+        'metodo_pago': n.metodo_pago or '',
+        'subtotal': float(n.subtotal or 0),
+        'impuestos': float(n.impuestos or 0),
         'total': float(n.total or 0),
-        'pagado': float(n.pagado or 0),
+        'total_pagado': float(n.total_pagado or 0),
         'saldo': float(n.saldo or 0),
-        'estado_pago': n.estado_pago
+        'fecha': n.fecha.isoformat() if n.fecha else '',
+        'observaciones': n.observaciones or '',
+        'cotizacion_folio': n.cotizacion_folio or '',
+        'orden_folio': n.orden_folio or '',
+        'items': [{
+            'id': i.id,
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion,
+            'precio_unitario': float(i.precio_unitario or 0),
+            'importe': float(i.importe or 0),
+            'impuesto': float(i.impuesto or 0)
+        } for i in n.items] if hasattr(n, 'items') else [],
+        'pagos': [{
+            'id': p.id,
+            'monto': float(p.monto),
+            'fecha_pago': p.fecha_pago.isoformat() if p.fecha_pago else '',
+            'metodo_pago': p.metodo_pago,
+            'memo': p.memo or ''
+        } for p in n.pagos] if hasattr(n, 'pagos') else []
     }
 
 def _pago_proveedor_to_dict(pago):
@@ -389,7 +425,6 @@ def _nota_proveedor_to_dict(nota):
 # ==================== NOTAS DE PROVEEDOR ====================
 @app.get("/notas_proveedor")
 def get_notas_proveedor(db: Session = Depends(get_db)):
-    # Asumimos que crud.get_all_notas_proveedor existe (está en tu crud.py)
     notas = crud.get_all_notas_proveedor(db)
     return [_nota_proveedor_to_dict(n) for n in notas]
 
@@ -403,7 +438,6 @@ def get_nota_proveedor(nota_id: int, db: Session = Depends(get_db)):
 @app.post("/notas_proveedor/{nota_id}/pagar")
 async def registrar_pago_proveedor_api(nota_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
     try:
-        # Convertir fecha ISO (ej: "2025-11-06") a objeto date
         fecha_pago_obj = datetime.fromisoformat(datos['fecha_pago']).date()
 
         nota = crud.registrar_pago_nota_proveedor(
