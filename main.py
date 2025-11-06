@@ -5,19 +5,17 @@ from gui.main_windows import MainWindow
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    RESTART_CODE = 1001 
+    result = RESTART_CODE
+    usuario = None
     
-    # Mostrar ventana de login
-    login = LoginWindow()
-    
-    if login.exec_() == QDialog.Accepted:
-        # Usuario autenticado correctamente
-        usuario = login.get_usuario_logueado()
+    while result == RESTART_CODE:
+        login = LoginWindow()
         
-        # Crear y mostrar ventana principal
-        window = MainWindow(usuario)
-        window.show()
-        
-        sys.exit(app.exec_())
-    else:
-        # Usuario canceló o cerró el login
-        sys.exit(0)
+        if login.exec_() == QDialog.Accepted:
+            usuario = login.get_usuario_logueado()
+            window = MainWindow(usuario)
+            result = window.exec_() 
+        else:
+            result = 0 
+    sys.exit(0)
