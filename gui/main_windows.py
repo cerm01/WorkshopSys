@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFrame, QHBoxLayout, QToolButton, QDialog
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor
 
 from gui.administracion_windows import AdministracionWindow
@@ -140,6 +140,38 @@ class MainWindow(QDialog):
         main_dialog_layout = QVBoxLayout(self)
         main_dialog_layout.addWidget(central_widget)
         self.setLayout(main_dialog_layout)
+        self.precalentar_ventanas()
+
+    def precalentar_ventanas(self):
+        """Crea instancias de las ventanas principales para que abran rápido."""
+        # Usamos un QTimer para hacerlo justo después de que la ventana principal se muestre,
+        # para no bloquear el arranque inicial.
+        QTimer.singleShot(100, self._ejecutar_precalentado)
+
+    def _ejecutar_precalentado(self):
+        """Tarea en segundo plano para instanciar todas las ventanas."""
+        print("Pre-calentando ventanas en segundo plano...")
+        try:
+            if self.window_instances["administracion"] is None:
+                self.window_instances["administracion"] = AdministracionWindow(self)
+                # Pre-calentar las sub-ventanas de admin
+                self.window_instances["administracion"].precalentar_sub_ventanas()
+
+            if self.window_instances["clientes"] is None:
+                self.window_instances["clientes"] = ClientesWindow(self)
+
+            if self.window_instances["proveedores"] is None:
+                self.window_instances["proveedores"] = ProveedoresWindow(self)
+
+            if self.window_instances["inventario"] is None:
+                self.window_instances["inventario"] = InventarioWindow(self)
+
+            if self.window_instances["reportes"] is None:
+                self.window_instances["reportes"] = ReportesWindow(self)
+
+            print("Ventanas listas.")
+        except Exception as e:
+            print(f"Error durante pre-calentado: {e}")
     
     def create_main_content_layout(self):
         """Crea el layout para los botones principales"""

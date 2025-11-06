@@ -9,7 +9,6 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 
-# Importar estilos
 from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE, 
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
@@ -17,7 +16,7 @@ from gui.styles import (
 
 from gui.api_client import api_client as db_helper
 from gui.websocket_client import ws_client
-# Importar la nueva ventana de diálogo
+
 try:
     from gui.estado_cuenta_dialog import EstadoCuentaClienteDialog
 except ImportError as e:
@@ -31,63 +30,52 @@ class ClientesWindow(QDialog):
         self.setWindowTitle("Gestión de Clientes")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
 
-        # Configuración inicial
         self.setGeometry(100, 100, 1400, 800)
         self.setMinimumSize(1200, 700)
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
 
-        # Variables de control
         self.cliente_en_edicion = None
         self.modo_edicion = False
+        self._datos_cargados = False
         
-        # Configurar interfaz
         self.setup_ui()
+        
         if ws_client:
             ws_client.cliente_creado.connect(self.on_notificacion_remota)
             ws_client.cliente_actualizado.connect(self.on_notificacion_remota)
             ws_client.cliente_eliminado.connect(self.on_notificacion_remota)
-        self.cargar_datos_desde_bd()
         
-        # Forzar maximización DESPUÉS de configurar la UI y con más delay
-        QTimer.singleShot(100, self.maximizar_ventana)
-    
-    def maximizar_ventana(self):
-        """Maximizar la ventana forzando actualización completa"""
         self.setWindowState(Qt.WindowMaximized)
-        # Forzar actualización del layout
-        QTimer.singleShot(50, self.forzar_resize_completo)
+        QTimer.singleShot(100, self._cargar_datos_inicial)
+    
+    def _cargar_datos_inicial(self):
+        if not self._datos_cargados:
+            self.cargar_datos_desde_bd()
+            self._datos_cargados = True
 
     def setup_ui(self):
-        """Configurar la interfaz de usuario"""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
         
-        # Formulario de cliente (stretch = 0, no se expande verticalmente)
         self.crear_formulario_cliente(main_layout)
         
-        # Layout horizontal: Tabla + Panel de detalles (stretch = 10, se expande)
         contenedor_horizontal = QHBoxLayout()
         contenedor_horizontal.setSpacing(10)
         
-        # Tabla (70% del espacio)
         self.crear_tabla_clientes(contenedor_horizontal)
         
-        # Panel de detalles (30% del espacio)
         self.crear_panel_detalle(contenedor_horizontal)
         
-        main_layout.addLayout(contenedor_horizontal, 10)  # INCREMENTADO de 1 a 10
+        main_layout.addLayout(contenedor_horizontal, 10)
         
-        # Botones principales (stretch = 0, no se expanden)
         self.crear_botones_principales(main_layout)
         
         self.setLayout(main_layout)
         
-        # Forzar tamaño mínimo del layout
         main_layout.setSizeConstraint(QVBoxLayout.SetDefaultConstraint)
 
     def crear_formulario_cliente(self, parent_layout):
-        """Crear formulario con labels al lado de cada campo"""
         grupo_form = QGroupBox()
         grupo_form.setStyleSheet(GROUP_BOX_STYLE)
         grupo_form.setMaximumHeight(180)
@@ -96,7 +84,6 @@ class ClientesWindow(QDialog):
         grid.setSpacing(10)
         grid.setContentsMargins(15, 15, 15, 15)
         
-        # Estilo para labels
         label_style = """
             QLabel {
                 font-size: 14px;
@@ -108,10 +95,8 @@ class ClientesWindow(QDialog):
             }
         """
         
-        # === FILA 1: Nombre | Tipo | Email | Teléfono ===
         row = 0
         
-        # Nombre
         lbl_nombre = QLabel("Nombre:")
         lbl_nombre.setStyleSheet(label_style)
         lbl_nombre.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -121,7 +106,6 @@ class ClientesWindow(QDialog):
         self.txt_nombre.setPlaceholderText("Nombre completo del cliente")
         grid.addWidget(self.txt_nombre, row, 1)
         
-        # Tipo
         lbl_tipo = QLabel("Tipo:")
         lbl_tipo.setStyleSheet(label_style)
         lbl_tipo.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -131,7 +115,6 @@ class ClientesWindow(QDialog):
         self.cmb_tipo.addItems(["Particular", "Empresa", "Gobierno"])
         grid.addWidget(self.cmb_tipo, row, 3)
         
-        # Email
         lbl_email = QLabel("Email:")
         lbl_email.setStyleSheet(label_style)
         lbl_email.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -141,7 +124,6 @@ class ClientesWindow(QDialog):
         self.txt_email.setPlaceholderText("correo@ejemplo.com")
         grid.addWidget(self.txt_email, row, 5)
         
-        # Teléfono
         lbl_telefono = QLabel("Teléfono:")
         lbl_telefono.setStyleSheet(label_style)
         lbl_telefono.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -151,10 +133,8 @@ class ClientesWindow(QDialog):
         self.txt_telefono.setPlaceholderText("(123) 456-7890")
         grid.addWidget(self.txt_telefono, row, 7)
         
-        # === FILA 2: Calle | Colonia | CP | Ciudad ===
         row = 1
         
-        # Calle
         lbl_calle = QLabel("Calle:")
         lbl_calle.setStyleSheet(label_style)
         lbl_calle.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -164,7 +144,6 @@ class ClientesWindow(QDialog):
         self.txt_calle.setPlaceholderText("Calle y número")
         grid.addWidget(self.txt_calle, row, 1)
         
-        # Colonia
         lbl_colonia = QLabel("Colonia:")
         lbl_colonia.setStyleSheet(label_style)
         lbl_colonia.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -174,7 +153,6 @@ class ClientesWindow(QDialog):
         self.txt_colonia.setPlaceholderText("Colonia o fraccionamiento")
         grid.addWidget(self.txt_colonia, row, 3)
         
-        # CP
         lbl_cp = QLabel("C.P.:")
         lbl_cp.setStyleSheet(label_style)
         lbl_cp.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -185,7 +163,6 @@ class ClientesWindow(QDialog):
         self.txt_cp.setMaxLength(5)
         grid.addWidget(self.txt_cp, row, 5)
         
-        # Ciudad
         lbl_ciudad = QLabel("Ciudad:")
         lbl_ciudad.setStyleSheet(label_style)
         lbl_ciudad.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -195,10 +172,8 @@ class ClientesWindow(QDialog):
         self.txt_ciudad.setPlaceholderText("Ciudad")
         grid.addWidget(self.txt_ciudad, row, 7)
         
-        # === FILA 3: Estado | País | RFC | ID ===
         row = 2
         
-        # Estado
         lbl_estado = QLabel("Estado:")
         lbl_estado.setStyleSheet(label_style)
         lbl_estado.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -216,7 +191,6 @@ class ClientesWindow(QDialog):
         self.cmb_estado.setCurrentText("Jalisco")
         grid.addWidget(self.cmb_estado, row, 1)
         
-        # País
         lbl_pais = QLabel("País:")
         lbl_pais.setStyleSheet(label_style)
         lbl_pais.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -227,7 +201,6 @@ class ClientesWindow(QDialog):
         self.txt_pais.setPlaceholderText("País")
         grid.addWidget(self.txt_pais, row, 3)
         
-        # RFC
         lbl_rfc = QLabel("RFC:")
         lbl_rfc.setStyleSheet(label_style)
         lbl_rfc.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -237,7 +210,6 @@ class ClientesWindow(QDialog):
         self.txt_rfc.setPlaceholderText("RFC (opcional)")
         grid.addWidget(self.txt_rfc, row, 5)
         
-        # ID (solo lectura)
         lbl_id = QLabel("ID:")
         lbl_id.setStyleSheet(label_style)
         lbl_id.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -248,25 +220,22 @@ class ClientesWindow(QDialog):
         self.txt_id.setPlaceholderText("Auto")
         grid.addWidget(self.txt_id, row, 7)
         
-        # Configurar columnas
-        for col in range(0, 8, 2):  # Labels
+        for col in range(0, 8, 2):  
             grid.setColumnStretch(col, 0)
             grid.setColumnMinimumWidth(col, 70)
         
-        for col in range(1, 8, 2):  # Campos
+        for col in range(1, 8, 2):  
             grid.setColumnStretch(col, 1)
         
         grupo_form.setLayout(grid)
         parent_layout.addWidget(grupo_form)
 
     def crear_tabla_clientes(self, parent_layout):
-        """Crear tabla de clientes"""
         widget_tabla = QWidget()
         layout_tabla = QVBoxLayout()
         layout_tabla.setContentsMargins(0, 0, 0, 0)
         layout_tabla.setSpacing(5)
         
-        # Título
         lbl_titulo = QLabel("📋 Lista de Clientes")
         lbl_titulo.setStyleSheet("""
             QLabel {
@@ -283,7 +252,6 @@ class ClientesWindow(QDialog):
         """)
         layout_tabla.addWidget(lbl_titulo)
         
-        # Tabla
         self.tabla_model = QStandardItemModel()
         self.tabla_model.setHorizontalHeaderLabels([
             "ID", "Nombre", "Tipo", "Email", "Teléfono"
@@ -298,7 +266,6 @@ class ClientesWindow(QDialog):
         self.tabla_clientes.horizontalHeader().setStretchLastSection(True)
         self.tabla_clientes.verticalHeader().setDefaultSectionSize(35)
         
-        # Conectar señal de selección
         self.tabla_clientes.selectionModel().selectionChanged.connect(self.actualizar_panel_detalle)
         
         header = self.tabla_clientes.horizontalHeader()
@@ -307,49 +274,30 @@ class ClientesWindow(QDialog):
         layout_tabla.addWidget(self.tabla_clientes)
         widget_tabla.setLayout(layout_tabla)
         parent_layout.addWidget(widget_tabla, 7)
-
-    def showEvent(self, event):
-        """Ajustar columnas y layout al mostrar ventana"""
-        super().showEvent(event)
-        
-        # Forzar actualización inmediata del layout
-        self.layout().invalidate()
-        self.layout().activate()
-        
-        # Ajustar columnas de la tabla con delay
-        QTimer.singleShot(50, self.ajustar_columnas_tabla)
-        
-        # Forzar resize completo con más delay
-        QTimer.singleShot(100, self.forzar_resize_completo)
     
     def forzar_resize_completo(self):
-        """Forzar ajuste completo del layout"""
-        # Actualizar geometría de todos los widgets
         self.updateGeometry()
         
-        # Invalidar y reactivar el layout
         if self.layout():
             self.layout().invalidate()
             self.layout().activate()
             
-        # Forzar actualización visual
         self.update()
-        
-        # Ajustar columnas nuevamente
         self.ajustar_columnas_tabla()
 
     def ajustar_columnas_tabla(self):
-        """Ajustar anchos de columnas con proporciones"""
         header = self.tabla_clientes.horizontalHeader()
         ancho_total = self.tabla_clientes.viewport().width()
         
-        # Proporciones: 10%, 35%, 10%, 35%, 10%
+        if ancho_total <= 0:
+            return
+            
         anchos = [
-            int(ancho_total * 0.10),  # ID
-            int(ancho_total * 0.35),  # Nombre
-            int(ancho_total * 0.10),  # Tipo
-            int(ancho_total * 0.35),  # Email
-            int(ancho_total * 0.10)   # Teléfono
+            int(ancho_total * 0.10),  
+            int(ancho_total * 0.35),  
+            int(ancho_total * 0.10),  
+            int(ancho_total * 0.35),  
+            int(ancho_total * 0.10)   
         ]
         
         for i, ancho in enumerate(anchos):
@@ -357,7 +305,6 @@ class ClientesWindow(QDialog):
             header.setSectionResizeMode(i, QHeaderView.Fixed)
 
     def crear_panel_detalle(self, parent_layout):
-        """Panel lateral con detalles del cliente"""
         panel = QFrame()
         panel.setStyleSheet("""
             QFrame {
@@ -370,7 +317,6 @@ class ClientesWindow(QDialog):
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Título
         titulo = QLabel("📄 Detalles del Cliente")
         titulo.setStyleSheet("""
             font-size: 16px;
@@ -382,12 +328,10 @@ class ClientesWindow(QDialog):
         """)
         layout.addWidget(titulo)
         
-        # Contenedor de detalles
         self.detalle_widget = QWidget()
         detalle_layout = QVBoxLayout()
         detalle_layout.setSpacing(5)
         
-        # Labels de detalle
         self.labels_detalle = {}
         campos = [
             ('id', '🆔 ID:', '---'),
@@ -408,7 +352,6 @@ class ClientesWindow(QDialog):
             self.labels_detalle[key] = frame
             detalle_layout.addWidget(frame)
             
-            # Separador después del teléfono
             if key == 'telefono':
                 sep = QFrame()
                 sep.setFrameShape(QFrame.HLine)
@@ -418,26 +361,22 @@ class ClientesWindow(QDialog):
         detalle_layout.addStretch()
         self.detalle_widget.setLayout(detalle_layout)
         
-        # Scroll area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         scroll.setWidget(self.detalle_widget)
         
         layout.addWidget(scroll)
-        # Crear y añadir el botón de estado de cuenta
         self.btn_estado_cuenta = QPushButton("Ver Estado de Cuenta")
-        # Usar el mismo estilo que los botones principales
         self.btn_estado_cuenta.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         self.btn_estado_cuenta.setCursor(Qt.PointingHandCursor)
         self.btn_estado_cuenta.clicked.connect(self.abrir_estado_cuenta)
         
-        layout.addWidget(self.btn_estado_cuenta) # Añadir el botón al final del panel        
+        layout.addWidget(self.btn_estado_cuenta) 
         panel.setLayout(layout)
         parent_layout.addWidget(panel, 3)
 
     def crear_label_detalle(self, titulo, valor):
-        """Crear label individual para detalles"""
         frame = QFrame()
         frame.setStyleSheet("""
             QFrame {
@@ -465,11 +404,9 @@ class ClientesWindow(QDialog):
         return frame
 
     def crear_botones_principales(self, parent_layout):
-        """Crear botones principales - CORREGIDO"""
         layout = QHBoxLayout()
         layout.setSpacing(15)
         
-        # Definición de botones con sus funciones
         botones_config = [
             ("btn_nuevo", "Nuevo", self.nuevo_cliente),
             ("btn_guardar", "Guardar", self.guardar_cliente),
@@ -480,7 +417,6 @@ class ClientesWindow(QDialog):
             ("btn_cerrar", "Cerrar", self.cerrar_ventana) 
         ]
         
-        # Crear cada botón y guardarlo como atributo de instancia
         for nombre_attr, texto, funcion in botones_config:
             btn = QPushButton(texto)
             btn.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
@@ -488,23 +424,19 @@ class ClientesWindow(QDialog):
             btn.setFixedHeight(50)
             btn.clicked.connect(funcion)
             
-            # Guardar referencia al botón como atributo de instancia
             setattr(self, nombre_attr, btn)
             layout.addWidget(btn)
         
         parent_layout.addLayout(layout)
 
     def abrir_estado_cuenta(self):
-        """
-        Abre el diálogo de estado de cuenta para el cliente seleccionado.
-        """
         if EstadoCuentaClienteDialog is None:
-            self.mostrar_mensaje("Error", "No se pudo cargar el módulo de Estado de Cuenta.", QMessageBox.Critical)
+            self.mostrar_error("No se pudo cargar el módulo de Estado de Cuenta.")
             return
 
         indice = self.tabla_clientes.currentIndex()
         if not indice.isValid():
-            self.mostrar_mensaje("Advertencia", "Seleccione un cliente para ver su estado de cuenta.", QMessageBox.Warning)
+            self.mostrar_advertencia("Seleccione un cliente para ver su estado de cuenta.")
             return
         
         fila = indice.row()
@@ -512,15 +444,13 @@ class ClientesWindow(QDialog):
             cliente_id = int(self.tabla_model.item(fila, 0).text())
             nombre_cliente = self.tabla_model.item(fila, 1).text()
         except Exception as e:
-            self.mostrar_mensaje("Error", f"No se pudo obtener la información del cliente: {e}", QMessageBox.Critical)
+            self.mostrar_error(f"No se pudo obtener la información del cliente: {e}")
             return
 
-        # Abrir el diálogo de estado de cuenta
         dialog = EstadoCuentaClienteDialog(cliente_id, nombre_cliente, self)
         dialog.exec_()
 
     def actualizar_panel_detalle(self):
-        """Actualizar panel de detalles con cliente seleccionado"""
         indice = self.tabla_clientes.currentIndex()
         if not indice.isValid():
             return
@@ -529,19 +459,16 @@ class ClientesWindow(QDialog):
         cliente_id = int(self.tabla_model.item(fila, 0).text())
         
         try:
-            # AHORA USA EL API CLIENT (renombrado a db_helper)
             clientes = db_helper.get_clientes() 
             cliente = next((c for c in clientes if c['id'] == cliente_id), None)
             
             if cliente:
-                # Actualizar valores en el panel de detalles
                 self.actualizar_label_valor(self.labels_detalle['id'], str(cliente['id']))
                 self.actualizar_label_valor(self.labels_detalle['nombre'], cliente['nombre'])
                 self.actualizar_label_valor(self.labels_detalle['tipo'], cliente['tipo'])
                 self.actualizar_label_valor(self.labels_detalle['email'], cliente['email'])
                 self.actualizar_label_valor(self.labels_detalle['telefono'], cliente['telefono'])
                 
-                # Dirección completa
                 direccion = f"{cliente.get('calle', '')}, {cliente.get('colonia', '')}"
                 self.actualizar_label_valor(self.labels_detalle['direccion'], direccion)
                 self.actualizar_label_valor(self.labels_detalle['ciudad'], cliente.get('ciudad', ''))
@@ -553,7 +480,6 @@ class ClientesWindow(QDialog):
             print(f"Error al actualizar detalles: {e}")
 
     def actualizar_label_valor(self, frame, valor):
-        """Actualizar valor en label de detalles"""
         for widget in frame.findChildren(QLabel):
             if widget.objectName() == "valor":
                 widget.setText(valor if valor else "---")
@@ -562,15 +488,11 @@ class ClientesWindow(QDialog):
     def on_notificacion_remota(self, data):
         self.cargar_datos_desde_bd()
 
-    # === OPERACIONES CRUD ===
-
     def nuevo_cliente(self):
-        """Preparar formulario para nuevo cliente"""
         self.limpiar_formulario()
         self.txt_nombre.setFocus()
 
     def guardar_cliente(self):
-        """Guardar o actualizar cliente"""
         if not self.validar_formulario():
             return
         
@@ -578,35 +500,31 @@ class ClientesWindow(QDialog):
         
         try:
             if self.modo_edicion and self.cliente_en_edicion:
-                # Esta llamada ahora va al api_client
                 if db_helper.actualizar_cliente(self.cliente_en_edicion['id'], datos):
-                    self.mostrar_mensaje("Éxito", "Cliente actualizado", QMessageBox.Information)
+                    self.mostrar_exito("Cliente actualizado")
                     self.cargar_datos_desde_bd()
                     self.limpiar_formulario()
                 else:
-                    self.mostrar_mensaje("Error", "No se pudo actualizar", QMessageBox.Critical)
+                    self.mostrar_error("No se pudo actualizar")
             else:
-                # Esta llamada ahora va al api_client
                 if db_helper.crear_cliente(datos):
-                    self.mostrar_mensaje("Éxito", "Cliente guardado", QMessageBox.Information)
+                    self.mostrar_exito("Cliente guardado")
                     self.cargar_datos_desde_bd()
                     self.limpiar_formulario()
                 else:
-                    self.mostrar_mensaje("Error", "No se pudo guardar", QMessageBox.Critical)
+                    self.mostrar_error("No se pudo guardar")
         except Exception as e:
-            self.mostrar_mensaje("Error", f"Error al guardar: {e}", QMessageBox.Critical)
+            self.mostrar_error(f"Error al guardar: {e}")
 
     def editar_cliente(self):
-        """Cargar cliente seleccionado para edición"""
         indice = self.tabla_clientes.currentIndex()
         if not indice.isValid():
-            self.mostrar_mensaje("Advertencia", "Seleccione un cliente", QMessageBox.Warning)
+            self.mostrar_advertencia("Seleccione un cliente")
             return
         
         fila = indice.row()
         cliente_id = int(self.tabla_model.item(fila, 0).text())
         
-        # Esta llamada ahora va al api_client
         clientes = db_helper.get_clientes()
         cliente = next((c for c in clientes if c['id'] == cliente_id), None)
         
@@ -617,10 +535,9 @@ class ClientesWindow(QDialog):
             self.btn_guardar.setText("Actualizar")
 
     def eliminar_cliente(self):
-        """Eliminar cliente seleccionado"""
         indice = self.tabla_clientes.currentIndex()
         if not indice.isValid():
-            self.mostrar_mensaje("Advertencia", "Seleccione un cliente", QMessageBox.Warning)
+            self.mostrar_advertencia("Seleccione un cliente")
             return
         
         fila = indice.row()
@@ -634,29 +551,23 @@ class ClientesWindow(QDialog):
         )
         
         if respuesta == QMessageBox.Yes:
-            # Esta llamada ahora va al api_client
             if db_helper.eliminar_cliente(cliente_id):
-                self.mostrar_mensaje("Éxito", "Cliente eliminado", QMessageBox.Information)
+                self.mostrar_exito("Cliente eliminado")
                 self.cargar_datos_desde_bd()
                 self.limpiar_formulario()
             else:
-                self.mostrar_mensaje("Error", "No se pudo eliminar", QMessageBox.Critical)
+                self.mostrar_error("No se pudo eliminar")
 
     def buscar_cliente(self):
-        """Buscar cliente por nombre"""
         texto, ok = QInputDialog.getText(self, "Buscar", "Nombre a buscar:")
         if ok and texto:
             try:
-                # Esta llamada ahora va al api_client
                 resultados = db_helper.buscar_clientes(texto)
                 self.actualizar_tabla_con_datos(resultados)
             except Exception as e:
-                self.mostrar_mensaje("Error", f"Error en búsqueda: {e}", QMessageBox.Critical)
-
-    # === FUNCIONES AUXILIARES ===
+                self.mostrar_error(f"Error en búsqueda: {e}")
 
     def obtener_datos_formulario(self):
-        """Obtener datos del formulario"""
         return {
             'nombre': self.txt_nombre.text().strip(),
             'tipo': self.cmb_tipo.currentText(),
@@ -672,7 +583,6 @@ class ClientesWindow(QDialog):
         }
 
     def cargar_datos_formulario(self, cliente):
-        """Cargar datos del cliente en formulario"""
         self.txt_id.setText(str(cliente['id']))
         self.txt_nombre.setText(cliente['nombre'])
         self.cmb_tipo.setCurrentText(cliente['tipo'])
@@ -687,53 +597,46 @@ class ClientesWindow(QDialog):
         self.txt_rfc.setText(cliente['rfc'])
 
     def validar_formulario(self):
-        """Validar datos del formulario"""
-        # Nombre obligatorio
         if not self.txt_nombre.text().strip():
-            self.mostrar_mensaje("Error", "El nombre es obligatorio.", QMessageBox.Critical)
+            self.mostrar_error("El nombre es obligatorio.")
             self.txt_nombre.setFocus()
             return False
         
-        # Email opcional pero válido
         email = self.txt_email.text().strip()
         if email:
             patron_email = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
             if not re.match(patron_email, email):
-                self.mostrar_mensaje("Error", "Formato de email inválido.", QMessageBox.Critical)
+                self.mostrar_error("Formato de email inválido.")
                 self.txt_email.setFocus()
                 return False
         
-        # Teléfono opcional pero válido
         telefono = self.txt_telefono.text().strip()
         if telefono:
             patron_telefono = r'^[\d\s\(\)\-\+]+$'
             if not re.match(patron_telefono, telefono) or len(re.sub(r'\D', '', telefono)) < 10:
-                self.mostrar_mensaje("Error", "Teléfono inválido (mínimo 10 dígitos).", QMessageBox.Critical)
+                self.mostrar_error("Teléfono inválido (mínimo 10 dígitos).")
                 self.txt_telefono.setFocus()
                 return False
         
-        # RFC opcional pero válido
         rfc = self.txt_rfc.text().strip()
         if rfc:
             patron_rfc = r'^[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}$'
             if not re.match(patron_rfc, rfc.upper()):
-                self.mostrar_mensaje("Error", "Formato de RFC inválido.", QMessageBox.Critical)
+                self.mostrar_error("Formato de RFC inválido.")
                 self.txt_rfc.setFocus()
                 return False
         
-        # CP opcional pero válido
         cp = self.txt_cp.text().strip()
         if cp:
             patron_cp = r'^\d{5}$'
             if not re.match(patron_cp, cp):
-                self.mostrar_mensaje("Error", "CP debe tener 5 dígitos.", QMessageBox.Critical)
+                self.mostrar_error("CP debe tener 5 dígitos.")
                 self.txt_cp.setFocus()
                 return False
         
         return True
 
     def limpiar_formulario(self):
-        """Limpiar formulario"""
         self.txt_id.clear()
         self.txt_nombre.clear()
         self.cmb_tipo.setCurrentIndex(0)
@@ -747,71 +650,82 @@ class ClientesWindow(QDialog):
         self.txt_pais.setText("México")
         self.txt_rfc.clear()
         self.cancelar_edicion()
-
-        # Volver a cargar todos los datos en la tabla
         self.cargar_datos_desde_bd()
 
     def cancelar_edicion(self):
-        """Cancelar modo de edición"""
         self.modo_edicion = False
         self.cliente_en_edicion = None
         self.btn_guardar.setText("Guardar")
 
     def cargar_datos_desde_bd(self):
-        """Cargar clientes desde base de datos"""
         try:
-            # Esta llamada ahora va al api_client
             clientes = db_helper.get_clientes()
             self.actualizar_tabla_con_datos(clientes)
         except Exception as e:
-            self.mostrar_mensaje("Error", f"Error al cargar: {e}", QMessageBox.Critical)
+            self.mostrar_error(f"Error al cargar: {e}")
+
+    def _crear_item(self, texto, alineacion):
+        item = QStandardItem(texto)
+        item.setTextAlignment(alineacion)
+        return item
 
     def actualizar_tabla_con_datos(self, clientes):
-        """Actualizar tabla con lista de clientes"""
         self.tabla_model.setRowCount(0)
         
         for cliente in clientes:
             fila = [
-                QStandardItem(str(cliente['id'])),
-                QStandardItem(cliente['nombre']),
-                QStandardItem(cliente['tipo']),
-                QStandardItem(cliente['email']),
-                QStandardItem(cliente['telefono'])
+                self._crear_item(str(cliente['id']), Qt.AlignCenter),
+                self._crear_item(cliente['nombre'], Qt.AlignCenter),
+                self._crear_item(cliente['tipo'], Qt.AlignCenter),
+                self._crear_item(cliente['email'], Qt.AlignCenter),
+                self._crear_item(cliente['telefono'], Qt.AlignCenter)
             ]
-            
-            for item in fila:
-                item.setTextAlignment(Qt.AlignCenter)
-            
             self.tabla_model.appendRow(fila)
 
-    def mostrar_mensaje(self, titulo, mensaje, tipo):
-        """Mostrar mensaje"""
-        msg_box = QMessageBox(tipo, titulo, mensaje, QMessageBox.Ok, self)
+    def _mostrar_mensaje(self, icono, titulo, mensaje):
+        msg_box = QMessageBox(icono, titulo, mensaje, QMessageBox.Ok, self)
         msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         msg_box.exec_()
 
+    def mostrar_advertencia(self, mensaje):
+        self._mostrar_mensaje(QMessageBox.Warning, "Advertencia", mensaje)
+    
+    def mostrar_error(self, mensaje):
+        self._mostrar_mensaje(QMessageBox.Critical, "Error", mensaje)
+    
+    def mostrar_exito(self, mensaje):
+        self._mostrar_mensaje(QMessageBox.Information, "Éxito", mensaje)
+        
+    def mostrar_info(self, mensaje):
+        self._mostrar_mensaje(QMessageBox.Information, "Información", mensaje)
+
     def closeEvent(self, event):
-        """Evento al cerrar - Limpiar formulario"""
         self.limpiar_formulario()
-        # Resetear geometría para la próxima vez que se abra
         self.setGeometry(100, 100, 1400, 800)
         event.accept()
     
     def cerrar_ventana(self):
-        """Cerrar la ventana correctamente reseteando su estado"""
-        # Resetear geometría antes de cerrar
         self.setGeometry(100, 100, 1400, 800)
-        # Limpiar formulario
         self.limpiar_formulario()
-        # Cerrar la ventana
         self.close()
     
     def resizeEvent(self, event):
-        """Evento al redimensionar - ajustar columnas y layout"""
         super().resizeEvent(event)
         if hasattr(self, 'tabla_clientes'):
             QTimer.singleShot(50, self.ajustar_columnas_tabla)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        
+        if not self._datos_cargados:
+             self.cargar_datos_desde_bd()
+             self._datos_cargados = True
+        
+        self.layout().invalidate()
+        self.layout().activate()
+
+        QTimer.singleShot(50, self.ajustar_columnas_tabla)
+        QTimer.singleShot(100, self.forzar_resize_completo)
 
 if __name__ == "__main__":
     from PyQt5.QtWidgets import QApplication

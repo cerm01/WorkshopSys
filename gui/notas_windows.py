@@ -7,30 +7,27 @@ from PyQt5.QtWidgets import (
     QTableView, QHeaderView, QMenu, QAction, QFrame, QWidget, QDateEdit, 
     QCompleter, QInputDialog
 )
-from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QColor, QFont
+from PyQt5.QtCore import Qt, QDate, QTimer
+from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QColor
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from gui.api_client import api_client as db_helper
 from gui.websocket_client import ws_client
-
 from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE, LABEL_STYLE,
     INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )
-
 from dialogs.buscar_notas_dialog import BuscarNotasDialog
+
 try:
     from dialogs.buscar_ordenes_borrador_dialog import BuscarOrdenesBorradorDialog
-except ImportError as e:
-    print(f"Error al importar BuscarOrdenesBorradorDialog: {e}")
+except ImportError:
     BuscarOrdenesBorradorDialog = None
 
 try:
     from gui.pagos_nota_dialog import PagosNotaDialog
-except ImportError as e:
-    print(f"Error al importar PagosNotaDialog: {e}")
-    PagosNotaDialog = None 
+except ImportError:
+    PagosNotaDialog = None
 
 class NotasWindow(QDialog):
     def __init__(self, parent=None):
@@ -38,39 +35,43 @@ class NotasWindow(QDialog):
         self.main_window = parent
         self.setWindowTitle("Notas")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
-
         self.setMinimumSize(800, 600)
         self.setWindowState(Qt.WindowMaximized)
-
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
 
+        # Variables de estado
         self.fila_en_edicion = -1
         self.iva_por_fila = {}
         self.tipo_por_fila = {}
-        
-        self.clientes = []
         self.clientes_dict = {}
         self.nota_actual_id = None
         self.modo_edicion = False
+        self._datos_cargados = False  # Flag para evitar recargas
 
         self.setup_ui()
+        self.conectar_senales()
         
+        # Cargar datos de forma asíncrona después de mostrar la UI
+        QTimer.singleShot(100, self._cargar_datos_inicial)
+        
+        # WebSocket al final
         if ws_client:
             ws_client.cliente_creado.connect(self.on_notificacion_cliente)
             ws_client.cliente_actualizado.connect(self.on_notificacion_cliente)
             ws_client.nota_creada.connect(self.on_notificacion_nota)
-        
-        self.cargar_clientes_bd()
     
+    def _cargar_datos_inicial(self):
+        """Carga datos después de mostrar la ventana"""
+        if not self._datos_cargados:
+            self.cargar_clientes_bd()
+            self._datos_cargados = True
+
     def on_notificacion_cliente(self, data):
         self.cargar_clientes_bd()
 
     def on_notificacion_nota(self, data):
-        """Recarga la nota actual si coincide con la notificación."""
         if self.nota_actual_id and data.get('id') == self.nota_actual_id:
-            print(f"Recargando nota {self.nota_actual_id} por notificación remota.")
             try:
-                # Esta llamada ahora usa api_client
                 nota_actualizada = db_helper.get_nota(self.nota_actual_id)
                 if nota_actualizada:
                     self.cargar_nota_en_formulario(nota_actualizada)
@@ -85,15 +86,13 @@ class NotasWindow(QDialog):
         self.crear_grupo_producto_servicio(main_layout)
         self.crear_tabla_items(main_layout)
         self.crear_panel_totales(main_layout)
-        
         main_layout.addStretch(1)
         
+        # Botones principales
         botones_layout = QHBoxLayout()
         botones_layout.setSpacing(10)
-        botones_layout.setContentsMargins(0, 0, 0, 0)
         
         textos_botones = ["Nuevo", "Guardar", "Cancelar", "Buscar", "Editar", "Limpiar", "Imprimir"]
-        
         self.botones = []
         
         for texto in textos_botones:
@@ -105,10 +104,7 @@ class NotasWindow(QDialog):
             self.botones.append(boton)
         
         main_layout.addLayout(botones_layout)
-
         self.setLayout(main_layout)
-        
-        self.conectar_senales()
 
     def crear_grupo_cliente(self, parent_layout):
         grupo_cliente = QGroupBox("")
@@ -118,74 +114,48 @@ class NotasWindow(QDialog):
         layout.setSpacing(15)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        readonly_style = INPUT_STYLE + """
-            QLineEdit {
-                background-color: #E8E8E8;
-                color: #666666;
-            }
-        """
+        readonly_style = INPUT_STYLE + "QLineEdit { background-color: #E8E8E8; color: #666666; }"
         
-        lbl_folio = QLabel("Folio")
-        lbl_folio.setStyleSheet(LABEL_STYLE)
+        # Folio
         self.txt_folio = QLineEdit()
         self.txt_folio.setStyleSheet(readonly_style)
         self.txt_folio.setReadOnly(True)
         self.txt_folio.setPlaceholderText("NV-Auto")
+        layout.addWidget(QLabel("Folio", styleSheet=LABEL_STYLE))
+        layout.addWidget(self.txt_folio, 1)
         
-        lbl_estado = QLabel("Estado")
-        lbl_estado.setStyleSheet(LABEL_STYLE)
+        # Estado
         self.txt_estado = QLineEdit()
         self.txt_estado.setStyleSheet(readonly_style)
         self.txt_estado.setReadOnly(True)
-        self.txt_estado.setPlaceholderText("Estado")
+        layout.addWidget(QLabel("Estado", styleSheet=LABEL_STYLE))
+        layout.addWidget(self.txt_estado, 1)
         
-        lbl_cliente = QLabel("Cliente")
-        lbl_cliente.setStyleSheet(LABEL_STYLE)
+        # Cliente
         self.txt_cliente = QLineEdit()
         self.txt_cliente.setStyleSheet(INPUT_STYLE)
         self.txt_cliente.setPlaceholderText("Escriba para buscar cliente...")
+        layout.addWidget(QLabel("Cliente", styleSheet=LABEL_STYLE))
+        layout.addWidget(self.txt_cliente, 3)
         
-        lbl_fecha = QLabel("Fecha")
-        lbl_fecha.setStyleSheet(LABEL_STYLE)
+        # Fecha
         self.date_fecha = QDateEdit()
         self.date_fecha.setCalendarPopup(True)
         self.date_fecha.setDate(QDate.currentDate())
         self.date_fecha.setDisplayFormat("dd/MM/yyyy")
         self.date_fecha.setStyleSheet(self._obtener_estilo_calendario())
+        layout.addWidget(QLabel("Fecha", styleSheet=LABEL_STYLE))
+        layout.addWidget(self.date_fecha, 1)
         
-        lbl_referencia = QLabel("Referencia")
-        lbl_referencia.setStyleSheet(LABEL_STYLE)
+        # Referencia
         self.txt_referencia = QLineEdit()
         self.txt_referencia.setStyleSheet(INPUT_STYLE)
         self.txt_referencia.setPlaceholderText("Placa/ID de vehículo/cliente")
-        
-        layout.addWidget(lbl_folio)
-        layout.addWidget(self.txt_folio, 1)
-        
-        layout.addWidget(lbl_estado)
-        layout.addWidget(self.txt_estado, 1)
-        
-        layout.addWidget(lbl_cliente)
-        layout.addWidget(self.txt_cliente, 3)
-        
-        layout.addWidget(lbl_fecha)
-        layout.addWidget(self.date_fecha, 1)
-        
-        layout.addWidget(lbl_referencia)
+        layout.addWidget(QLabel("Referencia", styleSheet=LABEL_STYLE))
         layout.addWidget(self.txt_referencia, 2)
         
         grupo_cliente.setLayout(layout)
         parent_layout.addWidget(grupo_cliente)
-
-    def obtener_datos_cliente(self):
-        nombre_cliente = self.txt_cliente.text()
-        cliente_id = self.clientes_dict.get(nombre_cliente, None)
-        
-        return {
-            'cliente_id': cliente_id,
-            'fecha': self.date_fecha.date().toPyDate(),
-            'referencia': self.txt_referencia.text()
-        }
     
     def crear_grupo_producto_servicio(self, parent_layout):
         grupo = QGroupBox("")
@@ -196,33 +166,18 @@ class NotasWindow(QDialog):
         grid_layout.setHorizontalSpacing(15)
         grid_layout.setContentsMargins(10, 10, 10, 10)
         
-        grid_layout.setColumnStretch(0, 1)
-        grid_layout.setColumnStretch(1, 6)
-        grid_layout.setColumnStretch(2, 2)
-        grid_layout.setColumnStretch(3, 2)
-        grid_layout.setColumnStretch(4, 1)
-        grid_layout.setColumnStretch(5, 1)
+        # Columnas responsivas
+        for i, stretch in enumerate([1, 6, 2, 2, 1, 1]):
+            grid_layout.setColumnStretch(i, stretch)
         
-        lbl_cantidad = QLabel("Cantidad")
-        lbl_cantidad.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_cantidad, 0, 0)
+        # Labels
+        labels = ["Cantidad", "Descripción", "Precio Unitario", "Importe", "IVA %"]
+        for i, texto in enumerate(labels):
+            lbl = QLabel(texto)
+            lbl.setStyleSheet(LABEL_STYLE)
+            grid_layout.addWidget(lbl, 0, i)
         
-        lbl_descripcion = QLabel("Descripción")
-        lbl_descripcion.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_descripcion, 0, 1)
-        
-        lbl_precio = QLabel("Precio Unitario")
-        lbl_precio.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_precio, 0, 2)
-        
-        lbl_importe = QLabel("Importe")
-        lbl_importe.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_importe, 0, 3)
-        
-        lbl_impuestos = QLabel("IVA %")
-        lbl_impuestos.setStyleSheet(LABEL_STYLE)
-        grid_layout.addWidget(lbl_impuestos, 0, 4)
-        
+        # Campos
         self.txt_cantidad = QLineEdit()
         self.txt_cantidad.setStyleSheet(INPUT_STYLE)
         self.txt_cantidad.setPlaceholderText("Cant.")
@@ -231,7 +186,7 @@ class NotasWindow(QDialog):
         
         self.txt_descripcion = QLineEdit()
         self.txt_descripcion.setStyleSheet(INPUT_STYLE)
-        self.txt_descripcion.setPlaceholderText("Ingrese descripción del producto o servicio")
+        self.txt_descripcion.setPlaceholderText("Ingrese descripción")
         grid_layout.addWidget(self.txt_descripcion, 1, 1)
         
         self.txt_precio = QLineEdit()
@@ -267,13 +222,7 @@ class NotasWindow(QDialog):
     
     def crear_tabla_items(self, parent_layout):
         self.tabla_model = QStandardItemModel()
-        self.tabla_model.setHorizontalHeaderLabels([
-            "Cantidad", 
-            "Descripción", 
-            "Precio Unitario", 
-            "IVA", 
-            "Importe"
-        ])
+        self.tabla_model.setHorizontalHeaderLabels(["Cantidad", "Descripción", "Precio Unitario", "IVA", "Importe"])
         
         self.tabla_items = QTableView()
         self.tabla_items.setModel(self.tabla_model)
@@ -281,167 +230,115 @@ class NotasWindow(QDialog):
         self.tabla_items.verticalHeader().setVisible(False)
         self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
         self.tabla_items.setStyleSheet(TABLE_STYLE)
+        self.tabla_items.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tabla_items.setSelectionBehavior(QTableView.SelectRows)
+        self.tabla_items.setSelectionMode(QTableView.SingleSelection)
+        self.tabla_items.setMinimumHeight(450)
         
+        # Header responsivo
         header = self.tabla_items.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        for i, mode in enumerate([QHeaderView.ResizeToContents, QHeaderView.Stretch, 
+                                   QHeaderView.ResizeToContents, QHeaderView.ResizeToContents, 
+                                   QHeaderView.ResizeToContents]):
+            header.setSectionResizeMode(i, mode)
         
         header.setFixedHeight(40)
         self.tabla_items.verticalHeader().setDefaultSectionSize(30)
         
-        self.tabla_items.setSelectionBehavior(QTableView.SelectRows)
-        self.tabla_items.setSelectionMode(QTableView.SingleSelection)
-        
-        self.tabla_items.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tabla_items.customContextMenuRequested.connect(self.mostrar_menu_contextual)
-        
-        self.tabla_items.setMinimumHeight(15 * 30 + 40)
         parent_layout.addWidget(self.tabla_items)
     
     def crear_panel_totales(self, parent_layout):
-        contenedor_principal = QWidget()
+        contenedor = QWidget()
         layout_principal = QHBoxLayout()
         layout_principal.setContentsMargins(0, 0, 0, 0)
 
-        self.botones_intermedios_layout = QHBoxLayout()
-        self.botones_intermedios_layout.setContentsMargins(0, 10, 0, 0)
-        self.botones_intermedios_layout.setSpacing(10)
+        # Botones intermedios
+        botones_layout = QHBoxLayout()
+        botones_layout.setSpacing(10)
 
         self.btn_ver_ordenes = QPushButton("Ordenes")
         self.btn_ver_ordenes.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         self.btn_ver_ordenes.setCursor(Qt.PointingHandCursor)
-        self.btn_ver_ordenes.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.botones_intermedios_layout.addWidget(self.btn_ver_ordenes, 1)
+        botones_layout.addWidget(self.btn_ver_ordenes, 1)
         
         self.btn_ver_notas = QPushButton("Notas Emitidas")
         self.btn_ver_notas.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         self.btn_ver_notas.setCursor(Qt.PointingHandCursor)
-        self.btn_ver_notas.clicked.connect(self.abrir_ventana_notas)
-        self.btn_ver_notas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.botones_intermedios_layout.addWidget(self.btn_ver_notas, 1)
+        botones_layout.addWidget(self.btn_ver_notas, 1)
         
         self.btn_pagos_abonos = QPushButton("Pagos y Abonos")
         self.btn_pagos_abonos.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         self.btn_pagos_abonos.setCursor(Qt.PointingHandCursor)
-        self.btn_pagos_abonos.clicked.connect(self.abrir_ventana_pagos)
-        self.btn_pagos_abonos.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.botones_intermedios_layout.addWidget(self.btn_pagos_abonos, 1)
+        botones_layout.addWidget(self.btn_pagos_abonos, 1)
+        botones_layout.addStretch(1)
 
-        self.botones_intermedios_layout.addStretch(1)         
-        botones_intermedios_container = QWidget()
-        botones_intermedios_container.setLayout(self.botones_intermedios_layout)
-        layout_principal.addWidget(botones_intermedios_container, 6)
+        botones_container = QWidget()
+        botones_container.setLayout(botones_layout)
+        layout_principal.addWidget(botones_container, 6)
         
-        contenedor_frame = QWidget()
-        contenedor_frame.setMaximumWidth(9999)
-        frame_layout = QVBoxLayout()
-        frame_layout.setContentsMargins(0, 0, 0, 0)
-        
+        # Panel de totales
         totales_frame = QFrame()
         totales_frame.setFrameStyle(QFrame.StyledPanel)
         totales_frame.setStyleSheet("""
             QFrame {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 0, y2: 1,
-                    stop: 0 rgba(255, 255, 255, 250),
-                    stop: 1 rgba(245, 245, 245, 250)
-                );
-                border: 1px solid rgba(0, 120, 142, 0.2);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(255,255,255,250), stop:1 rgba(245,245,245,250));
+                border: 1px solid rgba(0,120,142,0.2);
                 border-radius: 8px;
                 padding: 12px;
                 margin-top: 10px;
             }
         """)
         
-        main_totales_layout = QHBoxLayout()
-        main_totales_layout.addStretch()
-        
         totales_grid = QGridLayout()
         totales_grid.setSpacing(5)
-        totales_grid.setContentsMargins(0, 0, 0, 0)
         
-        label_style = """
-            QLabel {
-                font-size: 18px;
-                color: #333333;
-                background: transparent;
-                padding: 2px;
-            }
-        """
-        label_bold_style = label_style + "font-weight: bold;"
-        
-        lbl_subtotal_text = QLabel("Subtotal:")
-        lbl_subtotal_text.setStyleSheet(label_style)
-        lbl_subtotal_text.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        label_style = "QLabel { font-size: 18px; color: #333; background: transparent; padding: 2px; }"
         
         self.lbl_subtotal_valor = QLabel("$ 0.00")
-        self.lbl_subtotal_valor.setStyleSheet(label_bold_style)
+        self.lbl_subtotal_valor.setStyleSheet(label_style + "font-weight: bold;")
         self.lbl_subtotal_valor.setAlignment(Qt.AlignRight)
         
-        lbl_impuestos_text = QLabel("Impuestos:")
-        lbl_impuestos_text.setStyleSheet(label_style)
-        lbl_impuestos_text.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        
         self.lbl_impuestos_valor = QLabel("$ 0.00")
-        self.lbl_impuestos_valor.setStyleSheet(label_bold_style)
+        self.lbl_impuestos_valor.setStyleSheet(label_style + "font-weight: bold;")
         self.lbl_impuestos_valor.setAlignment(Qt.AlignRight)
+        
+        self.lbl_total_valor = QLabel("$ 0.00")
+        self.lbl_total_valor.setStyleSheet("QLabel { font-size: 18px; font-weight: bold; color: #00788E; }")
+        self.lbl_total_valor.setAlignment(Qt.AlignRight)
+        
+        totales_grid.addWidget(QLabel("Subtotal:", styleSheet=label_style), 0, 0)
+        totales_grid.addWidget(self.lbl_subtotal_valor, 0, 1)
+        totales_grid.addWidget(QLabel("Impuestos:", styleSheet=label_style), 1, 0)
+        totales_grid.addWidget(self.lbl_impuestos_valor, 1, 1)
         
         linea = QFrame()
         linea.setFrameShape(QFrame.HLine)
-        linea.setStyleSheet("background-color: rgba(0, 120, 142, 0.3); max-height: 1px;")
-        
-        lbl_total_text = QLabel("Total:")
-        lbl_total_text.setStyleSheet(label_style + "font-size: 18px; font-weight: bold;")
-        lbl_total_text.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-        
-        self.lbl_total_valor = QLabel("$ 0.00")
-        self.lbl_total_valor.setStyleSheet("""
-            QLabel {
-                font-size: 18px;
-                font-weight: bold;
-                color: #00788E;
-                background: transparent;
-                padding: 2px;
-            }
-        """)
-        self.lbl_total_valor.setAlignment(Qt.AlignRight)
-        
-        totales_grid.addWidget(lbl_subtotal_text, 0, 0)
-        totales_grid.addWidget(self.lbl_subtotal_valor, 0, 1)
-        totales_grid.addWidget(lbl_impuestos_text, 1, 0)
-        totales_grid.addWidget(self.lbl_impuestos_valor, 1, 1)
+        linea.setStyleSheet("background-color: rgba(0,120,142,0.3); max-height: 1px;")
         totales_grid.addWidget(linea, 2, 0, 1, 2)
-        totales_grid.addWidget(lbl_total_text, 3, 0)
-        totales_grid.addWidget(self.lbl_total_valor, 3, 1)
         
-        totales_grid.setColumnMinimumWidth(0, 80)
-        totales_grid.setColumnMinimumWidth(1, 120)
+        totales_grid.addWidget(QLabel("Total:", styleSheet=label_style + "font-weight: bold;"), 3, 0)
+        totales_grid.addWidget(self.lbl_total_valor, 3, 1)
         
         totales_container = QWidget()
         totales_container.setLayout(totales_grid)
         totales_container.setFixedWidth(220)
         
-        main_totales_layout.addWidget(totales_container)
-        totales_frame.setLayout(main_totales_layout)
+        totales_layout = QHBoxLayout()
+        totales_layout.addStretch()
+        totales_layout.addWidget(totales_container)
+        totales_frame.setLayout(totales_layout)
         
-        frame_layout.addWidget(totales_frame)
-        contenedor_frame.setLayout(frame_layout)
-        
-        layout_principal.addWidget(contenedor_frame, 1)
-        
-        contenedor_principal.setLayout(layout_principal)
-        
-        parent_layout.addWidget(contenedor_principal)
+        layout_principal.addWidget(totales_frame, 1)
+        contenedor.setLayout(layout_principal)
+        parent_layout.addWidget(contenedor)
     
     def conectar_senales(self):
         self.txt_cantidad.textChanged.connect(self.calcular_importe)
         self.txt_precio.textChanged.connect(self.calcular_importe)
         self.btn_agregar.clicked.connect(self.agregar_a_tabla)
-        
         self.tabla_items.doubleClicked.connect(self.cargar_item_para_editar)
+        self.tabla_items.customContextMenuRequested.connect(self.mostrar_menu_contextual)
         
         self.botones[0].clicked.connect(self.nueva_nota)
         self.botones[1].clicked.connect(self.guardar_nota)
@@ -451,18 +348,17 @@ class NotasWindow(QDialog):
         self.botones[5].clicked.connect(self.nueva_nota)
         
         self.btn_ver_ordenes.clicked.connect(self.abrir_ventana_ordenes_borrador)
+        self.btn_ver_notas.clicked.connect(self.abrir_ventana_notas)
+        self.btn_pagos_abonos.clicked.connect(self.abrir_ventana_pagos)
     
     def cargar_clientes_bd(self):
         try:
-            # Esta llamada ahora usa api_client
-            clientes = db_helper.get_clientes() 
+            clientes = db_helper.get_clientes()
             self.clientes_dict.clear()
             
-            nombres_clientes = []
-            for cliente in clientes:
-                nombre_completo = f"{cliente['nombre']} - {cliente['tipo']}"
-                nombres_clientes.append(nombre_completo)
-                self.clientes_dict[nombre_completo] = cliente['id']
+            nombres_clientes = [f"{c['nombre']} - {c['tipo']}" for c in clientes]
+            for nombre, cliente in zip(nombres_clientes, clientes):
+                self.clientes_dict[nombre] = cliente['id']
             
             completer = QCompleter(nombres_clientes)
             completer.setCaseSensitivity(Qt.CaseInsensitive)
@@ -475,20 +371,10 @@ class NotasWindow(QDialog):
                     border-radius: 4px;
                     padding: 5px;
                     font-size: 16px;
-                    min-height: 60px;
                 }
-                QListView::item {
-                    padding: 10px;
-                    border-radius: 3px;
-                    min-height: 30px;
-                }
-                QListView::item:hover {
-                    background-color: #E0F7FA;
-                }
-                QListView::item:selected {
-                    background-color: #2CD5C4;
-                    color: white;
-                }
+                QListView::item { padding: 10px; min-height: 30px; }
+                QListView::item:hover { background-color: #E0F7FA; }
+                QListView::item:selected { background-color: #2CD5C4; color: white; }
             """)
             
             self.txt_cliente.setCompleter(completer)
@@ -497,11 +383,10 @@ class NotasWindow(QDialog):
             self.mostrar_error(f"Error al cargar clientes: {e}")
     
     def guardar_nota(self):
-        nombre_cliente = self.txt_cliente.text()
-        cliente_id = self.clientes_dict.get(nombre_cliente, None)
+        cliente_id = self.clientes_dict.get(self.txt_cliente.text())
         
         if not cliente_id:
-            self.mostrar_advertencia("Seleccione un cliente válido de la lista")
+            self.mostrar_advertencia("Seleccione un cliente válido")
             return
         
         if self.tabla_model.rowCount() == 0:
@@ -518,73 +403,56 @@ class NotasWindow(QDialog):
             
             items = []
             for fila in range(self.tabla_model.rowCount()):
-                tipo = self.tipo_por_fila.get(fila, 'normal')
-                if tipo != 'normal':
+                if self.tipo_por_fila.get(fila, 'normal') != 'normal':
                     continue
                 
                 cantidad = int(self.tabla_model.item(fila, 0).text())
                 descripcion = self.tabla_model.item(fila, 1).text()
-                precio_texto = self.tabla_model.item(fila, 2).text().replace('$', '').replace(',', '')
-                precio_unitario = float(precio_texto)
-                importe = cantidad * precio_unitario
-                iva_porcentaje = self.iva_por_fila.get(fila, 16.0)
+                precio_unitario = float(self.tabla_model.item(fila, 2).text().replace('$', '').replace(',', ''))
                 
-                item_data = {
+                items.append({
                     'cantidad': cantidad,
                     'descripcion': descripcion,
                     'precio_unitario': precio_unitario,
-                    'importe': importe,
-                    'impuesto': iva_porcentaje
-                }
-                items.append(item_data)
+                    'importe': cantidad * precio_unitario,
+                    'impuesto': self.iva_por_fila.get(fila, 16.0)
+                })
             
             if self.modo_edicion and self.nota_actual_id:
                 nota = db_helper.actualizar_nota(self.nota_actual_id, nota_data, items)
-                mensaje = "Nota actualizada correctamente"
+                mensaje = "Nota actualizada"
             else:
                 nota = db_helper.crear_nota(nota_data, items)
-                mensaje = "Nota guardada correctamente"
+                mensaje = "Nota guardada"
             
             if nota:
                 self.mostrar_exito(f"{mensaje}: {nota['folio']}")
-                
-                # --- INICIO DE MODIFICACIÓN (PUNTO 2) ---
-                # Limpiar el formulario después de guardar o actualizar
                 self.nueva_nota()
-                # --- FIN DE MODIFICACIÓN ---
-                
             else:
                 self.mostrar_error("No se pudo guardar la nota")
             
         except Exception as e:
             self.mostrar_error(f"Error al guardar: {e}")
-            import traceback
-            traceback.print_exc()
     
     def nueva_nota(self):
-            self.nota_actual_id = None
-            self.modo_edicion = False
-            self.txt_folio.clear()
-            self.txt_folio.setPlaceholderText("NV-Auto")
-            self.txt_estado.clear()
-            self.txt_estado.setPlaceholderText("Estado")
-            
-            self.date_fecha.setDate(QDate.currentDate())
-            self.txt_cliente.clear()
-            self.txt_referencia.clear()
-            
-            self.tabla_model.setRowCount(0)
-            self.iva_por_fila.clear()
-            self.tipo_por_fila.clear()
-            
-            self._limpiar_campos_item()
-            
-            self.calcular_totales()
-            
-            self.controlar_estado_campos(True)
-
-            if hasattr(self, 'botones') and len(self.botones) > 1:
-                self.botones[1].setText("Guardar")
+        self.nota_actual_id = None
+        self.modo_edicion = False
+        self.txt_folio.clear()
+        self.txt_folio.setPlaceholderText("NV-Auto")
+        self.txt_estado.clear()
+        self.date_fecha.setDate(QDate.currentDate())
+        self.txt_cliente.clear()
+        self.txt_referencia.clear()
+        
+        self.tabla_model.setRowCount(0)
+        self.iva_por_fila.clear()
+        self.tipo_por_fila.clear()
+        self._limpiar_campos_item()
+        self.calcular_totales()
+        self.controlar_estado_campos(True)
+        
+        if self.botones:
+            self.botones[1].setText("Guardar")
 
     def buscar_nota(self):
         folio, ok = QInputDialog.getText(self, "Buscar Nota", "Ingrese el folio:")
@@ -592,12 +460,10 @@ class NotasWindow(QDialog):
         if ok and folio:
             try:
                 notas = db_helper.buscar_notas(folio=folio)
-                
                 if notas:
                     self.cargar_nota_en_formulario(notas[0])
                 else:
                     self.mostrar_advertencia("No se encontró la nota")
-                    
             except Exception as e:
                 self.mostrar_error(f"Error al buscar: {e}")
 
@@ -607,10 +473,10 @@ class NotasWindow(QDialog):
             self.cargar_nota_en_formulario(dialog.nota_seleccionada)
     
     def abrir_ventana_ordenes_borrador(self):
-        if BuscarOrdenesBorradorDialog is None:
-            self.mostrar_error("Error Crítico: No se pudo cargar el módulo de 'BuscarOrdenesBorradorDialog'.")
+        if not BuscarOrdenesBorradorDialog:
+            self.mostrar_error("Módulo de órdenes no disponible")
             return
-            
+        
         dialog = BuscarOrdenesBorradorDialog(self)
         if dialog.exec_() == QDialog.Accepted and dialog.nota_seleccionada:
             self.cargar_nota_en_formulario(dialog.nota_seleccionada)
@@ -624,7 +490,7 @@ class NotasWindow(QDialog):
         self.txt_referencia.setText(nota['observaciones'])
         self.txt_estado.setText(nota.get('estado', 'Registrado'))
         
-        self.txt_cliente.clear()
+        # Buscar cliente
         for nombre, id_cliente in self.clientes_dict.items():
             if id_cliente == nota['cliente_id']:
                 self.txt_cliente.setText(nombre)
@@ -636,59 +502,37 @@ class NotasWindow(QDialog):
         
         if 'items' in nota:
             for item in nota['items']:
-                cantidad = str(item['cantidad'])
-                descripcion = item['descripcion']
-                precio_formateado = f"${item['precio_unitario']:.2f}"
-                iva_porcentaje = item['impuesto']
-                iva_texto = f"{iva_porcentaje:.1f} %"
-                importe_calculado = item['cantidad'] * item['precio_unitario']
-                importe_formateado = f"${importe_calculado:.2f}"
-
-                item_cantidad = QStandardItem(cantidad)
-                item_cantidad.setTextAlignment(Qt.AlignCenter)
-                
-                item_descripcion = QStandardItem(descripcion)
-                item_descripcion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                
-                item_precio = QStandardItem(precio_formateado)
-                item_precio.setTextAlignment(Qt.AlignCenter)
-                
-                item_iva = QStandardItem(iva_texto)
-                item_iva.setTextAlignment(Qt.AlignCenter)
-                
-                item_importe = QStandardItem(importe_formateado)
-                item_importe.setTextAlignment(Qt.AlignCenter)
-                
                 fila = self.tabla_model.rowCount()
                 self.tabla_model.insertRow(fila)
                 
-                self.tabla_model.setItem(fila, 0, item_cantidad)
-                self.tabla_model.setItem(fila, 1, item_descripcion)
-                self.tabla_model.setItem(fila, 2, item_precio)
-                self.tabla_model.setItem(fila, 3, item_iva)
-                self.tabla_model.setItem(fila, 4, item_importe)
+                self.tabla_model.setItem(fila, 0, self._crear_item(str(item['cantidad']), Qt.AlignCenter))
+                self.tabla_model.setItem(fila, 1, self._crear_item(item['descripcion'], Qt.AlignLeft | Qt.AlignVCenter))
+                self.tabla_model.setItem(fila, 2, self._crear_item(f"${item['precio_unitario']:.2f}", Qt.AlignCenter))
+                self.tabla_model.setItem(fila, 3, self._crear_item(f"{item['impuesto']:.1f} %", Qt.AlignCenter))
+                self.tabla_model.setItem(fila, 4, self._crear_item(f"${item['cantidad'] * item['precio_unitario']:.2f}", Qt.AlignCenter))
                 
-                self.iva_por_fila[fila] = iva_porcentaje
+                self.iva_por_fila[fila] = item['impuesto']
                 self.tipo_por_fila[fila] = 'normal'
         
         self.calcular_totales()
-
-        if hasattr(self, 'botones') and len(self.botones) > 1:
+        if self.botones:
             self.botones[1].setText("Guardar")
-
         self.controlar_estado_campos(False)
+
+    def _crear_item(self, texto, alineacion):
+        """Helper para crear items de tabla"""
+        item = QStandardItem(texto)
+        item.setTextAlignment(alineacion)
+        return item
 
     def cancelar_nota(self):
         if not self.nota_actual_id:
-            self.mostrar_advertencia("No hay una nota para cancelar")
+            self.mostrar_advertencia("No hay nota para cancelar")
             return
         
         respuesta = QMessageBox.question(
-            self, 
-            "Confirmar Cancelación", 
-            f"¿Cancelar la nota {self.txt_folio.text()}?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            self, "Confirmar", f"¿Cancelar la nota {self.txt_folio.text()}?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         
         if respuesta == QMessageBox.Yes:
@@ -701,20 +545,17 @@ class NotasWindow(QDialog):
                     else:
                         self.nueva_nota()
                 else:
-                    self.mostrar_error("No se pudo cancelar (puede estar ya cancelada o pagada)")
+                    self.mostrar_error("No se pudo cancelar (ya está cancelada o pagada)")
             except Exception as e:
-                self.mostrar_error(f"Error al cancelar: {e}")
+                self.mostrar_error(f"Error: {e}")
     
     def calcular_importe(self):
         try:
-            cantidad_texto = self.txt_cantidad.text()
+            cantidad_texto = self.txt_cantidad.text().strip()
             precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
             
             if cantidad_texto and precio_texto:
-                cantidad = float(cantidad_texto)
-                precio = float(precio_texto)
-                importe = cantidad * precio
-                self.txt_importe.setValue(importe)
+                self.txt_importe.setValue(float(cantidad_texto) * float(precio_texto))
             else:
                 self.txt_importe.setValue(0)
         except ValueError:
@@ -726,43 +567,20 @@ class NotasWindow(QDialog):
         
         cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
-        
-        precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
-        precio = float(precio_texto)
-        precio_formateado = f"${precio:.2f}"
-        
-        cantidad_calculo = float(cantidad) if cantidad else 1
-        importe = cantidad_calculo * precio
-        importe_formateado = f"${importe:.2f}"
-
-        iva_porcentaje = self.txt_impuestos.value()
-        iva_texto = f"{iva_porcentaje:.1f} %"
-        
-        item_cantidad = QStandardItem(cantidad)
-        item_cantidad.setTextAlignment(Qt.AlignCenter)
-        
-        item_descripcion = QStandardItem(descripcion)
-        item_descripcion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        item_precio = QStandardItem(precio_formateado)
-        item_precio.setTextAlignment(Qt.AlignCenter)
-        
-        item_iva = QStandardItem(iva_texto)
-        item_iva.setTextAlignment(Qt.AlignCenter)
-        
-        item_importe = QStandardItem(importe_formateado)
-        item_importe.setTextAlignment(Qt.AlignCenter)
+        precio = float(self.txt_precio.text().replace("$", "").replace(",", "").strip())
+        iva = self.txt_impuestos.value()
+        importe = float(cantidad) * precio
         
         fila = self.tabla_model.rowCount()
         self.tabla_model.insertRow(fila)
         
-        self.tabla_model.setItem(fila, 0, item_cantidad)
-        self.tabla_model.setItem(fila, 1, item_descripcion)
-        self.tabla_model.setItem(fila, 2, item_precio)
-        self.tabla_model.setItem(fila, 3, item_iva)
-        self.tabla_model.setItem(fila, 4, item_importe)
+        self.tabla_model.setItem(fila, 0, self._crear_item(cantidad, Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 1, self._crear_item(descripcion, Qt.AlignLeft | Qt.AlignVCenter))
+        self.tabla_model.setItem(fila, 2, self._crear_item(f"${precio:.2f}", Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 3, self._crear_item(f"{iva:.1f} %", Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 4, self._crear_item(f"${importe:.2f}", Qt.AlignCenter))
         
-        self.iva_por_fila[fila] = iva_porcentaje
+        self.iva_por_fila[fila] = iva
         self.tipo_por_fila[fila] = 'normal'
         
         self.calcular_totales()
@@ -771,402 +589,220 @@ class NotasWindow(QDialog):
     
     def cargar_item_para_editar(self, index):
         fila = index.row()
-        tipo_fila = self.tipo_por_fila.get(fila, 'normal')
         
-        if tipo_fila in ['nota', 'seccion']:
+        if self.tipo_por_fila.get(fila, 'normal') in ['nota', 'seccion']:
             self.editar_nota_o_seccion(fila)
             return
         
-        cantidad = self.tabla_model.index(fila, 0).data()
-        descripcion = self.tabla_model.index(fila, 1).data()
-        precio = self.tabla_model.index(fila, 2).data()
-        
-        precio = precio.replace("$", "").replace(",", "").strip()
-        
-        self.txt_cantidad.setText(cantidad)
-        self.txt_descripcion.setText(descripcion)
-        self.txt_precio.setText(precio)
-
-        if fila in self.iva_por_fila:
-            self.txt_impuestos.setValue(self.iva_por_fila[fila])
-        else:
-            self.txt_impuestos.setValue(16.0)
+        self.txt_cantidad.setText(self.tabla_model.index(fila, 0).data())
+        self.txt_descripcion.setText(self.tabla_model.index(fila, 1).data())
+        self.txt_precio.setText(self.tabla_model.index(fila, 2).data().replace("$", "").replace(",", "").strip())
+        self.txt_impuestos.setValue(self.iva_por_fila.get(fila, 16.0))
         
         self.fila_en_edicion = fila
-        
         self.btn_agregar.setText("Actualizar")
         
         try:
             self.btn_agregar.clicked.disconnect()
         except TypeError:
             pass
-        
         self.btn_agregar.clicked.connect(self.actualizar_item)
     
     def actualizar_item(self):
-        if self.fila_en_edicion == -1:
-            return
-        
-        if not self.validar_datos():
+        if self.fila_en_edicion == -1 or not self.validar_datos():
             return
         
         fila = self.fila_en_edicion
-        
         cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
-        
-        precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
-        precio = float(precio_texto)
-        precio_formateado = f"${precio:.2f}"
-        
-        cantidad_calculo = float(cantidad) if cantidad else 1
-        importe = cantidad_calculo * precio
-        importe_formateado = f"${importe:.2f}"
-        
-        iva_porcentaje = self.txt_impuestos.value()
-        iva_texto = f"{iva_porcentaje:.1f} %"
+        precio = float(self.txt_precio.text().replace("$", "").replace(",", "").strip())
+        iva = self.txt_impuestos.value()
+        importe = float(cantidad) * precio
         
         self.tabla_model.item(fila, 0).setText(cantidad)
         self.tabla_model.item(fila, 1).setText(descripcion)
-        self.tabla_model.item(fila, 2).setText(precio_formateado)
-        self.tabla_model.item(fila, 3).setText(iva_texto)
-        self.tabla_model.item(fila, 4).setText(importe_formateado)
+        self.tabla_model.item(fila, 2).setText(f"${precio:.2f}")
+        self.tabla_model.item(fila, 3).setText(f"{iva:.1f} %")
+        self.tabla_model.item(fila, 4).setText(f"${importe:.2f}")
         
-        self.iva_por_fila[fila] = iva_porcentaje
-        
+        self.iva_por_fila[fila] = iva
         self.calcular_totales()
-        
         self._limpiar_campos_item()
-        self.fila_en_edicion = -1
-        self.btn_agregar.setText("Agregar")
-        
-        try:
-            self.btn_agregar.clicked.disconnect()
-        except TypeError:
-            pass
-        self.btn_agregar.clicked.connect(self.agregar_a_tabla)
     
     def calcular_totales(self):
-        subtotal = 0
-        total_impuestos = 0
+        subtotal = total_impuestos = 0
         
         for fila in range(self.tabla_model.rowCount()):
-            tipo_fila = self.tipo_por_fila.get(fila, 'normal')
-            if tipo_fila != 'normal':
+            if self.tipo_por_fila.get(fila, 'normal') != 'normal':
                 continue
-                
-            importe_item = self.tabla_model.item(fila, 4)
-            if importe_item:
-                importe_texto = importe_item.text()
-                importe = float(importe_texto.replace("$", "").replace(",", "").strip())
-                
-                iva_porcentaje = self.iva_por_fila.get(fila, 16.0)
-                iva_monto = importe * (iva_porcentaje / 100)
-                
-                subtotal += importe
-                total_impuestos += iva_monto
-        
-        total = subtotal + total_impuestos
+            
+            importe = float(self.tabla_model.item(fila, 4).text().replace("$", "").replace(",", ""))
+            iva_porcentaje = self.iva_por_fila.get(fila, 16.0)
+            
+            subtotal += importe
+            total_impuestos += importe * (iva_porcentaje / 100)
         
         self.lbl_subtotal_valor.setText(f"$ {subtotal:,.2f}")
         self.lbl_impuestos_valor.setText(f"$ {total_impuestos:,.2f}")
-        self.lbl_total_valor.setText(f"$ {total:,.2f}")
+        self.lbl_total_valor.setText(f"$ {subtotal + total_impuestos:,.2f}")
     
     def mostrar_menu_contextual(self, position):
-        indexes = self.tabla_items.selectedIndexes()
-        
         menu = QMenu(self)
-        
         menu.addSection("Insertar")
         
-        action_nota = QAction("➕ Agregar Nota", self)
-        action_nota.triggered.connect(self.insertar_nota)
-        menu.addAction(action_nota)
-        
-        action_seccion = QAction("📁 Agregar Sección", self)
-        action_seccion.triggered.connect(self.insertar_seccion)
-        menu.addAction(action_seccion)
-        
+        menu.addAction("➕ Agregar Nota", self.insertar_nota)
+        menu.addAction("📁 Agregar Sección", self.insertar_seccion)
         menu.addSeparator()
         
+        indexes = self.tabla_items.selectedIndexes()
         if indexes:
             fila = indexes[0].row()
-            tipo_fila = self.tipo_por_fila.get(fila, 'normal')
-            
             menu.addSection("Acciones")
             
-            if tipo_fila in ['nota', 'seccion']:
-                action_editar = QAction("✏️ Editar", self)
-                action_editar.triggered.connect(lambda: self.editar_nota_o_seccion(fila))
-                menu.addAction(action_editar)
+            if self.tipo_por_fila.get(fila, 'normal') in ['nota', 'seccion']:
+                menu.addAction("✏️ Editar", lambda: self.editar_nota_o_seccion(fila))
                 menu.addSeparator()
             
-            es_primera_fila = (fila == 0)
-            es_ultima_fila = (fila == self.tabla_model.rowCount() - 1)
-            
-            action_subir = QAction("Mover Arriba", self)
-            action_subir.setEnabled(not es_primera_fila)
-            action_subir.triggered.connect(lambda: self.mover_fila_arriba(fila))
-            menu.addAction(action_subir)
-            
-            action_bajar = QAction("Mover Abajo", self)
-            action_bajar.setEnabled(not es_ultima_fila)
-            action_bajar.triggered.connect(lambda: self.mover_fila_abajo(fila))
-            menu.addAction(action_bajar)
-            
+            menu.addAction("Mover Arriba", lambda: self.mover_fila_arriba(fila)).setEnabled(fila > 0)
+            menu.addAction("Mover Abajo", lambda: self.mover_fila_abajo(fila)).setEnabled(fila < self.tabla_model.rowCount() - 1)
             menu.addSeparator()
-            
-            action_eliminar = QAction("Eliminar", self)
-            action_eliminar.triggered.connect(lambda: self.eliminar_fila(fila))
-            menu.addAction(action_eliminar)
+            menu.addAction("Eliminar", lambda: self.eliminar_fila(fila))
         
         menu.exec_(self.tabla_items.viewport().mapToGlobal(position))
     
     def insertar_nota(self):
-        texto, ok = QInputDialog.getText(
-            self, 
-            "Agregar Nota", 
-            "Ingrese el texto de la nota:",
-            QLineEdit.Normal,
-            ""
-        )
-        
+        texto, ok = QInputDialog.getText(self, "Agregar Nota", "Texto de la nota:")
         if ok and texto:
-            fila = self.tabla_model.rowCount()
-            self.tabla_model.insertRow(fila)
-            
-            item_nota = QStandardItem(f"📝 {texto}")
-            item_nota.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            item_nota.setBackground(QColor(245, 245, 245))
-            item_nota.setForeground(QColor(100, 100, 100))
-            
-            self.tabla_model.setItem(fila, 0, item_nota)
-            
-            self.tabla_items.setSpan(fila, 0, 1, 5)
-            
-            self.tipo_por_fila[fila] = 'nota'
-            
-            self.calcular_totales()
+            self._insertar_fila_especial(f"📝 {texto}", 'nota', QColor(245, 245, 245), QColor(100, 100, 100))
 
     def insertar_seccion(self):
-        texto, ok = QInputDialog.getText(
-            self, 
-            "Agregar Sección", 
-            "Nombre de la sección:",
-            QLineEdit.Normal,
-            ""
-        )
-        
+        texto, ok = QInputDialog.getText(self, "Agregar Sección", "Nombre de la sección:")
         if ok and texto:
-            fila = self.tabla_model.rowCount()
-            self.tabla_model.insertRow(fila)
-            
-            item_seccion = QStandardItem(texto.upper())
-            item_seccion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            item_seccion.setBackground(QColor(0, 120, 142, 30))
-            item_seccion.setForeground(QColor(0, 120, 142))
-            
-            font = item_seccion.font()
+            self._insertar_fila_especial(texto.upper(), 'seccion', QColor(0, 120, 142, 30), QColor(0, 120, 142), bold=True)
+
+    def _insertar_fila_especial(self, texto, tipo, bg_color, fg_color, bold=False):
+        """Helper para insertar notas y secciones"""
+        fila = self.tabla_model.rowCount()
+        self.tabla_model.insertRow(fila)
+        
+        item = QStandardItem(texto)
+        item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        item.setBackground(bg_color)
+        item.setForeground(fg_color)
+        
+        if bold:
+            font = item.font()
             font.setBold(True)
             font.setPointSize(10)
-            item_seccion.setFont(font)
-            
-            self.tabla_model.setItem(fila, 0, item_seccion)
-            
-            self.tabla_items.setSpan(fila, 0, 1, 5)
-            
-            self.tipo_por_fila[fila] = 'seccion'
-            
-            self.calcular_totales()
+            item.setFont(font)
+        
+        self.tabla_model.setItem(fila, 0, item)
+        self.tabla_items.setSpan(fila, 0, 1, 5)
+        self.tipo_por_fila[fila] = tipo
 
     def editar_nota_o_seccion(self, fila):
         tipo = self.tipo_por_fila.get(fila, 'normal')
         if tipo == 'normal':
             return
         
-        item_actual = self.tabla_model.item(fila, 0)
-        if not item_actual:
-            return
+        item = self.tabla_model.item(fila, 0)
+        texto_actual = item.text().replace("📝 ", "") if tipo == 'nota' else item.text()
         
-        texto_actual = item_actual.text()
-        
-        if tipo == 'nota':
-            texto_actual = texto_actual.replace("📝 ", "")
-            titulo = "Editar Nota"
-            mensaje = "Modifique el texto de la nota:"
-        else:
-            titulo = "Editar Sección"
-            mensaje = "Modifique el nombre de la sección:"
-        
-        texto_nuevo, ok = QInputDialog.getText(
-            self,
-            titulo,
-            mensaje,
-            QLineEdit.Normal,
-            texto_actual
-        )
+        titulo = "Editar Nota" if tipo == 'nota' else "Editar Sección"
+        texto_nuevo, ok = QInputDialog.getText(self, titulo, "Modificar:", QLineEdit.Normal, texto_actual)
         
         if ok and texto_nuevo:
             if tipo == 'nota':
-                item_actual.setText(f"📝 {texto_nuevo}")
-                item_actual.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                item_actual.setBackground(QColor(245, 245, 245))
-                item_actual.setForeground(QColor(100, 100, 100))
+                self._insertar_fila_especial(f"📝 {texto_nuevo}", 'nota', QColor(245, 245, 245), QColor(100, 100, 100))
             else:
-                item_actual.setText(texto_nuevo.upper())
-                item_actual.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                item_actual.setBackground(QColor(0, 120, 142, 30))
-                item_actual.setForeground(QColor(0, 120, 142))
-                
-                font = item_actual.font()
-                font.setBold(True)
-                font.setPointSize(10)
-                item_actual.setFont(font)
+                self._insertar_fila_especial(texto_nuevo.upper(), 'seccion', QColor(0, 120, 142, 30), QColor(0, 120, 142), bold=True)
+            self.tabla_model.removeRow(fila)
     
     def mover_fila_arriba(self, fila):
-        if fila <= 0:
-            return
-        
-        self.intercambiar_filas(fila, fila - 1)
-        
-        self.tabla_items.selectRow(fila - 1)
+        if fila > 0:
+            self.intercambiar_filas(fila, fila - 1)
+            self.tabla_items.selectRow(fila - 1)
     
     def mover_fila_abajo(self, fila):
-        if fila >= self.tabla_model.rowCount() - 1:
-            return
-        
-        self.intercambiar_filas(fila, fila + 1)
-        
-        self.tabla_items.selectRow(fila + 1)
+        if fila < self.tabla_model.rowCount() - 1:
+            self.intercambiar_filas(fila, fila + 1)
+            self.tabla_items.selectRow(fila + 1)
     
     def intercambiar_filas(self, fila1, fila2):
+        # Limpiar spans
         self.tabla_items.setSpan(fila1, 0, 1, 1)
         self.tabla_items.setSpan(fila2, 0, 1, 1)
         
-        items_fila1 = []
-        items_fila2 = []
-        
+        # Intercambiar items
         for col in range(self.tabla_model.columnCount()):
             item1 = self.tabla_model.item(fila1, col)
             item2 = self.tabla_model.item(fila2, col)
-            
-            if item1:
-                items_fila1.append(item1.clone())
-            else:
-                items_fila1.append(None)
-            
-            if item2:
-                items_fila2.append(item2.clone())
-            else:
-                items_fila2.append(None)
+            self.tabla_model.setItem(fila1, col, item2.clone() if item2 else QStandardItem(""))
+            self.tabla_model.setItem(fila2, col, item1.clone() if item1 else QStandardItem(""))
         
-        for col in range(len(items_fila1)):
-            if items_fila2[col]:
-                self.tabla_model.setItem(fila1, col, items_fila2[col])
-            else:
-                self.tabla_model.setItem(fila1, col, QStandardItem(""))
-            
-            if items_fila1[col]:
-                self.tabla_model.setItem(fila2, col, items_fila1[col])
-            else:
-                self.tabla_model.setItem(fila2, col, QStandardItem(""))
+        # Intercambiar metadatos
+        self.tipo_por_fila[fila1], self.tipo_por_fila[fila2] = \
+            self.tipo_por_fila.get(fila2, 'normal'), self.tipo_por_fila.get(fila1, 'normal')
+        self.iva_por_fila[fila1], self.iva_por_fila[fila2] = \
+            self.iva_por_fila.get(fila2, 16.0), self.iva_por_fila.get(fila1, 16.0)
         
-        tipo1 = self.tipo_por_fila.get(fila1, 'normal')
-        tipo2 = self.tipo_por_fila.get(fila2, 'normal')
-        self.tipo_por_fila[fila1] = tipo2
-        self.tipo_por_fila[fila2] = tipo1
-        
-        iva1 = self.iva_por_fila.get(fila1, 16.0)
-        iva2 = self.iva_por_fila.get(fila2, 16.0)
-        self.iva_por_fila[fila1] = iva2
-        self.iva_por_fila[fila2] = iva1
-        
-        if self.tipo_por_fila.get(fila1, 'normal') in ['nota', 'seccion']:
-            self.tabla_items.setSpan(fila1, 0, 1, 5)
-        
-        if self.tipo_por_fila.get(fila2, 'normal') in ['nota', 'seccion']:
-            self.tabla_items.setSpan(fila2, 0, 1, 5)
+        # Restaurar spans
+        for f in [fila1, fila2]:
+            if self.tipo_por_fila.get(f, 'normal') in ['nota', 'seccion']:
+                self.tabla_items.setSpan(f, 0, 1, 5)
     
     def eliminar_fila(self, fila):
-        reply = QMessageBox.question(
-            self,
-            'Confirmar',
-            '¿Eliminar este item?',
-            QMessageBox.Yes | QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
+        if QMessageBox.question(self, 'Confirmar', '¿Eliminar este item?',
+                                QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
             self.tabla_model.removeRow(fila)
             
-            nuevo_iva = {}
-            nuevo_tipo = {}
-            for f in range(self.tabla_model.rowCount()):
-                if f < fila:
-                    nuevo_iva[f] = self.iva_por_fila.get(f, 16.0)
-                    nuevo_tipo[f] = self.tipo_por_fila.get(f, 'normal')
-                else:
-                    nuevo_iva[f] = self.iva_por_fila.get(f + 1, 16.0)
-                    nuevo_tipo[f] = self.tipo_por_fila.get(f + 1, 'normal')
+            # Reindexar metadatos
+            self.iva_por_fila = {i if i < fila else i: self.iva_por_fila.get(i+1 if i >= fila else i, 16.0)
+                                 for i in range(self.tabla_model.rowCount())}
+            self.tipo_por_fila = {i if i < fila else i: self.tipo_por_fila.get(i+1 if i >= fila else i, 'normal')
+                                  for i in range(self.tabla_model.rowCount())}
             
-            self.iva_por_fila = nuevo_iva
-            self.tipo_por_fila = nuevo_tipo
             self.calcular_totales()
 
     def editar_nota(self):
         if not self.nota_actual_id:
-            self.mostrar_advertencia("No hay una nota cargada para editar")
+            self.mostrar_advertencia("No hay nota cargada")
             return
         if self.txt_estado.text() == 'Cancelada':
-            self.mostrar_advertencia("No se puede editar una nota cancelada.")
-            return            
+            self.mostrar_advertencia("No se puede editar una nota cancelada")
+            return
+        
         self.modo_edicion = True
         self.controlar_estado_campos(True)
-
-        if hasattr(self, 'botones') and len(self.botones) > 1:
+        if self.botones:
             self.botones[1].setText("Actualizar")
-        
         self.mostrar_exito("Modo edición activado")
     
     def controlar_estado_campos(self, habilitar):
-        if hasattr(self, 'txt_cliente'):
-            self.txt_cliente.setReadOnly(not habilitar)
-        if hasattr(self, 'date_fecha'):
-            self.date_fecha.setEnabled(habilitar)
-        if hasattr(self, 'txt_referencia'):
-            self.txt_referencia.setReadOnly(not habilitar)
+        self.txt_cliente.setReadOnly(not habilitar)
+        self.date_fecha.setEnabled(habilitar)
+        self.txt_referencia.setReadOnly(not habilitar)
+        self.txt_cantidad.setReadOnly(not habilitar)
+        self.txt_descripcion.setReadOnly(not habilitar)
+        self.txt_precio.setReadOnly(not habilitar)
+        self.btn_agregar.setEnabled(habilitar)
         
-        if hasattr(self, 'cmb_producto'):
-            self.cmb_producto.setEnabled(habilitar)
-        if hasattr(self, 'txt_cantidad'):
-            self.txt_cantidad.setReadOnly(not habilitar)
-        if hasattr(self, 'txt_descripcion'):
-            self.txt_descripcion.setReadOnly(not habilitar)
-        if hasattr(self, 'txt_precio'):
-            self.txt_precio.setReadOnly(not habilitar)
-        if hasattr(self, 'btn_agregar'):
-            self.btn_agregar.setEnabled(habilitar)
-        
-        if hasattr(self, 'tabla_items'):
-            if habilitar:
-                self.tabla_items.setEditTriggers(QTableView.DoubleClicked)
-            else:
-                self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
+        self.tabla_items.setEditTriggers(QTableView.DoubleClicked if habilitar else QTableView.NoEditTriggers)
     
     def abrir_ventana_pagos(self):
-        if PagosNotaDialog is None:
-            self.mostrar_error("Error Crítico: No se pudo cargar el módulo de pagos (PagosNotaDialog).")
+        if not PagosNotaDialog:
+            self.mostrar_error("Módulo de pagos no disponible")
             return
-            
-        dialog = PagosNotaDialog(self)
         
+        dialog = PagosNotaDialog(self)
         if self.nota_actual_id:
             try:
-                nota_para_pago = db_helper.get_nota(self.nota_actual_id)
-                if nota_para_pago:
-                    dialog.cargar_nota(nota_para_pago)
+                nota = db_helper.get_nota(self.nota_actual_id)
+                if nota:
+                    dialog.cargar_nota(nota)
             except Exception as e:
-                self.mostrar_error(f"No se pudo cargar la nota para pagos: {e}")
-                
+                self.mostrar_error(f"Error al cargar nota: {e}")
+        
         dialog.exec_()
         
         if self.nota_actual_id:
@@ -1174,83 +810,66 @@ class NotasWindow(QDialog):
                 nota_actualizada = db_helper.get_nota(self.nota_actual_id)
                 if nota_actualizada:
                     self.cargar_nota_en_formulario(nota_actualizada)
-                    print(f"Nota {self.nota_actual_id} recargada después de pagos.")
             except Exception as e:
-                print(f"Error al recargar nota tras pago: {e}")
-                self.mostrar_error(f"No se pudo recargar la nota: {e}")
+                self.mostrar_error(f"Error al recargar: {e}")
     
     def validar_datos(self):
-        cantidad_texto = self.txt_cantidad.text().strip()
-        if not cantidad_texto:
-             self.mostrar_advertencia("Ingrese una cantidad.")
-             return False
         try:
-             if float(cantidad_texto) <= 0:
-                 self.mostrar_advertencia("La cantidad debe ser mayor a 0.")
-                 return False
+            cantidad = self.txt_cantidad.text().strip()
+            if not cantidad or float(cantidad) <= 0:
+                self.mostrar_advertencia("Cantidad inválida")
+                return False
         except ValueError:
-             self.mostrar_advertencia("Ingrese una cantidad numérica válida.")
-             return False
-
-        if not self.txt_descripcion.text():
-            self.mostrar_advertencia("Ingrese una descripción.")
+            self.mostrar_advertencia("Cantidad debe ser numérica")
             return False
         
-        precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
-        if not precio_texto:
-            self.mostrar_advertencia("Ingrese un precio.")
+        if not self.txt_descripcion.text():
+            self.mostrar_advertencia("Ingrese descripción")
             return False
+        
         try:
-            # Permite precio 0.00 solo si la nota está en Borrador
-            if float(precio_texto) < 0:
-                 self.mostrar_advertencia("El precio no puede ser negativo.")
-                 return False
-            if float(precio_texto) == 0 and self.txt_estado.text() != "Borrador":
-                 self.mostrar_advertencia("El precio no puede ser 0.00 si la nota no está en Borrador.")
-                 return False
+            precio = float(self.txt_precio.text().replace("$", "").replace(",", "").strip())
+            if precio < 0:
+                self.mostrar_advertencia("Precio no puede ser negativo")
+                return False
+            if precio == 0 and self.txt_estado.text() != "Borrador":
+                self.mostrar_advertencia("Precio 0.00 solo en Borrador")
+                return False
         except ValueError:
-             self.mostrar_advertencia("Ingrese un precio numérico válido.")
-             return False
+            self.mostrar_advertencia("Precio inválido")
+            return False
         
         return True
     
     def _limpiar_campos_item(self):
-            self.txt_cantidad.setText("")
-            self.txt_descripcion.setText("")
-            self.txt_precio.setText("")
-            self.txt_importe.setValue(0)
-            self.txt_impuestos.setValue(16.00)
-            self.txt_cantidad.setFocus()
-            
-            self.btn_agregar.setText("Agregar")
-            try:
-                self.btn_agregar.clicked.disconnect()
-            except TypeError:
-                pass
-            self.btn_agregar.clicked.connect(self.agregar_a_tabla)
-            
-            self.fila_en_edicion = -1
+        self.txt_cantidad.clear()
+        self.txt_descripcion.clear()
+        self.txt_precio.clear()
+        self.txt_importe.setValue(0)
+        self.txt_impuestos.setValue(16.00)
+        self.txt_cantidad.setFocus()
+        
+        self.btn_agregar.setText("Agregar")
+        try:
+            self.btn_agregar.clicked.disconnect()
+        except TypeError:
+            pass
+        self.btn_agregar.clicked.connect(self.agregar_a_tabla)
+        self.fila_en_edicion = -1
     
     def mostrar_advertencia(self, mensaje):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Warning)
-        msg.setWindowTitle("Advertencia")
-        msg.setText(mensaje)
-        msg.setStyleSheet(MESSAGE_BOX_STYLE)
-        msg.exec_()
+        self._mostrar_mensaje(QMessageBox.Warning, "Advertencia", mensaje)
     
     def mostrar_error(self, mensaje):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Critical)
-        msg.setWindowTitle("Error")
-        msg.setText(mensaje)
-        msg.setStyleSheet(MESSAGE_BOX_STYLE)
-        msg.exec_()
+        self._mostrar_mensaje(QMessageBox.Critical, "Error", mensaje)
     
     def mostrar_exito(self, mensaje):
+        self._mostrar_mensaje(QMessageBox.Information, "Éxito", mensaje)
+    
+    def _mostrar_mensaje(self, icono, titulo, mensaje):
         msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information)
-        msg.setWindowTitle("Éxito")
+        msg.setIcon(icono)
+        msg.setWindowTitle(titulo)
         msg.setText(mensaje)
         msg.setStyleSheet(MESSAGE_BOX_STYLE)
         msg.exec_()
@@ -1258,67 +877,24 @@ class NotasWindow(QDialog):
     def _obtener_estilo_calendario(self):
         return """
             QDateEdit {
-                padding: 8px;
-                border: 2px solid #F5F5F5;
-                border-radius: 6px;
-                background-color: #F5F5F5;
-                min-height: 25px;
-                font-size: 16px;
-                margin-top: 0px;
+                padding: 8px; border: 2px solid #F5F5F5; border-radius: 6px;
+                background-color: #F5F5F5; min-height: 25px; font-size: 16px;
             }
-            
-            QDateEdit:focus {
-                border: 2px solid #2CD5C4;
-                background-color: white;
+            QDateEdit:focus { border: 2px solid #2CD5C4; background-color: white; }
+            QDateEdit::drop-down { border: 0px; background: transparent; width: 30px; }
+            QDateEdit::down-arrow { width: 16px; height: 16px; }
+            QCalendarWidget { background-color: white; border: 2px solid #00788E; border-radius: 8px; }
+            QCalendarWidget QToolButton { 
+                color: white; background-color: #00788E; border: none; 
+                border-radius: 4px; margin: 2px; padding: 4px; 
             }
-            
-            QDateEdit::drop-down {
-                border: 0px;
-                background: transparent;
-                subcontrol-position: right center;
-                width: 30px;
+            QCalendarWidget QToolButton:hover { background-color: #2CD5C4; }
+            QCalendarWidget QAbstractItemView { 
+                selection-background-color: #2CD5C4; selection-color: white; 
             }
-            
-            QDateEdit::down-arrow {
-                image: url(assets/icons/calendario.png);
-                width: 16px;
-                height: 16px;
-            }
-            
-            QCalendarWidget {
-                background-color: white;
-                border: 2px solid #00788E;
-                border-radius: 8px;
-            }
-            
-            QCalendarWidget QToolButton {
-                color: white;
-                background-color: #00788E;
-                border: none;
-                border-radius: 4px;
-                margin: 2px;
-                padding: 4px;
-            }
-            
-            QCalendarWidget QToolButton:hover {
-                background-color: #2CD5C4;
-            }
-            
-            QCalendarWidget QMenu {
-                background-color: white;
-                border: 1px solid #00788E;
-            }
-            
-            QCalendarWidget QAbstractItemView {
-                selection-background-color: #2CD5C4;
-                selection-color: white;
-            }
-            
-            QCalendarWidget QWidget#qt_calendar_navigationbar {
-                background-color: #00788E;
-            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar { background-color: #00788E; }
         """
-    
+
     def closeEvent(self, event):
         event.accept()
 
@@ -1328,7 +904,7 @@ if __name__ == "__main__":
     try:
         from gui.api_client import api_client as db_helper
     except ImportError:
-        print("Error: No se pudo importar api_client. Asegúrate de que el servidor esté corriendo.")
+        print("Error: Servidor no disponible")
         sys.exit(1)
     window = NotasWindow()
     window.show()

@@ -9,7 +9,8 @@ from PyQt5.QtWidgets import (
     QInputDialog, QCompleter,
     QTextEdit, QDialogButtonBox
 )
-from PyQt5.QtCore import Qt, QDate
+# QTimer es necesario para la carga asíncrona
+from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QIcon, QColor, QFont
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -56,30 +57,44 @@ class CotizacionesWindow(QDialog):
         self.cotizacion_actual_id = None
         self.modo_edicion = False
 
+        self._datos_cargados = False
+
         # Crear la interfaz
         self.setup_ui()
+        
+        # Conectar señales
+        self.conectar_senales()
 
         if ws_client:
             # Recargar autocompletado si cambia un cliente
             ws_client.cliente_creado.connect(self.on_notificacion_cliente)
             ws_client.cliente_actualizado.connect(self.on_notificacion_cliente)
-            pass
-        
-        self.cargar_clientes_autocompletado()
+            ws_client.cotizacion_actualizada.connect(self.on_notificacion_cotizacion)
+
+        QTimer.singleShot(100, self._cargar_datos_inicial)
 
         # Estado inicial
         self.controlar_estado_campos(True)
-    
+
+    def _cargar_datos_inicial(self):
+        """Carga datos después de mostrar la ventana"""
+        if not self._datos_cargados:
+            self.cargar_clientes_bd()
+            self._datos_cargados = True
+
     def on_notificacion_cliente(self, data):
-        self.cargar_clientes_autocompletado()
+        # Renombrado para consistencia
+        self.cargar_clientes_bd()
 
     def on_notificacion_cotizacion(self, data):
         if self.cotizacion_actual_id and data.get('id') == self.cotizacion_actual_id:
             print(f"Recargando cotización {self.cotizacion_actual_id} por notificación remota...")
             try:
-                cotizacion = db_helper.get_cotizacion(self.cotizacion_actual_id) # (get_cotizacion no existe en db_helper, usa buscar_cotizaciones)
-                if cotizacion:
-                    self.cargar_cotizacion_en_formulario(cotizacion)
+                cotizaciones = db_helper.buscar_cotizaciones(id=self.cotizacion_actual_id)
+                if cotizaciones:
+                    self.cargar_cotizacion_en_formulario(cotizaciones[0])
+                else:
+                    self.nueva_cotizacion() # Limpiar si ya no se encuentra
             except Exception as e:
                 print(f"Error recargando cotización: {e}")
                 self.nueva_cotizacion() # Limpiar si hay error
@@ -129,9 +144,6 @@ class CotizacionesWindow(QDialog):
 
         # Asignar el layout al diálogo
         self.setLayout(main_layout)
-        
-        # Conectar señales
-        self.conectar_senales()
 
     def crear_grupo_cotizacion(self, parent_layout):
         """Crear grupo de campos para datos de la cotización  """
@@ -439,7 +451,7 @@ class CotizacionesWindow(QDialog):
         self.tabla_items.customContextMenuRequested.connect(self.mostrar_menu_contextual)
         
         # Establecer altura
-        self.tabla_items.setMinimumHeight(15 * 30 + 40)
+        self.tabla_items.setMinimumHeight(450) # Aumentado para consistencia con notas_windows
         
         # Agregar al layout
         parent_layout.addWidget(self.tabla_items)
@@ -471,7 +483,7 @@ class CotizacionesWindow(QDialog):
                 'observaciones': self.txt_proyecto.text()
             }
             
-            # Preparar items (solo normales)
+            # Preparar items
             items = []
             for fila in range(self.tabla_model.rowCount()):
                 if self.tipo_por_fila.get(fila, 'normal') != 'normal':
@@ -494,9 +506,7 @@ class CotizacionesWindow(QDialog):
             
             if cotizacion:
                 self.mostrar_exito(f"{mensaje}: {cotizacion['folio']}")
-                # --- INICIO DE MODIFICACIÓN (PUNTOS 1, 2) ---
                 self.nueva_cotizacion()
-                # --- FIN DE MODIFICACIÓN ---
             else:
                 self.mostrar_error("No se pudo guardar")
             
@@ -520,13 +530,11 @@ class CotizacionesWindow(QDialog):
         self.iva_por_fila.clear()
         self.tipo_por_fila.clear()
         
-        self.limpiar_formulario_items()
+        self._limpiar_campos_item() # Renombrado
         self.calcular_totales()
         self.controlar_estado_campos(True) # Habilita campos
         
-        # --- INICIO DE MODIFICACIÓN (PUNTO 3) ---
         self.botones[1].setText("Guardar")
-        # --- FIN DE MODIFICACIÓN ---
 
     def buscar_cotizacion(self):
         """Buscar cotización  """
@@ -543,6 +551,12 @@ class CotizacionesWindow(QDialog):
                     self.mostrar_advertencia("Cotización no encontrada")
             except Exception as e:
                 self.mostrar_error(f"Error al buscar: {e}")
+
+    def _crear_item(self, texto, alineacion):
+        """Helper para crear items de tabla (de notas_windows)"""
+        item = QStandardItem(texto)
+        item.setTextAlignment(alineacion)
+        return item
 
     def cargar_cotizacion_en_formulario(self, cotizacion):
         """Cargar en formulario"""
@@ -645,19 +659,15 @@ class CotizacionesWindow(QDialog):
         cantidad_num = float(cantidad)
         importe = cantidad_num * precio
         
-        item_cantidad = QStandardItem(cantidad)
-        item_cantidad.setTextAlignment(Qt.AlignCenter)
-        item_descripcion = QStandardItem(descripcion)
-        item_descripcion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        item_precio = QStandardItem(f"${precio:.2f}")
-        item_precio.setTextAlignment(Qt.AlignCenter)
-        item_iva = QStandardItem(f"{iva_porcentaje:.1f} %")
-        item_iva.setTextAlignment(Qt.AlignCenter)
-        item_importe = QStandardItem(f"${importe:.2f}")
-        item_importe.setTextAlignment(Qt.AlignCenter)
-        
         fila = self.tabla_model.rowCount()
-        self.tabla_model.appendRow([item_cantidad, item_descripcion, item_precio, item_iva, item_importe])
+        self.tabla_model.insertRow(fila)
+
+        self.tabla_model.setItem(fila, 0, self._crear_item(cantidad, Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 1, self._crear_item(descripcion, Qt.AlignLeft | Qt.AlignVCenter))
+        self.tabla_model.setItem(fila, 2, self._crear_item(f"${precio:.2f}", Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 3, self._crear_item(f"{iva_porcentaje:.1f} %", Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 4, self._crear_item(f"${importe:.2f}", Qt.AlignCenter))
+        
         self.iva_por_fila[fila] = iva_porcentaje
         self.tipo_por_fila[fila] = 'normal'
 
@@ -697,11 +707,14 @@ class CotizacionesWindow(QDialog):
         )
         
         if respuesta == QMessageBox.Yes:
-            if db_helper.cancelar_cotizacion(self.cotizacion_actual_id):
-                self.mostrar_exito("Cotización cancelada")
-                self.nueva_cotizacion()
-            else:
-                self.mostrar_error("No se pudo cancelar (puede estar ya cancelada)")
+            try:
+                if db_helper.cancelar_cotizacion(self.cotizacion_actual_id):
+                    self.mostrar_exito("Cotización cancelada")
+                    self.nueva_cotizacion()
+                else:
+                    self.mostrar_error("No se pudo cancelar (puede estar ya cancelada)")
+            except Exception as e:
+                self.mostrar_error(f"Error al cancelar: {e}")
                 
     def controlar_estado_campos(self, habilitar):
         """Habilitar/deshabilitar campos"""
@@ -743,8 +756,8 @@ class CotizacionesWindow(QDialog):
                 pass
 
 
-    def cargar_clientes_autocompletado(self):
-        """Cargar clientes y configurar autocompletado"""
+    def cargar_clientes_bd(self):
+        """Cargar clientes y configurar autocompletado (Renombrado)"""
         try:
             # Esta llamada ahora usa api_client
             clientes = db_helper.get_clientes()
@@ -885,8 +898,6 @@ class CotizacionesWindow(QDialog):
 
     # ===================================================================
     # = MÉTODOS MENÚ CONTEXTUAL Y TABLA
-    # (El resto del archivo no cambia, ya que db_helper está 
-    #  renombrado y las llamadas funcionarán a través del API Client)
     # ===================================================================
     
     def mostrar_menu_contextual(self, position):
@@ -951,49 +962,54 @@ class CotizacionesWindow(QDialog):
         
         menu.exec_(self.tabla_items.viewport().mapToGlobal(position))
 
+    def _insertar_fila_especial(self, texto, tipo, bg_color, fg_color, bold=False, height=None):
+        """Helper para insertar notas y secciones (de notas_windows)"""
+        fila = self.tabla_model.rowCount()
+        self.tabla_model.insertRow(fila)
+        
+        item = QStandardItem(texto)
+        alineacion = Qt.AlignLeft | (Qt.AlignTop if height else Qt.AlignVCenter)
+        item.setTextAlignment(alineacion)
+        item.setBackground(bg_color)
+        item.setForeground(fg_color)
+        
+        if bold:
+            font = item.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            item.setFont(font)
+        
+        self.tabla_model.setItem(fila, 0, item)
+        self.tabla_items.setSpan(fila, 0, 1, 5)
+        self.tipo_por_fila[fila] = tipo
+        
+        if height:
+            self.tabla_items.setRowHeight(fila, height)
+
     def insertar_nota(self):
-        """Inserta una fila de tipo nota  """
+        """Inserta una fila de tipo nota (Refactorizado)"""
         texto, ok = QInputDialog.getText(
             self, "Agregar Nota", "Ingrese el texto de la nota:", QLineEdit.Normal, ""
         )
         if ok and texto:
-            fila = self.tabla_model.rowCount()
-            self.tabla_model.insertRow(fila)
-            
-            item_nota = QStandardItem(f"📝 {texto}")
-            item_nota.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            item_nota.setBackground(QColor(245, 245, 245))
-            item_nota.setForeground(QColor(100, 100, 100))
-            
-            self.tabla_model.setItem(fila, 0, item_nota)
-            self.tabla_items.setSpan(fila, 0, 1, 5)
-            self.tipo_por_fila[fila] = 'nota'
-            self.calcular_totales()
+            self._insertar_fila_especial(
+                f"📝 {texto}", 'nota', 
+                QColor(245, 245, 245), QColor(100, 100, 100)
+            )
 
     def insertar_seccion(self):
-        """Inserta una fila de tipo sección  """
+        """Inserta una fila de tipo sección (Refactorizado)"""
         texto, ok = QInputDialog.getText(
             self, "Agregar Sección", "Nombre de la sección:", QLineEdit.Normal, ""
         )
         if ok and texto:
-            fila = self.tabla_model.rowCount()
-            self.tabla_model.insertRow(fila)
-            
-            item_seccion = QStandardItem(texto.upper())
-            item_seccion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            item_seccion.setBackground(QColor(0, 120, 142, 30))
-            item_seccion.setForeground(QColor(0, 120, 142))
-            
-            font = item_seccion.font(); font.setBold(True); font.setPointSize(10)
-            item_seccion.setFont(font)
-            
-            self.tabla_model.setItem(fila, 0, item_seccion)
-            self.tabla_items.setSpan(fila, 0, 1, 5)
-            self.tipo_por_fila[fila] = 'seccion'
-            self.calcular_totales()
+            self._insertar_fila_especial(
+                texto.upper(), 'seccion',
+                QColor(0, 120, 142, 30), QColor(0, 120, 142), bold=True
+            )
 
     def insertar_condiciones(self):
-        """Inserta condiciones comerciales  """
+        """Inserta condiciones comerciales (Refactorizado)"""
         dialog = QDialog(self)
         dialog.setWindowTitle("Agregar Condiciones Comerciales")
         dialog.setMinimumWidth(500)
@@ -1015,19 +1031,10 @@ class CotizacionesWindow(QDialog):
         if dialog.exec_() == QDialog.Accepted:
             texto = text_edit.toPlainText()
             if texto:
-                fila = self.tabla_model.rowCount()
-                self.tabla_model.insertRow(fila)
-                
-                item_condiciones = QStandardItem(f"📋 CONDICIONES COMERCIALES:\n{texto}")
-                item_condiciones.setTextAlignment(Qt.AlignLeft | Qt.AlignTop)
-                item_condiciones.setBackground(QColor(255, 250, 205))
-                item_condiciones.setForeground(QColor(50, 50, 50))
-                
-                self.tabla_model.setItem(fila, 0, item_condiciones)
-                self.tabla_items.setSpan(fila, 0, 1, 5)
-                self.tipo_por_fila[fila] = 'condiciones'
-                self.tabla_items.setRowHeight(fila, 80)
-                self.calcular_totales()
+                self._insertar_fila_especial(
+                    f"📋 CONDICIONES COMERCIALES:\n{texto}", 'condiciones',
+                    QColor(255, 250, 205), QColor(50, 50, 50), height=80
+                )
 
     def editar_elemento_especial(self, fila):
         """Edita una nota, sección o condiciones existente  """
@@ -1146,7 +1153,7 @@ class CotizacionesWindow(QDialog):
             self.calcular_totales()
             
             if fila == self.fila_en_edicion:
-                self.limpiar_formulario_items()
+                self._limpiar_campos_item() # Renombrado
     
     def calcular_importe(self):
         """Calcular el importe  """
@@ -1159,7 +1166,7 @@ class CotizacionesWindow(QDialog):
             self.txt_importe.setValue(importe)
             
             if precio > 0 and not self.txt_precio.hasFocus():
-                self.txt_precio.setText(f"${precio:.2f}")
+                self.txt_precio.setText(f"{precio:.2f}") # Simplificado
         except ValueError:
             self.txt_importe.setValue(0)
     
@@ -1298,7 +1305,7 @@ class CotizacionesWindow(QDialog):
         parent_layout.addWidget(contenedor_principal)
     
     def agregar_a_tabla(self):
-        """Agrega los datos del formulario a la tabla  """
+        """Agrega los datos del formulario a la tabla (Refactorizado)"""
         if not self.validar_datos():
             return
         
@@ -1313,31 +1320,20 @@ class CotizacionesWindow(QDialog):
         iva_porcentaje = self.txt_impuestos.value()
         iva_texto = f"{iva_porcentaje:.1f} %"
         
-        item_cantidad = QStandardItem(cantidad)
-        item_cantidad.setTextAlignment(Qt.AlignCenter)
-        item_descripcion = QStandardItem(descripcion)
-        item_descripcion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        item_precio = QStandardItem(precio_formateado)
-        item_precio.setTextAlignment(Qt.AlignCenter)
-        item_iva = QStandardItem(iva_texto)
-        item_iva.setTextAlignment(Qt.AlignCenter)
-        item_importe = QStandardItem(importe_formateado)
-        item_importe.setTextAlignment(Qt.AlignCenter)
-        
         fila = self.tabla_model.rowCount()
         self.tabla_model.insertRow(fila)
         
-        self.tabla_model.setItem(fila, 0, item_cantidad)
-        self.tabla_model.setItem(fila, 1, item_descripcion)
-        self.tabla_model.setItem(fila, 2, item_precio)
-        self.tabla_model.setItem(fila, 3, item_iva)
-        self.tabla_model.setItem(fila, 4, item_importe)
+        self.tabla_model.setItem(fila, 0, self._crear_item(cantidad, Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 1, self._crear_item(descripcion, Qt.AlignLeft | Qt.AlignVCenter))
+        self.tabla_model.setItem(fila, 2, self._crear_item(precio_formateado, Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 3, self._crear_item(iva_texto, Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 4, self._crear_item(importe_formateado, Qt.AlignCenter))
         
         self.iva_por_fila[fila] = iva_porcentaje
         self.tipo_por_fila[fila] = 'normal' # Marcar como normal
         
         self.calcular_totales()
-        self.limpiar_formulario_items()
+        self._limpiar_campos_item() # Renombrado
         self.tabla_items.selectRow(fila)
     
     def cargar_item_para_editar(self, index):
@@ -1378,6 +1374,7 @@ class CotizacionesWindow(QDialog):
         if not self.validar_datos():
             return
         
+        fila = self.fila_en_edicion
         cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
         precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
@@ -1388,23 +1385,16 @@ class CotizacionesWindow(QDialog):
         importe_formateado = f"${importe:.2f}"
         iva_texto = f"{self.txt_impuestos.value():.1f} %"
         
-        self.tabla_model.setItem(self.fila_en_edicion, 0, QStandardItem(cantidad))
-        self.tabla_model.setItem(self.fila_en_edicion, 1, QStandardItem(descripcion))
-        self.tabla_model.setItem(self.fila_en_edicion, 2, QStandardItem(precio_formateado))
-        self.tabla_model.setItem(self.fila_en_edicion, 3, QStandardItem(iva_texto))
-        self.tabla_model.setItem(self.fila_en_edicion, 4, QStandardItem(importe_formateado))
+        self.tabla_model.setItem(fila, 0, self._crear_item(cantidad, Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 1, self._crear_item(descripcion, Qt.AlignLeft | Qt.AlignVCenter))
+        self.tabla_model.setItem(fila, 2, self._crear_item(precio_formateado, Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 3, self._crear_item(iva_texto, Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 4, self._crear_item(importe_formateado, Qt.AlignCenter))
 
         self.iva_por_fila[self.fila_en_edicion] = self.txt_impuestos.value()
         
-        # Restaurar alineaciones
-        self.tabla_model.item(self.fila_en_edicion, 0).setTextAlignment(Qt.AlignCenter)
-        self.tabla_model.item(self.fila_en_edicion, 1).setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.tabla_model.item(self.fila_en_edicion, 2).setTextAlignment(Qt.AlignCenter)
-        self.tabla_model.item(self.fila_en_edicion, 3).setTextAlignment(Qt.AlignCenter)
-        self.tabla_model.item(self.fila_en_edicion, 4).setTextAlignment(Qt.AlignCenter)
-        
         self.calcular_totales()
-        self.limpiar_formulario_items()
+        self._limpiar_campos_item() # Renombrado
     
     # ===================================================================
     # = HELPERS
@@ -1412,39 +1402,53 @@ class CotizacionesWindow(QDialog):
 
     def mostrar_advertencia(self, mensaje):
         """Muestra un mensaje de advertencia  """
-        msg_box = QMessageBox(QMessageBox.Warning, "Advertencia", mensaje, QMessageBox.Ok, self)
-        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
-        msg_box.exec_()
+        self._mostrar_mensaje(QMessageBox.Warning, "Advertencia", mensaje)
     
     def mostrar_exito(self, mensaje):
         """Muestra un mensaje de éxito  """
-        QMessageBox.information(self, "Éxito", mensaje)
+        self._mostrar_mensaje(QMessageBox.Information, "Éxito", mensaje)
 
     def mostrar_error(self, mensaje):
         """Muestra un mensaje de error  """
-        msg = QMessageBox(QMessageBox.Critical, "Error", mensaje, QMessageBox.Ok, self)
+        self._mostrar_mensaje(QMessageBox.Critical, "Error", mensaje)
+    
+    def _mostrar_mensaje(self, icono, titulo, mensaje):
+        """Helper centralizado para mostrar QMessageBox"""
+        msg = QMessageBox(self)
+        msg.setIcon(icono)
+        msg.setWindowTitle(titulo)
+        msg.setText(mensaje)
         msg.setStyleSheet(MESSAGE_BOX_STYLE)
         msg.exec_()
 
     def validar_datos(self):
         """Valida los datos del formulario de items  """
-        if not self.txt_cantidad.text() or self.txt_cantidad.text() == "0":
-            self.mostrar_advertencia("Ingrese una cantidad válida.")
+        try:
+            cantidad = float(self.txt_cantidad.text().strip())
+            if cantidad <= 0:
+                self.mostrar_advertencia("Ingrese una cantidad válida.")
+                return False
+        except ValueError:
+            self.mostrar_advertencia("Cantidad debe ser numérica.")
             return False
         
         if not self.txt_descripcion.text():
             self.mostrar_advertencia("Ingrese una descripción.")
             return False
         
-        precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
-        if not precio_texto or float(precio_texto) <= 0:
-            self.mostrar_advertencia("Ingrese un precio unitario válido.")
+        try:
+            precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
+            if not precio_texto or float(precio_texto) <= 0:
+                self.mostrar_advertencia("Ingrese un precio unitario válido.")
+                return False
+        except ValueError:
+            self.mostrar_advertencia("Precio inválido.")
             return False
         
         return True
     
-    def limpiar_formulario_items(self):
-        """Limpia los campos del formulario de entrada  """
+    def _limpiar_campos_item(self):
+        """Limpia los campos del formulario de entrada (Renombrado)"""
         self.txt_cantidad.setText("")
         self.txt_descripcion.setText("")
         self.txt_precio.setText("")

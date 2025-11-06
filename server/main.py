@@ -242,7 +242,6 @@ def _cliente_to_dict(c):
         'ciudad': c.ciudad or '',
         'estado': c.estado or '',
         'cp': c.cp or '',
-        'notas': c.notas or ''
     }
 
 def _proveedor_to_dict(p):

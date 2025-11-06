@@ -98,6 +98,20 @@ class AdministracionWindow(QDialog):
 
         # Asignar el layout al diálogo
         self.setLayout(main_layout)
+
+    def precalentar_sub_ventanas(self):
+        """Crea instancias de las sub-ventanas de admin."""
+        try:
+            if self.window_instances["notas"] is None:
+                self.window_instances["notas"] = NotasWindow(self)
+            if self.window_instances["cotizaciones"] is None:
+                self.window_instances["cotizaciones"] = CotizacionesWindow(self)
+            if self.window_instances["ordenes"] is None:
+                self.window_instances["ordenes"] = OrdenesWindow(self)
+            if self.window_instances["notas_proveedores"] is None:
+                self.window_instances["notas_proveedores"] = NotasProveedoresWindow(self)
+        except Exception as e:
+            print(f"Error pre-calentando sub-ventanas: {e}")
     
     def create_button(self, config, identifier):
         """

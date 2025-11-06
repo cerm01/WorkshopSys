@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QInputDialog,
     QCompleter
 )
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor, QFont
 
 # Import styles
@@ -27,8 +27,8 @@ try:
     from gui.websocket_client import ws_client
 
 except ImportError:
-    print("Error: No se pudo importar 'api_client' o 'ws_client'.") # (MODIFICADO)
-    db_helper = None # Mantener el fallback por si acaso
+    print("Error: No se pudo importar 'api_client' o 'ws_client'.") 
+    db_helper = None 
 
 try:
     from dialogs.buscar_ordenes_dialog import BuscarOrdenesDialog
@@ -56,38 +56,42 @@ class OrdenesWindow(QDialog):
         self.orden_actual_obj = None
         self.modo_edicion = False
         self.clientes_dict = {}
+        self._datos_cargados = False
 
         self.setup_ui()
+        self.conectar_senales()
         
         if ws_client:
             ws_client.cliente_creado.connect(self.on_notificacion_cliente)
             ws_client.cliente_actualizado.connect(self.on_notificacion_cliente)
-            ws_client.orden_creada.connect(self.on_notificacion_orden) # 'orden_creada' se usa para todo
+            ws_client.orden_creada.connect(self.on_notificacion_orden) 
         
-        self.cargar_clientes_autocompletar()
         self.nueva_orden()
+        
+        QTimer.singleShot(100, self._cargar_datos_inicial)
     
+    def _cargar_datos_inicial(self):
+        if not self._datos_cargados:
+            self.cargar_clientes_bd()
+            self._datos_cargados = True
+
     def on_notificacion_cliente(self, data):
-        self.cargar_clientes_autocompletar()
+        self.cargar_clientes_bd()
 
     def on_notificacion_orden(self, data):
-        """Recarga la orden actual si coincide con la notificación."""
         if self.orden_actual_id and data.get('id') == self.orden_actual_id:
             print(f"Recargando orden {self.orden_actual_id} por notificación remota.")
             try:
-                # Esta llamada ahora usa api_client
                 orden_actualizada = db_helper.get_orden(self.orden_actual_id)
                 if orden_actualizada:
                     self.cargar_orden_en_formulario(orden_actualizada)
                 else:
-                    # La orden fue eliminada remotamente
                     self.nueva_orden()
                     self.mostrar_advertencia("La orden que estaba viendo fue eliminada remotamente.")
             except Exception as e:
                 print(f"Error recargando orden: {e}")
     
     def setup_ui(self):
-        """Configurar la interfaz de usuario"""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
         
@@ -100,10 +104,8 @@ class OrdenesWindow(QDialog):
         self.crear_botones(main_layout)
 
         self.setLayout(main_layout)
-        self.conectar_senales()
 
     def crear_grupo_orden(self, parent_layout):
-        """Crear grupo de campos para datos de la orden"""
         grupo_orden = QGroupBox("")
         grupo_orden.setStyleSheet(GROUP_BOX_STYLE)
         
@@ -111,7 +113,6 @@ class OrdenesWindow(QDialog):
         layout.setSpacing(15)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Folio
         lbl_folio = QLabel("Folio Orden")
         lbl_folio.setStyleSheet(LABEL_STYLE)
         self.txt_folio = QLineEdit()
@@ -119,14 +120,12 @@ class OrdenesWindow(QDialog):
         self.txt_folio.setReadOnly(True)
         self.txt_folio.setPlaceholderText("ORD-Auto")
         
-        # Cliente
         lbl_cliente = QLabel("Cliente")
         lbl_cliente.setStyleSheet(LABEL_STYLE)
         self.txt_cliente = QLineEdit()
         self.txt_cliente.setStyleSheet(INPUT_STYLE)
         self.txt_cliente.setPlaceholderText("Escriba para buscar cliente...")
         
-        # Fecha
         lbl_fecha = QLabel("Fecha")
         lbl_fecha.setStyleSheet(LABEL_STYLE)
         self.date_fecha = QDateEdit()
@@ -135,7 +134,6 @@ class OrdenesWindow(QDialog):
         self.date_fecha.setDisplayFormat("dd/MM/yyyy")
         self.date_fecha.setStyleSheet(self._obtener_estilo_calendario())
         
-        # Estado
         lbl_estado = QLabel("Estado")
         lbl_estado.setStyleSheet(LABEL_STYLE)
         self.cmb_estado = QComboBox()
@@ -155,7 +153,6 @@ class OrdenesWindow(QDialog):
         parent_layout.addWidget(grupo_orden)
     
     def crear_grupo_vehiculo(self, parent_layout):
-        """Crear grupo de campos para datos del vehículo"""
         grupo_vehiculo = QGroupBox("")
         grupo_vehiculo.setStyleSheet(GROUP_BOX_STYLE)
         
@@ -186,7 +183,6 @@ class OrdenesWindow(QDialog):
         parent_layout.addWidget(grupo_vehiculo)
 
     def crear_grupo_servicio(self, parent_layout):
-        """Crear grupo para agregar servicios/trabajos"""
         grupo = QGroupBox("")
         grupo.setStyleSheet(GROUP_BOX_STYLE)
         
@@ -226,7 +222,6 @@ class OrdenesWindow(QDialog):
         parent_layout.addWidget(grupo)
     
     def crear_tabla_items(self, parent_layout):
-        """Crear tabla para mostrar los trabajos/servicios"""
         self.tabla_model = QStandardItemModel()
         self.tabla_model.setHorizontalHeaderLabels(["Cantidad", "Descripción del Trabajo/Servicio"])
         
@@ -253,16 +248,13 @@ class OrdenesWindow(QDialog):
         parent_layout.addWidget(self.tabla_items)
 
     def crear_botones(self, parent_layout):
-        """Crear botones de acción"""
         botones_layout = QHBoxLayout()
         botones_layout.setSpacing(10)
         
-        # --- INICIO DE MODIFICACIÓN (REQ 1 Y 2) ---
         textos_botones = [
             "Nueva", "Guardar", "Cancelar", "Buscar", "Editar", "Limpiar", "Imprimir", 
             "Mostrar Órdenes", "Generar Nota"
         ]
-        # --- FIN DE MODIFICACIÓN ---
         
         self.botones = []
         
@@ -274,7 +266,6 @@ class OrdenesWindow(QDialog):
             botones_layout.addWidget(boton)
             self.botones.append(boton)
         
-        # --- INICIO DE MODIFICACIÓN (Índices ajustados) ---
         self.btn_nueva = self.botones[0]
         self.btn_guardar = self.botones[1]
         self.btn_cancelar = self.botones[2]
@@ -282,14 +273,12 @@ class OrdenesWindow(QDialog):
         self.btn_editar = self.botones[4]
         self.btn_limpiar = self.botones[5]
         self.btn_imprimir = self.botones[6]
-        self.btn_mostrar_ordenes = self.botones[7] # Botón nuevo
-        self.btn_generar_nota = self.botones[8] # Índice movido
-        # --- FIN DE MODIFICACIÓN ---
+        self.btn_mostrar_ordenes = self.botones[7] 
+        self.btn_generar_nota = self.botones[8] 
         
         parent_layout.addLayout(botones_layout)
 
     def _obtener_estilo_calendario(self):
-        """Estilo para el calendario"""
         return """
             QDateEdit {
                 padding: 8px;
@@ -316,7 +305,6 @@ class OrdenesWindow(QDialog):
         """
 
     def conectar_senales(self):
-        """Conectar señales de controles"""
         self.btn_agregar.clicked.connect(self.agregar_a_tabla)
         self.tabla_items.doubleClicked.connect(self.cargar_item_para_editar)
 
@@ -327,32 +315,23 @@ class OrdenesWindow(QDialog):
         self.btn_editar.clicked.connect(self.habilitar_edicion)
         self.btn_limpiar.clicked.connect(self.nueva_orden) 
         
-        # --- INICIO DE MODIFICACIÓN (REQ 3) ---
         self.btn_mostrar_ordenes.clicked.connect(self.abrir_ventana_ordenes)
-        # --- FIN DE MODIFICACIÓN ---
-        
         self.btn_generar_nota.clicked.connect(self.generar_nota_desde_orden)
 
     # ==================================================
     # LÓGICA DE BASE DE DATOS Y ESTADO
     # ==================================================
 
-
-    # --- INICIO DE MODIFICACIÓN (REQ 3) ---
     def abrir_ventana_ordenes(self):
-        """Abre el diálogo para mostrar todas las órdenes."""
         if BuscarOrdenesDialog is None:
             self.mostrar_error("Error Crítico: No se pudo cargar el módulo de 'BuscarOrdenesDialog'.")
             return
             
         dialog = BuscarOrdenesDialog(self)
         if dialog.exec_() == QDialog.Accepted and dialog.orden_seleccionada:
-            # Si el usuario selecciona una, la cargamos
             self.cargar_orden_en_formulario(dialog.orden_seleccionada)
-    # --- FIN DE MODIFICACIÓN ---
 
     def nueva_orden(self):
-        """Prepara el formulario para una nueva orden."""
         self.orden_actual_id = None
         self.orden_actual_obj = None
         self.modo_edicion = True
@@ -366,7 +345,7 @@ class OrdenesWindow(QDialog):
         self.txt_ano.clear()
         self.txt_placa.clear()
         
-        self.limpiar_formulario_item()
+        self._limpiar_campos_item()
         
         self.cmb_estado.setCurrentText("Pendiente")
         self.date_fecha.setDate(QDate.currentDate())
@@ -377,12 +356,10 @@ class OrdenesWindow(QDialog):
         
         self.btn_guardar.setText("Guardar")
 
-    def cargar_clientes_autocompletar(self):
-        """Carga los clientes desde la BD y configura el QCompleter."""
+    def cargar_clientes_bd(self):
         if not db_helper: return
         
         try:
-            # Esta llamada ahora usa api_client
             clientes = db_helper.get_clientes()
             self.clientes_dict.clear()
             nombres_clientes = []
@@ -439,7 +416,6 @@ class OrdenesWindow(QDialog):
             self.mostrar_advertencia("Seleccione un cliente válido.")
             return
         
-        # Recopilar items
         items_a_guardar = []
         for fila in range(self.tabla_model.rowCount()):
             tipo = self.tipo_por_fila.get(fila, 'normal')
@@ -488,7 +464,7 @@ class OrdenesWindow(QDialog):
                     self.orden_actual_obj = orden
             
             if orden:
-                self.nueva_orden() # Limpiar todo el formulario
+                self.nueva_orden() 
             
         except Exception as e:
             self.mostrar_error(f"Error al guardar: {e}")
@@ -545,13 +521,10 @@ class OrdenesWindow(QDialog):
         
         self.tabla_model.removeRows(0, self.tabla_model.rowCount())
         for item in orden['items']:
-            cantidad = QStandardItem(str(item['cantidad']))
-            cantidad.setTextAlignment(Qt.AlignCenter)
-            desc = QStandardItem(item['descripcion'])
-            desc.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            
             fila = self.tabla_model.rowCount()
-            self.tabla_model.appendRow([cantidad, desc])
+            self.tabla_model.insertRow(fila)
+            self.tabla_model.setItem(fila, 0, self._crear_item(str(item['cantidad']), Qt.AlignCenter))
+            self.tabla_model.setItem(fila, 1, self._crear_item(item['descripcion'], Qt.AlignLeft | Qt.AlignVCenter))
             self.tipo_por_fila[fila] = 'normal'
         
         self.controlar_estado_campos(False)
@@ -614,10 +587,7 @@ class OrdenesWindow(QDialog):
         self.btn_editar.setEnabled(not habilitar and orden_cargada and not nota_generada)
         self.btn_cancelar.setEnabled(not habilitar and orden_cargada and not nota_generada)
         
-        # --- INICIO DE MODIFICACIÓN ---
-        # El botón de mostrar órdenes siempre está habilitado, como "Buscar"
         self.btn_mostrar_ordenes.setEnabled(True)
-        # --- FIN DE MODIFICACIÓN ---
 
         self.btn_generar_nota.setEnabled(not habilitar and orden_cargada and not nota_generada)
         
@@ -629,6 +599,30 @@ class OrdenesWindow(QDialog):
     # ==================================================
     # LÓGICA DE LA TABLA (Notas, Secciones, Items)
     # ==================================================
+
+    def _crear_item(self, texto, alineacion):
+        item = QStandardItem(texto)
+        item.setTextAlignment(alineacion)
+        return item
+
+    def _insertar_fila_especial(self, texto, tipo, bg_color, fg_color, bold=False):
+        fila = self.tabla_model.rowCount()
+        self.tabla_model.insertRow(fila)
+        
+        item = QStandardItem(texto)
+        item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        item.setBackground(bg_color)
+        item.setForeground(fg_color)
+        
+        if bold:
+            font = item.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            item.setFont(font)
+        
+        self.tabla_model.setItem(fila, 0, item)
+        self.tabla_items.setSpan(fila, 0, 1, 2)
+        self.tipo_por_fila[fila] = tipo
 
     def mostrar_menu_contextual(self, position):
         menu = QMenu(self)
@@ -683,38 +677,19 @@ class OrdenesWindow(QDialog):
     def insertar_nota(self):
         texto, ok = QInputDialog.getText(self, "Agregar Nota", "Texto de la nota:")
         if ok and texto:
-            fila = self.tabla_model.rowCount()
-            self.tabla_model.insertRow(fila)
-            
-            item_nota = QStandardItem(f"📝 {texto}")
-            item_nota.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            item_nota.setBackground(QColor(245, 245, 245))
-            item_nota.setForeground(QColor(100, 100, 100))
-            
-            self.tabla_model.setItem(fila, 0, item_nota)
-            self.tabla_items.setSpan(fila, 0, 1, 2)
-            self.tipo_por_fila[fila] = 'nota'
+            self._insertar_fila_especial(
+                f"📝 {texto}", 'nota', 
+                QColor(245, 245, 245), QColor(100, 100, 100)
+            )
             self._actualizar_mapa_tipos()
 
     def insertar_seccion(self):
         texto, ok = QInputDialog.getText(self, "Agregar Sección", "Nombre de la sección:")
         if ok and texto:
-            fila = self.tabla_model.rowCount()
-            self.tabla_model.insertRow(fila)
-            
-            item_seccion = QStandardItem(texto.upper())
-            item_seccion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            item_seccion.setBackground(QColor(0, 120, 142, 30))
-            item_seccion.setForeground(QColor(0, 120, 142))
-            
-            font = item_seccion.font()
-            font.setBold(True)
-            font.setPointSize(10)
-            item_seccion.setFont(font)
-            
-            self.tabla_model.setItem(fila, 0, item_seccion)
-            self.tabla_items.setSpan(fila, 0, 1, 2)
-            self.tipo_por_fila[fila] = 'seccion'
+            self._insertar_fila_especial(
+                texto.upper(), 'seccion',
+                QColor(0, 120, 142, 30), QColor(0, 120, 142), bold=True
+            )
             self._actualizar_mapa_tipos()
 
     def editar_elemento_especial(self, fila):
@@ -785,7 +760,7 @@ class OrdenesWindow(QDialog):
             self.tabla_model.removeRow(fila)
             self._actualizar_mapa_tipos()
             if fila == self.fila_en_edicion:
-                self.limpiar_formulario_item()
+                self._limpiar_campos_item()
 
     def _actualizar_mapa_tipos(self):
         tipos_actuales = list(self.tipo_por_fila.items())
@@ -810,18 +785,13 @@ class OrdenesWindow(QDialog):
         cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
         
-        item_cantidad = QStandardItem(cantidad)
-        item_cantidad.setTextAlignment(Qt.AlignCenter)
-        item_descripcion = QStandardItem(descripcion)
-        item_descripcion.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        
         fila = self.tabla_model.rowCount()
         self.tabla_model.insertRow(fila)
-        self.tabla_model.setItem(fila, 0, item_cantidad)
-        self.tabla_model.setItem(fila, 1, item_descripcion)
+        self.tabla_model.setItem(fila, 0, self._crear_item(cantidad, Qt.AlignCenter))
+        self.tabla_model.setItem(fila, 1, self._crear_item(descripcion, Qt.AlignLeft | Qt.AlignVCenter))
         self.tipo_por_fila[fila] = 'normal'
         
-        self.limpiar_formulario_item()
+        self._limpiar_campos_item()
         self.tabla_items.selectRow(fila)
 
     def cargar_item_para_editar(self, index):
@@ -855,19 +825,14 @@ class OrdenesWindow(QDialog):
         
         cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
-        
-        item_cant = QStandardItem(cantidad)
-        item_cant.setTextAlignment(Qt.AlignCenter)
-        item_desc = QStandardItem(descripcion)
-        item_desc.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
-        self.tabla_model.setItem(self.fila_en_edicion, 0, item_cant)
-        self.tabla_model.setItem(self.fila_en_edicion, 1, item_desc)
+        self.tabla_model.setItem(self.fila_en_edicion, 0, self._crear_item(cantidad, Qt.AlignCenter))
+        self.tabla_model.setItem(self.fila_en_edicion, 1, self._crear_item(descripcion, Qt.AlignLeft | Qt.AlignVCenter))
         self.tipo_por_fila[self.fila_en_edicion] = 'normal'
         
-        self.limpiar_formulario_item()
+        self._limpiar_campos_item()
 
-    def limpiar_formulario_item(self):
+    def _limpiar_campos_item(self):
         self.txt_cantidad.setText("")
         self.txt_descripcion.setText("")
         self.txt_cantidad.setFocus()
@@ -884,11 +849,6 @@ class OrdenesWindow(QDialog):
     # ==================================================
 
     def generar_nota_desde_orden(self):
-        """
-        Toma la orden actual y genera una Nota de Venta con precios en 0
-        y los datos del vehículo en observaciones.
-        Implementa Reglas 1, 2 y 3.
-        """
         if not self.orden_actual_id or not self.orden_actual_obj:
             self.mostrar_advertencia("No hay una orden cargada para generar una nota.")
             return
@@ -1010,7 +970,6 @@ class OrdenesWindow(QDialog):
             traceback.print_exc()
 
     def validar_datos_orden(self):
-        """Validar datos generales de la orden"""
         if not self.clientes_dict.get(self.txt_cliente.text(), None):
             self.mostrar_advertencia("Seleccione un cliente válido de la lista.")
             return False
@@ -1020,7 +979,6 @@ class OrdenesWindow(QDialog):
         return True
 
     def validar_item_formulario(self):
-        """Validar datos del formulario de item antes de agregar"""
         try:
             cantidad_str = self.txt_cantidad.text().strip()
             if not cantidad_str:
@@ -1042,22 +1000,22 @@ class OrdenesWindow(QDialog):
         return True
 
     def mostrar_advertencia(self, mensaje):
-        msg = QMessageBox(QMessageBox.Warning, "Advertencia", mensaje, QMessageBox.Ok, self)
-        msg.setStyleSheet(MESSAGE_BOX_STYLE)
-        msg.exec_()
+        self._mostrar_mensaje(QMessageBox.Warning, "Advertencia", mensaje)
 
     def mostrar_exito(self, mensaje):
-        msg = QMessageBox(QMessageBox.Information, "Éxito", mensaje, QMessageBox.Ok, self)
-        msg.setStyleSheet(MESSAGE_BOX_STYLE)
-        msg.exec_()
+        self._mostrar_mensaje(QMessageBox.Information, "Éxito", mensaje)
 
     def mostrar_error(self, mensaje):
-        msg = QMessageBox(QMessageBox.Critical, "Error", mensaje, QMessageBox.Ok, self)
-        msg.setStyleSheet(MESSAGE_BOX_STYLE)
-        msg.exec_()
+        self._mostrar_mensaje(QMessageBox.Critical, "Error", mensaje)
 
     def mostrar_info(self, mensaje):
-        msg = QMessageBox(QMessageBox.Information, "Información", mensaje, QMessageBox.Ok, self)
+        self._mostrar_mensaje(QMessageBox.Information, "Información", mensaje)
+
+    def _mostrar_mensaje(self, icono, titulo, mensaje):
+        msg = QMessageBox(self)
+        msg.setIcon(icono)
+        msg.setWindowTitle(titulo)
+        msg.setText(mensaje)
         msg.setStyleSheet(MESSAGE_BOX_STYLE)
         msg.exec_()
 
@@ -1070,7 +1028,7 @@ if __name__ == "__main__":
     try:
         from gui.api_client import api_client as db_helper
     except ImportError:
-        db_helper = None # Fallback
+        db_helper = None 
         
     if not db_helper:
         msg = QMessageBox()
