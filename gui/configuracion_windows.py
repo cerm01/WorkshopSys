@@ -15,8 +15,8 @@ from PyQt5.QtGui import (
 )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from db_helper import db_helper, generar_hash_password
-from styles import (
+from gui.db_helper import db_helper, generar_hash_password
+from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE,
     BUTTON_STYLE_2, TABLE_STYLE, MESSAGE_BOX_STYLE
 )

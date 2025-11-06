@@ -3,17 +3,17 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFr
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor
 
-from administracion_windows import AdministracionWindow
-from clientes_windows import ClientesWindow
-from proveedores_windows import ProveedoresWindow
-from inventario_windows import InventarioWindow
-from reportes_windows import ReportesWindow
-from configuracion_windows import ConfiguracionWindow
+from gui.administracion_windows import AdministracionWindow
+from gui.clientes_windows import ClientesWindow
+from gui.proveedores_windows import ProveedoresWindow
+from gui.inventario_windows import InventarioWindow
+from gui.reportes_windows import ReportesWindow
+from gui.configuracion_windows import ConfiguracionWindow
 
-from utils import recolor_icon
+from gui.utils import recolor_icon
 
 # Importar los estilos desde styles.py
-from styles import MAIN_WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
+from gui.styles import MAIN_WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
 
 class MainWindow(QMainWindow):
     # Definición de las ventanas y sus configuraciones como constante de clase
@@ -76,22 +76,24 @@ class MainWindow(QMainWindow):
         "margins": (30, 30, 30, 30)
     }
     
-    def __init__(self):
+    def __init__(self, usuario=None):
         super().__init__()
-        self.setWindowTitle(self.WINDOW_SETTINGS["title"])
+        self.usuario_actual = usuario
+        # Actualizar título con usuario
+        titulo = self.WINDOW_SETTINGS["title"]
+        if usuario:
+            nombre = usuario.get('nombre_completo', 'Usuario')
+            rol = usuario.get('rol', '')
+            titulo = f"{titulo} - {nombre} ({rol})"
+        self.setWindowTitle(titulo)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
-
         # Dimensiones iniciales
         self.setMinimumSize(*self.WINDOW_SETTINGS["min_size"])
         self.showMaximized()  # Mostrar maximizada
-
         # Fondo degradado - Usamos el estilo importado
-        # Aplicamos el estilo específico para QMainWindow
         self.setStyleSheet(MAIN_WINDOW_GRADIENT)
-        
         # Inicializar diccionario para las instancias de ventanas
         self.window_instances = {key: None for key in self.WINDOW_CONFIG.keys()}
-        
         # Crear la interfaz
         self.setup_ui()
     

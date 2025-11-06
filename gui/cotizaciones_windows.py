@@ -20,12 +20,12 @@ except ImportError as e:
     BuscarCotizacionesDialog = None
 
 # Import styles
-from styles import (
+from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2,
     GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )
 from datetime import datetime, timedelta
-from db_helper import db_helper
+from gui.db_helper import db_helper
 
 
 class CotizacionesWindow(QDialog):

@@ -11,9 +11,9 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QColor, QFont
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from db_helper import db_helper
+from gui.db_helper import db_helper
 
-from styles import (
+from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE, LABEL_STYLE,
     INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )

@@ -3,14 +3,14 @@ from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFrame, QToolButton, QHBoxLayo
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor
 
-from utils import recolor_icon
+from gui.utils import recolor_icon
 
-from notas_windows import NotasWindow
-from cotizaciones_windows import CotizacionesWindow
-from ordenes_windows import OrdenesWindow
-from notas_proveedores_windows import NotasProveedoresWindow
+from gui.notas_windows import NotasWindow
+from gui.cotizaciones_windows import CotizacionesWindow
+from gui.ordenes_windows import OrdenesWindow
+from gui.notas_proveedores_windows import NotasProveedoresWindow
 # Importar los estilos
-from styles import WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
+from gui.styles import WINDOW_GRADIENT, ROUNDED_FRAME, BUTTON_STYLE_2
 
 class AdministracionWindow(QDialog):
     # Definición de las ventanas y sus configuraciones como constante de clase

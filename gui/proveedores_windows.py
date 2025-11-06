@@ -10,12 +10,12 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 
 # Importar estilos
-from styles import (
+from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE, 
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
 
-from db_helper import db_helper
+from gui.db_helper import db_helper
 try:
     from gui.estado_cuenta_proveedor_dialog import EstadoCuentaProveedorDialog
 except ImportError as e:

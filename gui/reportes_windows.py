@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from styles import (
+from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE,
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
@@ -14,7 +14,7 @@ from styles import (
 # === INICIO DE CAMBIOS: Importar db_helper ===
 from datetime import datetime
 try:
-    from db_helper import db_helper
+    from gui.db_helper import db_helper
 except ImportError:
     print("Error: No se pudo importar 'db_helper'.")
     # Fallback o salida

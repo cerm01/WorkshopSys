@@ -9,13 +9,13 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor
 
-from styles import (
+from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE,
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
 
 try:
-    from db_helper import db_helper
+    from gui.db_helper import db_helper
 except ImportError:
     print("Error: No se pudo importar 'db_helper'. Asegúrate de que el archivo db_helper.py existe.")
     sys.exit(1)
