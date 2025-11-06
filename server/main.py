@@ -11,6 +11,13 @@ from server import crud
 import json
 from datetime import datetime
 
+from server.models import (
+    Cliente, Proveedor, Producto, MovimientoInventario,
+    Orden, OrdenItem, Cotizacion, CotizacionItem,
+    NotaVenta, NotaVentaItem, NotaVentaPago, Usuario,
+    NotaProveedor, NotaProveedorItem, NotaProveedorPago
+)
+
 app = FastAPI(title="Taller API Distribuida")
 
 # CORS para permitir conexiones
@@ -278,11 +285,15 @@ def _orden_to_dict(o):
         'id': o.id,
         'folio': o.folio,
         'cliente_id': o.cliente_id,
+        # Campos añadidos/corregidos que necesita el diálogo:
+        'cliente_nombre': o.cliente.nombre if o.cliente else 'N/A',
         'vehiculo_marca': o.vehiculo_marca or '',
         'vehiculo_modelo': o.vehiculo_modelo or '',
+        'vehiculo_ano': o.vehiculo_ano or '', 
         'estado': o.estado,
-        'total': float(o.total or 0),
-        'fecha': o.fecha_ingreso.isoformat() if o.fecha_ingreso else ''
+        'fecha_recepcion': o.fecha_recepcion.isoformat() if o.fecha_recepcion else '', # Nombre corregido
+        'mecanico_asignado': o.mecanico_asignado or '',
+        'nota_folio': o.nota_folio or ''
     }
 
 def _cotizacion_to_dict(c):
@@ -310,6 +321,91 @@ def _nota_to_dict(n):
         'saldo': float(n.saldo or 0),
         'estado_pago': n.estado_pago
     }
+
+def _pago_proveedor_to_dict(pago):
+    if not pago: return {}
+    return {
+        'id': pago.id,
+        'nota_id': pago.nota_id,
+        'monto': float(pago.monto),
+        'fecha_pago': pago.fecha_pago.strftime("%d/%m/%Y %H:%M"),
+        'metodo_pago': pago.metodo_pago,
+        'memo': pago.memo or ''
+    }
+
+def _nota_proveedor_to_dict(nota):
+    if not nota: return {}
+    return {
+        'id': nota.id,
+        'folio': nota.folio,
+        'proveedor_id': nota.proveedor_id,
+        'proveedor_nombre': nota.proveedor.nombre if nota.proveedor else '',
+        'estado': nota.estado or 'Registrado',
+        'metodo_pago': nota.metodo_pago or 'Efectivo',
+        'fecha': nota.fecha.strftime("%d/%m/%Y") if nota.fecha else '',
+        'observaciones': nota.observaciones or '',
+        'subtotal': float(nota.subtotal or 0),
+        'impuestos': float(nota.impuestos or 0),
+        'total': float(nota.total or 0),
+        'total_pagado': float(nota.total_pagado or 0),
+        'saldo': float(nota.saldo or 0),
+        'items': [{
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion,
+            'precio_unitario': float(i.precio_unitario or 0),
+            'importe': float(i.importe or 0),
+            'impuesto': float(i.impuesto or 0)
+        } for i in nota.items],
+        'pagos': [_pago_proveedor_to_dict(p) for p in nota.pagos]
+    }
+
+# ==================== NOTAS DE PROVEEDOR ====================
+@app.get("/notas_proveedor")
+def get_notas_proveedor(db: Session = Depends(get_db)):
+    # Asumimos que crud.get_all_notas_proveedor existe (está en tu crud.py)
+    notas = crud.get_all_notas_proveedor(db)
+    return [_nota_proveedor_to_dict(n) for n in notas]
+
+@app.get("/notas_proveedor/{nota_id}")
+def get_nota_proveedor(nota_id: int, db: Session = Depends(get_db)):
+    nota = crud.get_nota_proveedor(db, nota_id)
+    if nota:
+        return _nota_proveedor_to_dict(nota)
+    raise HTTPException(status_code=404, detail="Nota de proveedor no encontrada")
+
+@app.post("/notas_proveedor/{nota_id}/pagar")
+async def registrar_pago_proveedor_api(nota_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        # Convertir fecha ISO (ej: "2025-11-06") a objeto date
+        fecha_pago_obj = datetime.fromisoformat(datos['fecha_pago']).date()
+
+        nota = crud.registrar_pago_nota_proveedor(
+            db=db,
+            nota_id=nota_id,
+            monto=float(datos['monto']),
+            fecha_pago=fecha_pago_obj,
+            metodo_pago=datos['metodo_pago'],
+            memo=datos['memo']
+        )
+        await manager.broadcast({
+            "type": "nota_proveedor_actualizada",
+            "data": _nota_proveedor_to_dict(nota)
+        })
+        return _nota_proveedor_to_dict(nota)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/pagos_proveedor/{pago_id}")
+async def eliminar_pago_proveedor_api(pago_id: int, db: Session = Depends(get_db)):
+    try:
+        nota = crud.eliminar_pago_nota_proveedor(db, pago_id)
+        await manager.broadcast({
+            "type": "nota_proveedor_actualizada",
+            "data": _nota_proveedor_to_dict(nota)
+        })
+        return _nota_proveedor_to_dict(nota)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/")
 def root():

@@ -167,6 +167,28 @@ class TallerAPIClient:
             notas = [n for n in notas if filtros['folio'].lower() in n.get('folio', '').lower()]
         return notas
     
+    # ==================== NOTAS DE PROVEEDOR ====================
+
+    def get_all_notas_proveedor(self) -> List[Dict]:
+        return self._get("/notas_proveedor") or []
+
+    def get_nota_proveedor(self, nota_id: int) -> Optional[Dict]:
+        return self._get(f"/notas_proveedor/{nota_id}")
+
+    def registrar_pago_proveedor(self, nota_id: int, monto: float, fecha_pago: Any, metodo_pago: str, memo: str) -> Optional[Dict]:
+        """Registrar un pago a proveedor. fecha_pago debe ser un objeto date."""
+        datos_pago = {
+            "monto": monto,
+            "fecha_pago": fecha_pago.isoformat(), # Convertir date a string ISO
+            "metodo_pago": metodo_pago,
+            "memo": memo
+        }
+        return self._post(f"/notas_proveedor/{nota_id}/pagar", datos_pago)
+
+    def eliminar_pago_proveedor(self, pago_id: int) -> Optional[Dict]:
+        """Elimina un pago a proveedor y devuelve la nota actualizada"""
+        return self._delete(f"/pagos_proveedor/{pago_id}")
+    
     # ==================== INVENTARIO ====================
     
     def registrar_movimiento_inventario(self, producto_id: int, tipo: str, 

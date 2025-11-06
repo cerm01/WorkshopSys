@@ -1,3 +1,4 @@
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 from typing import List, Optional, Dict, Any
@@ -286,7 +287,7 @@ def get_movimientos_inventario(
 
 def get_all_ordenes(db: Session, estado: Optional[str] = None) -> List[Orden]:
     """Obtener todas las órdenes (opcional: filtrar por estado)"""
-    query = db.query(Orden)
+    query = db.query(Orden).options(joinedload(Orden.cliente))
     if estado:
         query = query.filter(Orden.estado == estado)
     return query.order_by(Orden.created_at.desc()).all()

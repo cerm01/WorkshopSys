@@ -6,12 +6,21 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from datetime import datetime
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-from gui.api_client import api_client
-from gui.websocket_client import ws_client
+try:
+    from gui.api_client import api_client
+    from gui.websocket_client import ws_client
+except ImportError as e:
+    print(f"Error importando api_client o ws_client: {e}")
+    # Fallback para evitar que el editor marque error
+    api_client = None 
+    ws_client = None
+
 from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, INPUT_STYLE, TABLE_STYLE, LABEL_STYLE, MESSAGE_BOX_STYLE
 )
@@ -21,6 +30,21 @@ class BuscarNotasProveedorDialog(QDialog):
         super().__init__(parent)
         self.nota_seleccionada = None
         self.setup_ui()
+        self.cargar_notas()
+
+        if ws_client:
+            try:
+
+                ws_client.nota_proveedor_creada.connect(self.on_notificacion_remota)
+            except AttributeError:
+                print("Advertencia: La señal 'nota_proveedor_creada' no está definida en ws_client.")
+
+    def on_notificacion_remota(self, data):
+        """
+        Slot para manejar las notificaciones del WebSocket.
+        Recarga la lista de notas de proveedor.
+        """
+        print(f"Notificación de nota de proveedor recibida, recargando lista...")
         self.cargar_notas()
 
     def setup_ui(self):
@@ -92,9 +116,16 @@ class BuscarNotasProveedorDialog(QDialog):
     def cargar_notas(self):
         """Carga todas las notas (con datos para ordenamiento)"""
         self.modelo.setRowCount(0)
-        try:
+        if not api_client:
+            QMessageBox.critical(self, "Error", "El cliente API no está inicializado.")
+            return
 
-            notas = db_helper.get_notas_proveedor()
+        try:
+            notas = api_client.get_all_notas_proveedor()
+            
+            if notas is None:
+                raise Exception("No se pudo obtener respuesta del servidor (api_client devolvió None)")
+                
             for nota in notas:
                 item_id = QStandardItem()
                 item_folio = QStandardItem()
@@ -114,9 +145,20 @@ class BuscarNotasProveedorDialog(QDialog):
                 item_folio.setData(nota['folio'], Qt.UserRole) # Ordenar como texto
                 
                 # Fecha (Col 2)
-                fecha_obj = QDate.fromString(nota['fecha'], "dd/MM/yyyy")
-                item_fecha.setData(nota['fecha'], Qt.DisplayRole) # Mostrar "dd/MM/yyyy"
-                item_fecha.setData(fecha_obj, Qt.UserRole)    # Ordenar como objeto Fecha
+                fecha_str_iso = nota.get('fecha', '')
+                fecha_obj = QDate()
+                if fecha_str_iso:
+                    try:
+                        fecha_dt = datetime.fromisoformat(fecha_str_iso)
+                        fecha_str_display = fecha_dt.strftime("%d/%m/%Y")
+                        fecha_obj = QDate(fecha_dt.year, fecha_dt.month, fecha_dt.day)
+                    except ValueError:
+                        fecha_str_display = fecha_str_iso
+                else:
+                    fecha_str_display = "N/A"
+                
+                item_fecha.setData(fecha_str_display, Qt.DisplayRole)
+                item_fecha.setData(fecha_obj, Qt.UserRole)
                 
                 # Proveedor (Col 3)
                 proveedor_nombre = nota.get('proveedor_nombre', '')
@@ -124,20 +166,24 @@ class BuscarNotasProveedorDialog(QDialog):
                 item_proveedor.setData(proveedor_nombre, Qt.UserRole) # Ordenar como texto
                 
                 # Subtotal (Col 4)
-                item_subtotal.setData(f"${nota['subtotal']:.2f}", Qt.DisplayRole)
-                item_subtotal.setData(nota['subtotal'], Qt.UserRole) # Ordenar como número
+                subtotal_val = nota.get('subtotal', 0.0)
+                item_subtotal.setData(f"${subtotal_val:.2f}", Qt.DisplayRole)
+                item_subtotal.setData(subtotal_val, Qt.UserRole) # Ordenar como número
                 
                 # IVA (Col 5)
-                item_iva.setData(f"${nota['impuestos']:.2f}", Qt.DisplayRole) # <-- 'impuestos'
-                item_iva.setData(nota['impuestos'], Qt.UserRole) # Ordenar como número
+                impuestos_val = nota.get('impuestos', 0.0)
+                item_iva.setData(f"${impuestos_val:.2f}", Qt.DisplayRole) # <-- 'impuestos'
+                item_iva.setData(impuestos_val, Qt.UserRole) # Ordenar como número
                 
                 # Total (Col 6)
-                item_total.setData(f"${nota['total']:.2f}", Qt.DisplayRole)
-                item_total.setData(nota['total'], Qt.UserRole) # Ordenar como número
+                total_val = nota.get('total', 0.0)
+                item_total.setData(f"${total_val:.2f}", Qt.DisplayRole)
+                item_total.setData(total_val, Qt.UserRole) # Ordenar como número
                 
                 # Estado (Col 7)
-                item_estado.setData(nota['estado'], Qt.DisplayRole)
-                item_estado.setData(nota['estado'], Qt.UserRole) # Ordenar como texto
+                estado_val = nota.get('estado', 'N/A')
+                item_estado.setData(estado_val, Qt.DisplayRole)
+                item_estado.setData(estado_val, Qt.UserRole) # Ordenar como texto
 
                 # --- Añadir la fila ---
                 fila = [
@@ -176,8 +222,13 @@ class BuscarNotasProveedorDialog(QDialog):
         # Leemos el ID de la columna 0, usando los datos reales (UserRole)
         nota_id = int(self.modelo.item(fila, 0).data(Qt.UserRole))
         
+        if not api_client:
+            QMessageBox.critical(self, "Error", "El cliente API no está inicializado.")
+            return
+            
         try:
-            notas = db_helper.get_notas_proveedor() 
+            notas = api_client.get_all_notas_proveedor()
+        
             self.nota_seleccionada = next((n for n in notas if n['id'] == nota_id), None)
             self.accept()
         except Exception as e:

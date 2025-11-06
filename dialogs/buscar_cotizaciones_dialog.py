@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from datetime import datetime
 
 # --- Inicio: Asegurar imports ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +36,17 @@ class BuscarCotizacionesDialog(QDialog):
         super().__init__(parent)
         self.cotizacion_seleccionada = None
         self.setup_ui()
+        self.cargar_cotizaciones()
+        if ws_client:
+            ws_client.cotizacion_creada.connect(self.on_notificacion_remota)
+
+
+    def on_notificacion_remota(self, data):
+        """
+        Slot para manejar las notificaciones del WebSocket.
+        Recarga la lista de cotizaciones.
+        """
+        print(f"Notificación de cotización recibida ({data.get('type', 'desconocido')}), recargando lista...")
         self.cargar_cotizaciones()
 
     def setup_ui(self):
@@ -108,7 +120,11 @@ class BuscarCotizacionesDialog(QDialog):
         """Carga todas las cotizaciones (con datos para ordenamiento)"""
         self.modelo.setRowCount(0)
         try:
-            cotizaciones = db_helper.get_cotizaciones()
+            cotizaciones = api_client.get_all_cotizaciones()
+
+            if cotizaciones is None:
+                raise Exception("No se pudo obtener respuesta del servidor (api_client devolvió None)")
+
             for cotizacion in cotizaciones:
                 item_id = QStandardItem()
                 item_folio = QStandardItem()
@@ -125,24 +141,39 @@ class BuscarCotizacionesDialog(QDialog):
                 
                 # Folio (Col 1)
                 item_folio.setData(cotizacion['folio'], Qt.DisplayRole)
-                item_folio.setData(cotizacion['folio'], Qt.UserRole) # <-- AÑADIDO
+                item_folio.setData(cotizacion['folio'], Qt.UserRole)
                 
                 # Fecha (Col 2)
-                fecha_str = cotizacion.get('created_at', '')
-                fecha_obj = QDate.fromString(fecha_str, "dd/MM/yyyy")
-                item_fecha.setData(fecha_str, Qt.DisplayRole)
+                # --- INICIO DE CAMBIOS: Ajuste de formato de fecha ---
+                # El api_client devuelve formato ISO (ej: "2025-11-05T10:00:00")
+                # El db_helper devolvía "dd/MM/yyyy"
+                fecha_str_iso = cotizacion.get('fecha', '')
+                fecha_obj = QDate()
+                if fecha_str_iso:
+                    try:
+                        fecha_dt = datetime.fromisoformat(fecha_str_iso)
+                        fecha_str_display = fecha_dt.strftime("%d/%m/%Y")
+                        fecha_obj = QDate(fecha_dt.year, fecha_dt.month, fecha_dt.day)
+                    except ValueError:
+                        fecha_str_display = fecha_str_iso # Mostrar ISO si no se puede parsear
+                else:
+                    fecha_str_display = "N/A"
+                
+                item_fecha.setData(fecha_str_display, Qt.DisplayRole)
                 item_fecha.setData(fecha_obj, Qt.UserRole)
                 
                 # Vigencia (Col 3)
                 vigencia_str = cotizacion.get('vigencia', '')
                 vigencia_obj = QDate.fromString(vigencia_str, "dd/MM/yyyy")
                 item_vigencia.setData(vigencia_str, Qt.DisplayRole)
-                item_vigencia.setData(vigencia_obj, Qt.UserRole) # <-- AÑADIDO (para ordenar como fecha)
+                item_vigencia.setData(vigencia_obj, Qt.UserRole) 
                 
                 # Cliente (Col 4)
-                cliente_nombre = cotizacion.get('cliente_nombre', '')
+                # NOTA: Asumimos que el endpoint /cotizaciones devuelve 'cliente_nombre'
+                # Si no lo hace, el servidor (server/main.py) debe ser ajustado.
+                cliente_nombre = cotizacion.get('cliente_nombre', f"ID: {cotizacion['cliente_id']}")
                 item_cliente.setData(cliente_nombre, Qt.DisplayRole)
-                item_cliente.setData(cliente_nombre, Qt.UserRole) # <-- AÑADIDO
+                item_cliente.setData(cliente_nombre, Qt.UserRole)
                 
                 # Total (Col 5)
                 item_total.setData(f"${cotizacion['total']:.2f}", Qt.DisplayRole)
@@ -151,12 +182,12 @@ class BuscarCotizacionesDialog(QDialog):
                 # Estado (Col 6)
                 estado_val = cotizacion['estado']
                 item_estado.setData(estado_val, Qt.DisplayRole)
-                item_estado.setData(estado_val, Qt.UserRole) # <-- AÑADIDO
+                item_estado.setData(estado_val, Qt.UserRole) 
                 
                 # Nota (Col 7)
                 nota_folio_val = cotizacion.get('nota_folio') or "-"
                 item_nota_folio.setData(nota_folio_val, Qt.DisplayRole)
-                item_nota_folio.setData(nota_folio_val, Qt.UserRole) # <-- AÑADIDO
+                item_nota_folio.setData(nota_folio_val, Qt.UserRole)
 
                 # --- Añadir la fila ---
                 fila = [
@@ -195,7 +226,7 @@ class BuscarCotizacionesDialog(QDialog):
         cotizacion_id = int(self.modelo.item(fila, 0).data(Qt.UserRole))
         
         try:
-            cotizaciones = db_helper.get_cotizaciones() 
+            cotizaciones = api_client.get_all_cotizaciones()
             self.cotizacion_seleccionada = next((c for c in cotizaciones if c['id'] == cotizacion_id), None)
             self.accept()
         except Exception as e:

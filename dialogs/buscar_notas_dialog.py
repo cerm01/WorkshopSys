@@ -1,20 +1,35 @@
+import sys
+import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
     QTableView, QLineEdit, QComboBox, QLabel, QHeaderView, QMessageBox
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from datetime import datetime
+
 from gui.api_client import api_client
 from gui.websocket_client import ws_client
+
 from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, INPUT_STYLE, TABLE_STYLE, LABEL_STYLE
 )
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 
 class BuscarNotasDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.nota_seleccionada = None
         self.setup_ui()
+        self.cargar_notas()
+
+        if ws_client:
+            ws_client.nota_creada.connect(self.on_notificacion_remota)
+
+    def on_notificacion_remota(self, data):
         self.cargar_notas()
 
     def setup_ui(self):
@@ -86,7 +101,11 @@ class BuscarNotasDialog(QDialog):
         """Carga todas las notas (con datos para ordenamiento)"""
         self.modelo.setRowCount(0)
         try:
-            notas = db_helper.get_notas()
+            notas = api_client.get_all_notas_venta()
+            
+            if notas is None:
+                raise Exception("No se pudo obtener respuesta del servidor (api_client devolvió None)")
+                
             for nota in notas:
                 item_id = QStandardItem()
                 item_folio = QStandardItem()
@@ -107,22 +126,33 @@ class BuscarNotasDialog(QDialog):
                 item_folio.setData(nota['folio'], Qt.UserRole)
                 
                 # Fecha (Col 2)
-                fecha_obj = QDate.fromString(nota['fecha'], "dd/MM/yyyy")
-                item_fecha.setData(nota['fecha'], Qt.DisplayRole)
+                fecha_str_iso = nota.get('fecha', '')
+                fecha_obj = QDate()
+                if fecha_str_iso:
+                    try:
+                        fecha_dt = datetime.fromisoformat(fecha_str_iso)
+                        fecha_str_display = fecha_dt.strftime("%d/%m/%Y")
+                        fecha_obj = QDate(fecha_dt.year, fecha_dt.month, fecha_dt.day)
+                    except ValueError:
+                        fecha_str_display = fecha_str_iso # Mostrar ISO si no se puede parsear
+                else:
+                    fecha_str_display = "N/A"
+
+                item_fecha.setData(fecha_str_display, Qt.DisplayRole)
                 item_fecha.setData(fecha_obj, Qt.UserRole)
                 
                 # Cliente (Col 3)
-                cliente_nombre = nota.get('cliente_nombre', '')
+                cliente_nombre = nota.get('cliente_nombre', f"ID: {nota['cliente_id']}")
                 item_cliente.setData(cliente_nombre, Qt.DisplayRole)
                 item_cliente.setData(cliente_nombre, Qt.UserRole)
                 
                 # Subtotal (Col 4)
-                item_subtotal.setData(f"${nota['subtotal']:.2f}", Qt.DisplayRole)
-                item_subtotal.setData(nota['subtotal'], Qt.UserRole)
+                item_subtotal.setData(f"${nota.get('subtotal', 0.0):.2f}", Qt.DisplayRole)
+                item_subtotal.setData(nota.get('subtotal', 0.0), Qt.UserRole)
                 
                 # IVA (Col 5)
-                item_iva.setData(f"${nota['impuestos']:.2f}", Qt.DisplayRole)
-                item_iva.setData(nota['impuestos'], Qt.UserRole)
+                item_iva.setData(f"${nota.get('impuestos', 0.0):.2f}", Qt.DisplayRole)
+                item_iva.setData(nota.get('impuestos', 0.0), Qt.UserRole)
                 
                 # Total (Col 6)
                 item_total.setData(f"${nota['total']:.2f}", Qt.DisplayRole)
@@ -132,9 +162,12 @@ class BuscarNotasDialog(QDialog):
                 estado_val = nota['estado']
                 item_estado.setData(estado_val, Qt.DisplayRole)
                 item_estado.setData(estado_val, Qt.UserRole)
+                
+                # Origen (Col 8)
                 origen_val = nota.get('orden_folio') or nota.get('cotizacion_folio') or "-"
                 item_origen.setData(origen_val, Qt.DisplayRole)
                 item_origen.setData(origen_val, Qt.UserRole)
+                
                 fila = [
                     item_id, item_folio, item_fecha, item_cliente,
                     item_subtotal, item_iva, item_total, item_estado,
@@ -172,7 +205,8 @@ class BuscarNotasDialog(QDialog):
         nota_id = int(self.modelo.item(fila, 0).data(Qt.UserRole))
         
         try:
-            notas = db_helper.get_notas() 
+            notas = api_client.get_all_notas_venta()
+            
             self.nota_seleccionada = next((n for n in notas if n['id'] == nota_id), None)
             self.accept()
         except Exception as e:

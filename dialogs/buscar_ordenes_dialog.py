@@ -16,6 +16,7 @@ sys.path.append(parent_dir)
 try:
     from gui.api_client import api_client
     from gui.websocket_client import ws_client
+
     from gui.styles import (
         SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, INPUT_STYLE, TABLE_STYLE, LABEL_STYLE
     )
@@ -39,6 +40,16 @@ class BuscarOrdenesDialog(QDialog):
         super().__init__(parent)
         self.orden_seleccionada = None
         self.setup_ui()
+        self.cargar_ordenes()
+
+        if ws_client:
+            ws_client.orden_creada.connect(self.on_notificacion_remota)
+    def on_notificacion_remota(self, data):
+        """
+        Slot para manejar las notificaciones del WebSocket.
+        Recarga la lista de órdenes.
+        """
+        print(f"Notificación de orden recibida ({data.get('type', 'desconocido')}), recargando lista...")
         self.cargar_ordenes()
 
     def setup_ui(self):
@@ -111,9 +122,14 @@ class BuscarOrdenesDialog(QDialog):
     def cargar_ordenes(self):
         """Carga TODAS las órdenes."""
         self.modelo.setRowCount(0)
+        if not api_client:
+            QMessageBox.critical(self, "Error", "El cliente API no está inicializado.")
+            return
+            
         try:
-            # Llama a buscar_ordenes sin filtros para obtener todas
-            ordenes = db_helper.buscar_ordenes() 
+            ordenes = api_client.get_all_ordenes() 
+            if ordenes is None:
+                 raise Exception("No se pudo obtener respuesta del servidor (api_client devolvió None)")
             
             for orden in ordenes:
                 item_id = QStandardItem()
@@ -134,26 +150,24 @@ class BuscarOrdenesDialog(QDialog):
                 item_folio.setData(orden['folio'], Qt.UserRole)
                 
                 # Fecha (Col 2)
-                fecha_obj = orden['fecha_recepcion']
+                fecha_obj_iso = orden.get('fecha_recepcion', '') # Obtenemos el campo corregido
                 fecha_str = "N/A"
                 fecha_obj_qdate = QDate()
 
-                if isinstance(fecha_obj, str):
+                if fecha_obj_iso:
                     try:
-                        fecha_dt = datetime.fromisoformat(fecha_obj)
+                        fecha_dt = datetime.fromisoformat(fecha_obj_iso)
                         fecha_str = fecha_dt.strftime("%d/%m/%Y")
                         fecha_obj_qdate = QDate(fecha_dt.year, fecha_dt.month, fecha_dt.day)
                     except ValueError:
-                        pass # Usar QDate() por defecto
-                elif isinstance(fecha_obj, datetime):
-                    fecha_str = fecha_obj.strftime("%d/%m/%Y")
-                    fecha_obj_qdate = QDate(fecha_obj.year, fecha_obj.month, fecha_obj.day)
+                        fecha_str = fecha_obj_iso # Mostrar ISO si falla
                     
                 item_fecha.setData(fecha_str, Qt.DisplayRole)
                 item_fecha.setData(fecha_obj_qdate, Qt.UserRole) # Para ordenar
                 
                 # Cliente (Col 3)
-                cliente_nombre = orden.get('cliente_nombre', '')
+                # (Asegurado por el Paso 1 y 2)
+                cliente_nombre = orden.get('cliente_nombre', '') 
                 item_cliente.setData(cliente_nombre, Qt.DisplayRole)
                 item_cliente.setData(cliente_nombre, Qt.UserRole)
                 
@@ -168,11 +182,13 @@ class BuscarOrdenesDialog(QDialog):
                 item_estado.setData(estado_val, Qt.UserRole)
                 
                 # Mecanico (Col 6)
+                # (Asegurado por el Paso 1 y 2)
                 mecanico_val = orden.get('mecanico_asignado', '-')
                 item_mecanico.setData(mecanico_val, Qt.DisplayRole)
                 item_mecanico.setData(mecanico_val, Qt.UserRole)
 
                 # Nota Folio (Col 7)
+                # (Asegurado por el Paso 1 y 2)
                 nota_val = orden.get('nota_folio', '-')
                 item_nota_folio.setData(nota_val, Qt.DisplayRole)
                 item_nota_folio.setData(nota_val, Qt.UserRole)
@@ -217,9 +233,13 @@ class BuscarOrdenesDialog(QDialog):
         
         fila = indices[0].row()
         orden_id = int(self.modelo.item(fila, 0).data(Qt.UserRole))
-        
+
+        if not api_client:
+            QMessageBox.critical(self, "Error", "El cliente API no está inicializado.")
+            return
+            
         try:
-            ordenes = db_helper.buscar_ordenes() 
+            ordenes = api_client.get_all_ordenes() 
             self.orden_seleccionada = next((o for o in ordenes if o['id'] == orden_id), None)
             self.accept()
         except Exception as e:

@@ -17,6 +17,7 @@ sys.path.append(parent_dir)
 try:
     from gui.api_client import api_client
     from gui.websocket_client import ws_client
+    
     from dialogs.buscar_notas_proveedor_dialog import BuscarNotasProveedorDialog
     from gui.styles import (
         SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE,
@@ -49,6 +50,18 @@ class PagosNotaProveedorDialog(QDialog):
         self.nota_actual = None
         self.setup_ui()
         self.conectar_senales()
+
+        if ws_client:
+            ws_client.nota_proveedor_actualizada.connect(self.on_notificacion_remota)
+
+    def on_notificacion_remota(self, nota_actualizada):
+        """
+        Slot para manejar las notificaciones del WebSocket.
+        Si la nota actualizada es la que estamos viendo, la recarga.
+        """
+        if self.nota_actual and self.nota_actual['id'] == nota_actualizada.get('id'):
+            print(f"Recargando Nota Proveedor {self.nota_actual['id']} por notificación remota.")
+            self.cargar_nota(nota_actualizada)
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -240,7 +253,7 @@ class PagosNotaProveedorDialog(QDialog):
         if dialog.exec_() == QDialog.Accepted and dialog.nota_seleccionada:
             # Volvemos a consultar la nota para tener los datos más frescos
             try:
-                nota_fresca = db_helper.get_nota_proveedor(dialog.nota_seleccionada['id']) 
+                nota_fresca = api_client.get_nota_proveedor(dialog.nota_seleccionada['id']) 
                 if nota_fresca:
                     self.cargar_nota(nota_fresca)
                 else:
@@ -333,9 +346,7 @@ class PagosNotaProveedorDialog(QDialog):
             return
             
         try:
-            
-            # Llamar a la función del db_helper para proveedores
-            nota_actualizada = db_helper.registrar_pago_proveedor(
+            nota_actualizada = api_client.registrar_pago_proveedor(
                 self.nota_actual['id'],
                 monto,
                 fecha_pago_py, # Enviar el objeto date de Python
@@ -381,7 +392,7 @@ class PagosNotaProveedorDialog(QDialog):
         menu.exec_(self.tabla_pagos.viewport().mapToGlobal(position))
 
     def eliminar_pago_seleccionado(self):
-        """Obtiene el ID del pago y llama al db_helper para eliminarlo."""
+        """Obtiene el ID del pago y llama al api_client para eliminarlo."""
         indexes = self.tabla_pagos.selectedIndexes()
         if not indexes:
             return
@@ -418,9 +429,7 @@ class PagosNotaProveedorDialog(QDialog):
 
         # Proceder con la eliminación
         try:
-            
-            # Llamar al db_helper para eliminar pago de proveedor
-            nota_actualizada = db_helper.eliminar_pago_proveedor(pago_id)
+            nota_actualizada = api_client.eliminar_pago_proveedor(pago_id)
             
             if nota_actualizada:
                 self.mostrar_mensaje("Éxito", "Pago eliminado y saldo revertido.", QMessageBox.Information)
@@ -449,7 +458,6 @@ if __name__ == "__main__":
     
     try:
         from gui.api_client import api_client
-        from gui.websocket_client import ws_client
         from dialogs.buscar_notas_proveedor_dialog import BuscarNotasProveedorDialog
         from gui.styles import *
     except ImportError as e:
@@ -457,7 +465,6 @@ if __name__ == "__main__":
         sys.path.insert(0, os.path.dirname(parent_dir))
         try:
             from gui.api_client import api_client
-            from gui.websocket_client import ws_client
             from dialogs.buscar_notas_proveedor_dialog import BuscarNotasProveedorDialog
             from gui.styles import *
         except ImportError as e2:

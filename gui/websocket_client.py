@@ -15,7 +15,7 @@ class WebSocketClient(QThread):
     cotizacion_creada = pyqtSignal(dict)
     nota_creada = pyqtSignal(dict)
     stock_actualizado = pyqtSignal(dict)
-    
+    nota_proveedor_actualizada = pyqtSignal(dict)
     connection_status = pyqtSignal(bool)  # True=conectado, False=desconectado
     
     def __init__(self, server_url: str = "localhost:8000"):
@@ -83,6 +83,8 @@ class WebSocketClient(QThread):
                 self.nota_creada.emit(event_data)
             elif event_type == 'stock_actualizado':
                 self.stock_actualizado.emit(event_data)
+            elif event_type == 'nota_proveedor_actualizada':
+                self.nota_proveedor_actualizada.emit(event_data)
             
         except Exception as e:
             print(f"Error procesando mensaje: {e}")
