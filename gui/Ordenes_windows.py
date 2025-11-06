@@ -21,20 +21,20 @@ from gui.styles import (
 )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-try:
-    from gui.db_helper import db_helper
-except ImportError:
-    print("Error: No se pudo importar 'db_helper'.")
-    db_helper = None
 
-# --- INICIO DE MODIFICACIÓN (REQ 3) ---
-# Importar el nuevo diálogo de búsqueda
+try:
+    from gui.api_client import api_client as db_helper
+    from gui.websocket_client import ws_client
+
+except ImportError:
+    print("Error: No se pudo importar 'api_client' o 'ws_client'.") # (MODIFICADO)
+    db_helper = None # Mantener el fallback por si acaso
+
 try:
     from dialogs.buscar_ordenes_dialog import BuscarOrdenesDialog
 except ImportError as e:
     print(f"Error al importar BuscarOrdenesDialog: {e}")
     BuscarOrdenesDialog = None
-# --- FIN DE MODIFICACIÓN ---
 
 class OrdenesWindow(QDialog):
     def __init__(self, parent=None):
@@ -59,8 +59,32 @@ class OrdenesWindow(QDialog):
 
         self.setup_ui()
         
+        if ws_client:
+            ws_client.cliente_creado.connect(self.on_notificacion_cliente)
+            ws_client.cliente_actualizado.connect(self.on_notificacion_cliente)
+            ws_client.orden_creada.connect(self.on_notificacion_orden) # 'orden_creada' se usa para todo
+        
         self.cargar_clientes_autocompletar()
         self.nueva_orden()
+    
+    def on_notificacion_cliente(self, data):
+        self.cargar_clientes_autocompletar()
+
+    def on_notificacion_orden(self, data):
+        """Recarga la orden actual si coincide con la notificación."""
+        if self.orden_actual_id and data.get('id') == self.orden_actual_id:
+            print(f"Recargando orden {self.orden_actual_id} por notificación remota.")
+            try:
+                # Esta llamada ahora usa api_client
+                orden_actualizada = db_helper.get_orden(self.orden_actual_id)
+                if orden_actualizada:
+                    self.cargar_orden_en_formulario(orden_actualizada)
+                else:
+                    # La orden fue eliminada remotamente
+                    self.nueva_orden()
+                    self.mostrar_advertencia("La orden que estaba viendo fue eliminada remotamente.")
+            except Exception as e:
+                print(f"Error recargando orden: {e}")
     
     def setup_ui(self):
         """Configurar la interfaz de usuario"""
@@ -313,6 +337,7 @@ class OrdenesWindow(QDialog):
     # LÓGICA DE BASE DE DATOS Y ESTADO
     # ==================================================
 
+
     # --- INICIO DE MODIFICACIÓN (REQ 3) ---
     def abrir_ventana_ordenes(self):
         """Abre el diálogo para mostrar todas las órdenes."""
@@ -357,6 +382,7 @@ class OrdenesWindow(QDialog):
         if not db_helper: return
         
         try:
+            # Esta llamada ahora usa api_client
             clientes = db_helper.get_clientes()
             self.clientes_dict.clear()
             nombres_clientes = []
@@ -1041,13 +1067,17 @@ class OrdenesWindow(QDialog):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
+    try:
+        from gui.api_client import api_client as db_helper
+    except ImportError:
+        db_helper = None # Fallback
+        
     if not db_helper:
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Critical)
         msg.setWindowTitle("Error Crítico")
-        msg.setText("No se pudo cargar el módulo 'db_helper'.")
-        msg.setInformativeText("La aplicación no puede funcionar sin acceso a la base de datos.")
+        msg.setText("No se pudo cargar el módulo 'api_client'.")
+        msg.setInformativeText("La aplicación no puede funcionar sin acceso a la base de datos (API Server).")
         msg.exec_()
     else:
         window = OrdenesWindow()

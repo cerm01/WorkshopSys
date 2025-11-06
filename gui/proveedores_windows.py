@@ -15,7 +15,9 @@ from gui.styles import (
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
 
-from gui.db_helper import db_helper
+from gui.api_client import api_client as db_helper
+from gui.websocket_client import ws_client
+
 try:
     from gui.estado_cuenta_proveedor_dialog import EstadoCuentaProveedorDialog
 except ImportError as e:
@@ -40,10 +42,17 @@ class ProveedoresWindow(QDialog):
         
         # Configurar interfaz
         self.setup_ui()
+
+        if ws_client:
+            ws_client.proveedor_creado.connect(self.on_notificacion_remota)
+        
         self.cargar_datos_desde_bd()
 
         #Forzar maximización
         QTimer.singleShot(100, self.maximizar_ventana)
+
+    def on_notificacion_remota(self, data):
+        self.cargar_datos_desde_bd()
 
     def maximizar_ventana(self):
         """Maximizar la ventana forzando actualización completa"""
@@ -518,6 +527,7 @@ class ProveedoresWindow(QDialog):
         proveedor_id = int(self.tabla_model.item(fila, 0).text())
 
         try: 
+            # Esta llamada ahora usa api_client (renombrado como db_helper)
             proveedores = db_helper.get_proveedores()
             proveedor = next((p for p in proveedores if p['id'] == proveedor_id), None)
         
@@ -745,6 +755,7 @@ class ProveedoresWindow(QDialog):
     def cargar_datos_desde_bd(self):
         """Cargar datos de proveedores desde la base de datos"""
         try:
+            # Esta llamada ahora usa api_client
             proveedores = db_helper.get_proveedores()
             self.actualizar_tabla(proveedores)
         except Exception as e:
@@ -800,6 +811,12 @@ class ProveedoresWindow(QDialog):
 if __name__ == "__main__":
     from PyQt5.QtWidgets import QApplication
     app = QApplication(sys.argv)
+    try:
+        from gui.api_client import api_client as db_helper
+    except ImportError:
+        print("Error: No se pudo importar api_client. Asegúrate de que el servidor esté corriendo.")
+        sys.exit(1)
+        
     window = ProveedoresWindow()
     window.show()
     sys.exit(app.exec_())

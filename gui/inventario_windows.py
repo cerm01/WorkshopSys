@@ -15,11 +15,12 @@ from gui.styles import (
 )
 
 try:
-    from gui.db_helper import db_helper
-except ImportError:
-    print("Error: No se pudo importar 'db_helper'. Asegúrate de que el archivo db_helper.py existe.")
-    sys.exit(1)
+    from gui.api_client import api_client as db_helper
+    from gui.websocket_client import ws_client
 
+except ImportError:
+    print("Error: No se pudo importar 'api_client' o 'ws_client'.")
+    sys.exit(1)
 
 
 class InventarioWindow(QDialog):
@@ -45,8 +46,21 @@ class InventarioWindow(QDialog):
         # Configurar UI
         self.setup_ui()
         self.conectar_senales()
+
+        if ws_client:
+            ws_client.producto_creado.connect(self.on_notificacion_producto)
+            ws_client.producto_actualizado.connect(self.on_notificacion_producto)
+            ws_client.stock_actualizado.connect(self.on_notificacion_producto)
+            ws_client.proveedor_creado.connect(self.on_notificacion_proveedor)
+
         self.cargar_productos_desde_bd()
-        self.cargar_proveedores_bd() ### MODIFICADO ### Llamar a la función para cargar proveedores
+        self.cargar_proveedores_bd()
+    
+    def on_notificacion_producto(self, data):
+        self.cargar_productos_desde_bd()
+
+    def on_notificacion_proveedor(self, data):
+        self.cargar_proveedores_bd()
     
     def setup_ui(self):
         """Configurar interfaz con pestañas"""
@@ -581,6 +595,7 @@ class InventarioWindow(QDialog):
         """Cargar productos desde la base de datos"""
         try:
             # Las funciones de actualización ahora cargan desde la BD
+            # (usando api_client renombrado como db_helper)
             self.actualizar_tabla_productos()
             self.actualizar_alertas()
             self.actualizar_tabla_movimientos()
@@ -633,6 +648,7 @@ class InventarioWindow(QDialog):
             datos['proveedor_id'] = None
         ### FIN: MODIFICADO ###
         
+        # Esta llamada ahora usa api_client
         producto = db_helper.crear_producto(datos)
         
         if producto:
@@ -674,6 +690,7 @@ class InventarioWindow(QDialog):
             datos['proveedor_id'] = None
         ### FIN: MODIFICADO ###
         
+        # Esta llamada ahora usa api_client
         producto = db_helper.actualizar_producto(self.producto_en_edicion_id, datos)
         
         if producto:
@@ -691,6 +708,7 @@ class InventarioWindow(QDialog):
             return
         
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
+        # Esta llamada ahora usa api_client
         productos = db_helper.get_productos()
         producto = next((p for p in productos if p['id'] == producto_id), None)
         
@@ -708,6 +726,7 @@ class InventarioWindow(QDialog):
             return
         
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
+        # Esta llamada ahora usa api_client
         productos = db_helper.get_productos()
         producto = next((p for p in productos if p['id'] == producto_id), None)
         nombre_producto = producto['nombre'] if producto else f"ID {producto_id}"
@@ -720,6 +739,7 @@ class InventarioWindow(QDialog):
             )
             
             if respuesta == QMessageBox.Yes:
+                # Esta llamada ahora usa api_client
                 if db_helper.eliminar_producto(producto_id):
                     self.cargar_productos_desde_bd()
                     self.limpiar_formulario_producto()
@@ -736,6 +756,7 @@ class InventarioWindow(QDialog):
         
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
         
+        # Esta llamada ahora usa api_client
         productos = db_helper.get_productos()
         producto = next((p for p in productos if p['id'] == producto_id), None)
         
@@ -753,6 +774,7 @@ class InventarioWindow(QDialog):
                 )
                 
                 if ok2:
+                    # Esta llamada ahora usa api_client
                     if db_helper.registrar_movimiento(producto_id, "Entrada", cantidad, motivo, "Admin"):
                         self.cargar_productos_desde_bd() # Recargar todo
                         self.mostrar_mensaje("Éxito", f"Se agregaron {cantidad} unidades.", QMessageBox.Information)
@@ -768,6 +790,7 @@ class InventarioWindow(QDialog):
         
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
         
+        # Esta llamada ahora usa api_client
         productos = db_helper.get_productos()
         producto = next((p for p in productos if p['id'] == producto_id), None)
         
@@ -789,6 +812,7 @@ class InventarioWindow(QDialog):
                 )
                 
                 if ok2:
+                    # Esta llamada ahora usa api_client
                     if db_helper.registrar_movimiento(producto_id, "Salida", cantidad, motivo, "Admin"):
                         self.cargar_productos_desde_bd() # Recargar todo
                         self.mostrar_mensaje("Éxito", f"Se retiraron {cantidad} unidades.", QMessageBox.Information)
@@ -798,6 +822,7 @@ class InventarioWindow(QDialog):
     def cargar_proveedores_bd(self):
         """Cargar proveedores y configurar autocompletado"""
         try:
+            # Esta llamada ahora usa api_client
             proveedores = db_helper.get_proveedores()
             self.proveedores_dict.clear()
             
@@ -846,6 +871,7 @@ class InventarioWindow(QDialog):
         """Actualizar tabla de productos"""
         if productos is None:
             try:
+                # Esta llamada ahora usa api_client
                 productos = db_helper.get_productos()
             except Exception as e:
                 self.mostrar_mensaje("Error BD", f"No se pudo leer productos: {e}", QMessageBox.Critical)
@@ -895,6 +921,7 @@ class InventarioWindow(QDialog):
     def actualizar_tabla_movimientos(self):
         """Actualizar tabla de movimientos"""
         try:
+            # Esta llamada ahora usa api_client
             movimientos = db_helper.get_movimientos()
         except Exception as e:
             self.mostrar_mensaje("Error BD", f"No se pudo leer movimientos: {e}", QMessageBox.Critical)
@@ -935,6 +962,7 @@ class InventarioWindow(QDialog):
     def actualizar_alertas(self):
         """Actualizar tabla de alertas"""
         try:
+            # Esta llamada ahora usa api_client
             productos_bajo_stock = db_helper.get_productos_bajo_stock()
         except Exception as e:
             self.mostrar_mensaje("Error BD", f"No se pudo leer alertas: {e}", QMessageBox.Critical)
@@ -986,6 +1014,7 @@ class InventarioWindow(QDialog):
         producto_id = int(self.tabla_productos_model.item(fila, 0).text())
 
         try:
+            # Esta llamada ahora usa api_client
             productos = db_helper.get_productos()
             producto = next((p for p in productos if p['id'] == producto_id), None)
         except Exception as e:
@@ -1021,6 +1050,7 @@ class InventarioWindow(QDialog):
             return
         
         try:
+            # Esta llamada ahora usa api_client
             productos = db_helper.buscar_productos(texto)
             self.actualizar_tabla_productos(productos) # Carga solo los filtrados
         except Exception as e:
@@ -1030,9 +1060,11 @@ class InventarioWindow(QDialog):
         """Filtrar movimientos por tipo"""
         try:
             if tipo == "Todos":
+                # Esta llamada ahora usa api_client
                 movimientos = db_helper.get_movimientos()
             else:
                 # Filtrar después de obtener (como en logica.py)
+                # Esta llamada ahora usa api_client
                 todos_mov = db_helper.get_movimientos()
                 movimientos = [m for m in todos_mov if m['tipo'] == tipo]
         except Exception as e:
@@ -1111,6 +1143,7 @@ class InventarioWindow(QDialog):
         # Verificar código duplicado (solo al agregar)
         if not self.modo_edicion:
             try:
+                # Esta llamada ahora usa api_client
                 productos = db_helper.get_productos()
                 if any(p['codigo'] == self.txt_codigo.text().strip() for p in productos):
                     self.mostrar_mensaje("Error", "El código ya existe.", QMessageBox.Critical)
@@ -1157,6 +1190,11 @@ class InventarioWindow(QDialog):
 if __name__ == "__main__":
     from PyQt5.QtWidgets import QApplication
     app = QApplication(sys.argv)
+    try:
+        from gui.api_client import api_client as db_helper
+    except ImportError:
+        print("Error: No se pudo importar api_client. Asegúrate de que el servidor esté corriendo.")
+        sys.exit(1)
     window = InventarioWindow()
     window.show()
     sys.exit(app.exec_())

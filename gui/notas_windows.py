@@ -11,7 +11,8 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QColor, QFont
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from gui.db_helper import db_helper
+from gui.api_client import api_client as db_helper
+from gui.websocket_client import ws_client
 
 from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE, LABEL_STYLE,
@@ -54,7 +55,27 @@ class NotasWindow(QDialog):
 
         self.setup_ui()
         
+        if ws_client:
+            ws_client.cliente_creado.connect(self.on_notificacion_cliente)
+            ws_client.cliente_actualizado.connect(self.on_notificacion_cliente)
+            ws_client.nota_creada.connect(self.on_notificacion_nota)
+        
         self.cargar_clientes_bd()
+    
+    def on_notificacion_cliente(self, data):
+        self.cargar_clientes_bd()
+
+    def on_notificacion_nota(self, data):
+        """Recarga la nota actual si coincide con la notificación."""
+        if self.nota_actual_id and data.get('id') == self.nota_actual_id:
+            print(f"Recargando nota {self.nota_actual_id} por notificación remota.")
+            try:
+                # Esta llamada ahora usa api_client
+                nota_actualizada = db_helper.get_nota(self.nota_actual_id)
+                if nota_actualizada:
+                    self.cargar_nota_en_formulario(nota_actualizada)
+            except Exception as e:
+                print(f"Error recargando nota: {e}")
     
     def setup_ui(self):
         main_layout = QVBoxLayout()
@@ -433,6 +454,7 @@ class NotasWindow(QDialog):
     
     def cargar_clientes_bd(self):
         try:
+            # Esta llamada ahora usa api_client
             clientes = db_helper.get_clientes() 
             self.clientes_dict.clear()
             
@@ -1303,6 +1325,11 @@ class NotasWindow(QDialog):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    try:
+        from gui.api_client import api_client as db_helper
+    except ImportError:
+        print("Error: No se pudo importar api_client. Asegúrate de que el servidor esté corriendo.")
+        sys.exit(1)
     window = NotasWindow()
     window.show()
     sys.exit(app.exec_())

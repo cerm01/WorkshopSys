@@ -2,6 +2,7 @@ import sys
 import os
 import shutil
 import re
+import hashlib
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFrame, QTabWidget, QWidget,
@@ -15,12 +16,17 @@ from PyQt5.QtGui import (
 )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from gui.db_helper import db_helper, generar_hash_password
+from gui.api_client import api_client as db_helper
+from gui.websocket_client import ws_client
+
 from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE,
     BUTTON_STYLE_2, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
 
+def generar_hash_password(password: str) -> str:
+    """Generar hash SHA256 de contraseña"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 class ConfiguracionWindow(QDialog):
     def __init__(self, parent=None):
@@ -37,6 +43,16 @@ class ConfiguracionWindow(QDialog):
         
         self.setup_ui()
         
+        if ws_client:
+            pass
+        
+        # Cargar datos iniciales
+        self.cargar_datos_empresa()
+        self.cargar_usuarios()
+
+    def on_notificacion_remota(self, data):
+        self.cargar_usuarios()
+    
     def setup_ui(self):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
@@ -77,10 +93,6 @@ class ConfiguracionWindow(QDialog):
         
         main_layout.addWidget(self.tabs)
         self.setLayout(main_layout)
-        
-        # Cargar datos iniciales
-        self.cargar_datos_empresa()
-        self.cargar_usuarios()
     
     # ==================== TAB EMPRESA (MODIFICADO) ====================
     
@@ -89,10 +101,6 @@ class ConfiguracionWindow(QDialog):
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
-        
-        # --- INICIO DE CAMBIOS: QScrollArea ELIMINADO ---
-        # No hay QScrollArea ni scroll_widget
-        # Los widgets se añaden directamente a 'layout'
         
         # Grupo: Datos Generales
         grupo_general = QGroupBox()
@@ -245,25 +253,18 @@ class ConfiguracionWindow(QDialog):
         logo_layout.addLayout(logo_btns)
         logo_layout.addStretch()
         
-        layout.addLayout(logo_layout) # <-- Directo a 'layout'
+        layout.addLayout(logo_layout)
         
         # Botón Guardar
-        layout.addStretch() # <-- Se añade el stretch aquí (como en el archivo viejo)
+        layout.addStretch()
         btn_guardar_empresa = QPushButton("Guardar Configuración")
         btn_guardar_empresa.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         btn_guardar_empresa.setFixedHeight(60)
         btn_guardar_empresa.clicked.connect(self.guardar_empresa)
         layout.addWidget(btn_guardar_empresa)
         
-        # --- FIN DE CAMBIOS ---
-        
         tab.setLayout(layout)
         return tab
-    
-    # ====================================================
-    # === EL RESTO DEL ARCHIVO ES IDÉNTICO AL NUEVO =====
-    # === (Se mantiene la lógica de logo_data, hash, etc.)
-    # ====================================================
 
     def _crear_pixmap_circular(self, pixmap_o_bytes, tamanio=150):
         """Crear pixmap circular desde QPixmap o bytes"""
@@ -331,6 +332,7 @@ class ConfiguracionWindow(QDialog):
     
     def cargar_datos_empresa(self):
         """Cargar datos de la empresa desde BD"""
+        # Esta llamada ahora usa api_client (renombrado como db_helper)
         datos = db_helper.get_config_empresa()
         if datos:
             self.txt_nombre_comercial.setText(datos.get('nombre_comercial', ''))
@@ -411,6 +413,7 @@ class ConfiguracionWindow(QDialog):
             'logo_data': self.logo_data  # Guardamos bytes
         }
         
+        # Esta llamada ahora usa api_client (renombrado como db_helper)
         if db_helper.guardar_config_empresa(datos):
             self.mostrar_mensaje("Éxito", "Configuración guardada correctamente", QMessageBox.Information)
         else:
@@ -524,6 +527,7 @@ class ConfiguracionWindow(QDialog):
     
     def cargar_usuarios(self):
         self.tabla_usuarios_model.setRowCount(0)
+        # Esta llamada ahora usa api_client (renombrado como db_helper)
         usuarios = db_helper.get_usuarios()
         
         for usuario in usuarios:
@@ -573,12 +577,14 @@ class ConfiguracionWindow(QDialog):
         
         # Validar candado de admin
         if self.usuario_en_edicion_id:
+            # Esta llamada ahora usa api_client
             usuario_original = db_helper.get_usuario(self.usuario_en_edicion_id)
             
             if (usuario_original and
                 usuario_original['rol'] == 'Admin' and 
                 datos['activo'] is False):
                 
+                # Esta llamada ahora usa api_client
                 usuarios = db_helper.get_usuarios()
                 conteo_admins_activos = sum(1 for u in usuarios if u['rol'] == 'Admin' and u['activo'])
                 
@@ -595,6 +601,7 @@ class ConfiguracionWindow(QDialog):
             datos['password_hash'] = generar_hash_password(password)
         
         if self.usuario_en_edicion_id:
+            # Esta llamada ahora usa api_client
             if db_helper.actualizar_usuario(self.usuario_en_edicion_id, datos):
                 self.mostrar_mensaje("Éxito", "Usuario actualizado", QMessageBox.Information)
                 self.cargar_usuarios()
@@ -604,6 +611,7 @@ class ConfiguracionWindow(QDialog):
         else:
             if password:
                 datos['password_hash'] = generar_hash_password(password)
+            # Esta llamada ahora usa api_client
             if db_helper.crear_usuario(datos):
                 self.mostrar_mensaje("Éxito", "Usuario creado", QMessageBox.Information)
                 self.cargar_usuarios()
@@ -620,6 +628,7 @@ class ConfiguracionWindow(QDialog):
         fila = indice.row()
         usuario_id = int(self.tabla_usuarios_model.item(fila, 0).text())
         
+        # Esta llamada ahora usa api_client
         usuario = db_helper.get_usuario(usuario_id)
         if usuario:
             self.usuario_en_edicion_id = usuario_id
@@ -644,16 +653,16 @@ class ConfiguracionWindow(QDialog):
         rol = self.tabla_usuarios_model.item(fila, 4).text()
 
         # Validación: Admin activo
-        if rol == "Admin":
-            admins_activos = db_helper.contar_admins_activos()
+        # Esta llamada ahora usa api_client
+        admins_activos = db_helper.contar_admins_activos()
             
-            if admins_activos <= 1:
-                self.mostrar_mensaje(
-                    "Acción Denegada",
-                    "No se puede eliminar el único administrador activo del sistema.",
-                    QMessageBox.Critical
-                )
-                return
+        if rol == "Admin" and admins_activos <= 1:
+            self.mostrar_mensaje(
+                "Acción Denegada",
+                "No se puede eliminar el único administrador activo del sistema.",
+                QMessageBox.Critical
+            )
+            return
 
         respuesta = QMessageBox.question(
             self, 
@@ -663,6 +672,7 @@ class ConfiguracionWindow(QDialog):
         )
         
         if respuesta == QMessageBox.Yes:
+            # Esta llamada ahora usa api_client
             if db_helper.eliminar_usuario(usuario_id):
                 self.mostrar_mensaje("Éxito", "Usuario eliminado", QMessageBox.Information)
                 self.cargar_usuarios()
@@ -769,6 +779,7 @@ class ConfiguracionWindow(QDialog):
             
             if archivo_origen:
                 archivo_destino = os.path.join(self.base_dir, "taller.db")
+                # Esta llamada ahora usa api_client (renombrado como db_helper)
                 db_helper.close()
                 shutil.copy2(archivo_origen, archivo_destino)
                 

@@ -11,15 +11,13 @@ from gui.styles import (
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
 
-# === INICIO DE CAMBIOS: Importar db_helper ===
 from datetime import datetime
 try:
-    from gui.db_helper import db_helper
+    from gui.api_client import api_client as db_helper
+    from gui.websocket_client import ws_client
 except ImportError:
-    print("Error: No se pudo importar 'db_helper'.")
-    # Fallback o salida
+    print("Error: No se pudo importar 'api_client' o 'ws_client'.")
     sys.exit(1) 
-# === FIN DE CAMBIOS ===
 
 
 class ReportesWindow(QDialog):
@@ -212,6 +210,8 @@ class ReportesWindow(QDialog):
         try:
             datos_filtrados = []
             
+            # (Todas estas llamadas ahora usan api_client renombrado como db_helper)
+            
             if tipo == "Ventas por Periodo":
                 headers = ["Folio", "Fecha", "Cliente", "Total", "Saldo", "Estado"]
                 self.tabla_model.setHorizontalHeaderLabels(headers) # Restablecer headers
@@ -382,6 +382,12 @@ class ReportesWindow(QDialog):
 if __name__ == "__main__":
     from PyQt5.QtWidgets import QApplication
     app = QApplication(sys.argv)
+    try:
+        from gui.api_client import api_client as db_helper
+    except ImportError:
+        print("Error: No se pudo importar api_client. Asegúrate de que el servidor esté corriendo.")
+        sys.exit(1)
+        
     window = ReportesWindow()
     window.show()
     sys.exit(app.exec_())

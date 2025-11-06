@@ -15,7 +15,9 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 try:
-    from gui.db_helper import db_helper
+    from gui.api_client import api_client as db_helper 
+    from gui.websocket_client import ws_client 
+    
     from dialogs.buscar_notas_dialog import BuscarNotasDialog
     from gui.styles import (
         SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE,
@@ -47,6 +49,30 @@ class PagosNotaDialog(QDialog):
         self.nota_actual = None
         self.setup_ui()
         self.conectar_senales()
+
+        if ws_client:
+            ws_client.nota_creada.connect(self.on_notificacion_remota)
+
+    def on_notificacion_remota(self, data):
+        """
+        Recarga la nota actual si coincide con la notificación 
+        (ej. si fue pagada o cancelada en otra terminal).
+        """
+        if self.nota_actual and data.get('id') == self.nota_actual.get('id'):
+            print(f"Recargando nota {self.nota_actual.get('id')} por notificación.")
+            try:
+                # (Esta llamada ahora usa api_client)
+                nota_actualizada = db_helper.get_nota(self.nota_actual.get('id'))
+                if nota_actualizada:
+                    self.cargar_nota(nota_actualizada)
+                else:
+                    # La nota fue eliminada remotamente
+                    self.mostrar_mensaje("Aviso", "La nota que estaba viendo fue eliminada remotamente.", QMessageBox.Warning)
+                    self.nota_actual = None
+                    self.grupo_pago.setEnabled(False)
+                    self.tabla_pagos_model.setRowCount(0)
+            except Exception as e:
+                print(f"Error recargando nota: {e}")
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -238,6 +264,7 @@ class PagosNotaDialog(QDialog):
         if dialog.exec_() == QDialog.Accepted and dialog.nota_seleccionada:
             # Volvemos a consultar la nota para tener los datos más frescos
             try:
+                # (Esta llamada ahora usa api_client)
                 nota_fresca = db_helper.get_nota(dialog.nota_seleccionada['id'])
                 if nota_fresca:
                     self.cargar_nota(nota_fresca)
@@ -331,7 +358,7 @@ class PagosNotaDialog(QDialog):
             return
             
         try:
-            # Llamar a la función del db_helper
+            # Llamar a la función del db_helper (api_client)
             nota_actualizada = db_helper.registrar_pago(
                 self.nota_actual['id'],
                 monto,
@@ -415,7 +442,7 @@ class PagosNotaDialog(QDialog):
 
         # Proceder con la eliminación
         try:
-            # Llamar al db_helper
+            # Llamar al db_helper (api_client)
             nota_actualizada = db_helper.eliminar_pago(pago_id)
             
             if nota_actualizada:
@@ -447,15 +474,14 @@ if __name__ == "__main__":
     sys.path.insert(0, parent_dir)
     
     try:
-        from gui.db_helper import db_helper
+        from gui.api_client import api_client as db_helper
         from dialogs.buscar_notas_dialog import BuscarNotasDialog
         from gui.styles import *
     except ImportError as e:
         print(f"Error fatal en __main__: {e}")
-        # Intentar una ruta de importación alternativa si falla la primera
         sys.path.insert(0, os.path.dirname(parent_dir))
         try:
-            from gui.db_helper import db_helper
+            from gui.api_client import api_client as db_helper
             from dialogs.buscar_notas_dialog import BuscarNotasDialog
             from gui.styles import *
         except ImportError as e2:

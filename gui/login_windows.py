@@ -5,12 +5,12 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPainterPath, QFont, QFontMetrics
-from gui.db_helper import DatabaseHelper
+from gui.api_client import api_client as db_helper
 
 class LoginWindow(QDialog):
     def __init__(self):
         super().__init__()
-        self.db_helper = DatabaseHelper()
+        self.db_helper = db_helper        
         self.usuario_logueado = None
         
         self.setWindowTitle("Iniciar Sesión")
@@ -57,6 +57,7 @@ class LoginWindow(QDialog):
     
     def _cargar_logo_empresa(self):
         """Cargar logo desde la base de datos"""
+        # Esta llamada ahora usa api_client (renombrado como db_helper)
         config = self.db_helper.get_config_empresa()
         
         if config and config.get('logo_data'):
@@ -137,6 +138,7 @@ class LoginWindow(QDialog):
         frame_layout.setSpacing(5)
         
         # Nombre comercial con ajuste automático
+        # Esta llamada ahora usa api_client
         config = self.db_helper.get_config_empresa()
         nombre_empresa = config.get('nombre_comercial', 'WORKSHOPSYS') if config else 'WORKSHOPSYS'
         
@@ -302,7 +304,7 @@ class LoginWindow(QDialog):
             self._mostrar_error("Por favor ingrese usuario y contraseña")
             return
         
-        # Validar contra BD
+        # Validar contra BD (Ahora a través de api_client)
         usuario = self.db_helper.validar_login(username, password)
         
         if usuario:
@@ -323,6 +325,11 @@ class LoginWindow(QDialog):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    try:
+        from gui.api_client import api_client as db_helper
+    except ImportError:
+        print("Error: No se pudo importar api_client. Asegúrate de que el servidor esté corriendo.")
+        sys.exit(1)   
     window = LoginWindow()
     if window.exec_() == QDialog.Accepted:
         usuario = window.get_usuario_logueado()

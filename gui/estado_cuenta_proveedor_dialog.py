@@ -14,7 +14,9 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 try:
-    from gui.db_helper import db_helper
+    from gui.api_client import api_client as db_helper
+    from gui.websocket_client import ws_client
+    
     from gui.styles import (
         SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE,
         LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE,
@@ -49,6 +51,11 @@ class EstadoCuentaProveedorDialog(QDialog):
 
         self.setup_ui()
         self.conectar_senales()
+
+        if ws_client:
+            ws_client.proveedor_creado.connect(self.on_notificacion_remota)
+            ws_client.nota_creada.connect(self.on_notificacion_remota)
+
         self.cargar_datos()
 
     def setup_ui(self):
@@ -196,6 +203,9 @@ class EstadoCuentaProveedorDialog(QDialog):
         self.btn_filtrar.clicked.connect(self.cargar_datos)
         self.btn_cerrar.clicked.connect(self.accept)
 
+    def on_notificacion_remota(self, data):
+        self.cargar_datos()
+
     def cargar_datos(self):
         self.tabla_model.setRowCount(0)
         
@@ -206,6 +216,7 @@ class EstadoCuentaProveedorDialog(QDialog):
         
         try:
             # 1. Obtener todas las notas del proveedor
+            # (Esta llamada ahora usa api_client renombrado como db_helper)
             notas_proveedor = db_helper.buscar_notas_proveedor(proveedor_id=self.proveedor_id)
             
             if not notas_proveedor:
@@ -305,9 +316,11 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     # Simular la carga del diálogo (se necesita un ID de proveedor de la BD, ej: 1)
     try:
+        # (NUEVO) Simular la importación del api_client si se ejecuta directamente
+        from gui.api_client import api_client as db_helper
         dialog = EstadoCuentaProveedorDialog(proveedor_id=1, proveedor_nombre="Proveedor de Prueba (ID 1)")
         dialog.show()
     except Exception as e:
-        QMessageBox.critical(None, "Error", f"No se pudo iniciar: {e}\nAsegúrese de que la BD esté poblada.")
+        QMessageBox.critical(None, "Error", f"No se pudo iniciar: {e}\nAsegúrese de que la BD esté poblada y el servidor (server/main.py) esté corriendo.")
     
     sys.exit(app.exec_())

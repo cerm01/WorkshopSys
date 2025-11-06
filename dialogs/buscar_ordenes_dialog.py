@@ -14,7 +14,8 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 try:
-    from gui.db_helper import db_helper
+    from gui.api_client import api_client
+    from gui.websocket_client import ws_client
     from gui.styles import (
         SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, INPUT_STYLE, TABLE_STYLE, LABEL_STYLE
     )

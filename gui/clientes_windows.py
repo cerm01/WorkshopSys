@@ -15,7 +15,8 @@ from gui.styles import (
     LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, MESSAGE_BOX_STYLE
 )
 
-from gui.db_helper import db_helper
+from gui.api_client import api_client as db_helper
+from gui.websocket_client import ws_client
 # Importar la nueva ventana de diálogo
 try:
     from gui.estado_cuenta_dialog import EstadoCuentaClienteDialog
@@ -41,6 +42,10 @@ class ClientesWindow(QDialog):
         
         # Configurar interfaz
         self.setup_ui()
+        if ws_client:
+            ws_client.cliente_creado.connect(self.on_notificacion_remota)
+            ws_client.cliente_actualizado.connect(self.on_notificacion_remota)
+            ws_client.cliente_eliminado.connect(self.on_notificacion_remota)
         self.cargar_datos_desde_bd()
         
         # Forzar maximización DESPUÉS de configurar la UI y con más delay
@@ -524,7 +529,8 @@ class ClientesWindow(QDialog):
         cliente_id = int(self.tabla_model.item(fila, 0).text())
         
         try:
-            clientes = db_helper.get_clientes()
+            # AHORA USA EL API CLIENT (renombrado a db_helper)
+            clientes = db_helper.get_clientes() 
             cliente = next((c for c in clientes if c['id'] == cliente_id), None)
             
             if cliente:
@@ -553,6 +559,9 @@ class ClientesWindow(QDialog):
                 widget.setText(valor if valor else "---")
                 break
 
+    def on_notificacion_remota(self, data):
+        self.cargar_datos_desde_bd()
+
     # === OPERACIONES CRUD ===
 
     def nuevo_cliente(self):
@@ -569,6 +578,7 @@ class ClientesWindow(QDialog):
         
         try:
             if self.modo_edicion and self.cliente_en_edicion:
+                # Esta llamada ahora va al api_client
                 if db_helper.actualizar_cliente(self.cliente_en_edicion['id'], datos):
                     self.mostrar_mensaje("Éxito", "Cliente actualizado", QMessageBox.Information)
                     self.cargar_datos_desde_bd()
@@ -576,6 +586,7 @@ class ClientesWindow(QDialog):
                 else:
                     self.mostrar_mensaje("Error", "No se pudo actualizar", QMessageBox.Critical)
             else:
+                # Esta llamada ahora va al api_client
                 if db_helper.crear_cliente(datos):
                     self.mostrar_mensaje("Éxito", "Cliente guardado", QMessageBox.Information)
                     self.cargar_datos_desde_bd()
@@ -595,6 +606,7 @@ class ClientesWindow(QDialog):
         fila = indice.row()
         cliente_id = int(self.tabla_model.item(fila, 0).text())
         
+        # Esta llamada ahora va al api_client
         clientes = db_helper.get_clientes()
         cliente = next((c for c in clientes if c['id'] == cliente_id), None)
         
@@ -622,6 +634,7 @@ class ClientesWindow(QDialog):
         )
         
         if respuesta == QMessageBox.Yes:
+            # Esta llamada ahora va al api_client
             if db_helper.eliminar_cliente(cliente_id):
                 self.mostrar_mensaje("Éxito", "Cliente eliminado", QMessageBox.Information)
                 self.cargar_datos_desde_bd()
@@ -634,6 +647,7 @@ class ClientesWindow(QDialog):
         texto, ok = QInputDialog.getText(self, "Buscar", "Nombre a buscar:")
         if ok and texto:
             try:
+                # Esta llamada ahora va al api_client
                 resultados = db_helper.buscar_clientes(texto)
                 self.actualizar_tabla_con_datos(resultados)
             except Exception as e:
@@ -746,6 +760,7 @@ class ClientesWindow(QDialog):
     def cargar_datos_desde_bd(self):
         """Cargar clientes desde base de datos"""
         try:
+            # Esta llamada ahora va al api_client
             clientes = db_helper.get_clientes()
             self.actualizar_tabla_con_datos(clientes)
         except Exception as e:

@@ -11,7 +11,8 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QColor, QFont
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from gui.db_helper import db_helper
+from gui.api_client import api_client as db_helper
+from gui.websocket_client import ws_client
 
 from gui.styles import (
     SECONDARY_WINDOW_GRADIENT, BUTTON_STYLE_2, GROUP_BOX_STYLE, LABEL_STYLE,
@@ -56,9 +57,26 @@ class NotasProveedoresWindow(QDialog):
         # Crear la interfaz
         self.setup_ui()
         
+        if ws_client:
+            ws_client.proveedor_creado.connect(self.on_notificacion_proveedor)
+
         # Cargar datos
         self.cargar_proveedores_bd()
         self.nueva_nota() # Iniciar en estado limpio
+
+    def on_notificacion_proveedor(self, data):
+        self.cargar_proveedores_bd()
+    
+    def on_notificacion_nota(self, data):
+        if self.nota_actual_id and data.get('id') == self.nota_actual_id:
+            print(f"Recargando nota proveedor {self.nota_actual_id} por notificación.")
+            try:
+                # Esta llamada ahora usa api_client
+                nota_actualizada = db_helper.get_nota_proveedor(self.nota_actual_id)
+                if nota_actualizada:
+                    self.cargar_nota_en_formulario(nota_actualizada)
+            except Exception as e:
+                print(f"Error recargando nota proveedor: {e}")
 
     def setup_ui(self):
         """Configurar la interfaz de usuario"""
@@ -455,6 +473,7 @@ class NotasProveedoresWindow(QDialog):
     def cargar_proveedores_bd(self):
         """Cargar lista de proveedores desde la base de datos y configurar autocompletado"""
         try:
+            # Esta llamada ahora usa api_client
             proveedores = db_helper.get_proveedores() 
             self.proveedores_dict.clear() 
             
@@ -549,7 +568,7 @@ class NotasProveedoresWindow(QDialog):
                 }
                 items.append(item_data)
             
-            # Llamadas reales a db_helper
+            # Llamadas reales a db_helper (api_client)
             if self.modo_edicion and self.nota_actual_id:
                 nota = db_helper.actualizar_nota_proveedor(self.nota_actual_id, nota_data, items)
                 mensaje = "Nota actualizada correctamente"
@@ -603,7 +622,7 @@ class NotasProveedoresWindow(QDialog):
         
         if ok and folio:
             try:
-                # Llamada real a db_helper
+                # Llamada real a db_helper (api_client)
                 notas = db_helper.buscar_notas_proveedor(folio=folio)
                 
                 if notas:
@@ -706,7 +725,7 @@ class NotasProveedoresWindow(QDialog):
         
         if respuesta == QMessageBox.Yes:
             try:
-                # Llamada real a db_helper
+                # Llamada real a db_helper (api_client)
                 success = db_helper.cancelar_nota_proveedor(self.nota_actual_id)
 
                 if success:
@@ -1284,6 +1303,11 @@ class NotasProveedoresWindow(QDialog):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    try:
+        from gui.api_client import api_client as db_helper
+    except ImportError:
+        print("Error: No se pudo importar api_client. Asegúrate de que el servidor esté corriendo.")
+        sys.exit(1)
     window = NotasProveedoresWindow()
     window.show()
     sys.exit(app.exec_())

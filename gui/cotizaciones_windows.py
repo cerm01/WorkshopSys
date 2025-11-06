@@ -25,8 +25,8 @@ from gui.styles import (
     GROUP_BOX_STYLE, LABEL_STYLE, INPUT_STYLE, TABLE_STYLE, FORM_BUTTON_STYLE, MESSAGE_BOX_STYLE
 )
 from datetime import datetime, timedelta
-from gui.db_helper import db_helper
-
+from gui.api_client import api_client as db_helper 
+from gui.websocket_client import ws_client
 
 class CotizacionesWindow(QDialog):
     def __init__(self, parent=None):
@@ -59,11 +59,31 @@ class CotizacionesWindow(QDialog):
         # Crear la interfaz
         self.setup_ui()
 
+        if ws_client:
+            # Recargar autocompletado si cambia un cliente
+            ws_client.cliente_creado.connect(self.on_notificacion_cliente)
+            ws_client.cliente_actualizado.connect(self.on_notificacion_cliente)
+            pass
+        
         self.cargar_clientes_autocompletado()
 
         # Estado inicial
         self.controlar_estado_campos(True)
     
+    def on_notificacion_cliente(self, data):
+        self.cargar_clientes_autocompletado()
+
+    def on_notificacion_cotizacion(self, data):
+        if self.cotizacion_actual_id and data.get('id') == self.cotizacion_actual_id:
+            print(f"Recargando cotización {self.cotizacion_actual_id} por notificación remota...")
+            try:
+                cotizacion = db_helper.get_cotizacion(self.cotizacion_actual_id) # (get_cotizacion no existe en db_helper, usa buscar_cotizaciones)
+                if cotizacion:
+                    self.cargar_cotizacion_en_formulario(cotizacion)
+            except Exception as e:
+                print(f"Error recargando cotización: {e}")
+                self.nueva_cotizacion() # Limpiar si hay error
+
     def setup_ui(self):
         """Configurar la interfaz de usuario  """
         # Layout principal 
@@ -726,6 +746,7 @@ class CotizacionesWindow(QDialog):
     def cargar_clientes_autocompletado(self):
         """Cargar clientes y configurar autocompletado"""
         try:
+            # Esta llamada ahora usa api_client
             clientes = db_helper.get_clientes()
             self.clientes_dict.clear()
             
@@ -864,6 +885,8 @@ class CotizacionesWindow(QDialog):
 
     # ===================================================================
     # = MÉTODOS MENÚ CONTEXTUAL Y TABLA
+    # (El resto del archivo no cambia, ya que db_helper está 
+    #  renombrado y las llamadas funcionarán a través del API Client)
     # ===================================================================
     
     def mostrar_menu_contextual(self, position):
