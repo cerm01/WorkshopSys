@@ -172,6 +172,36 @@ class TallerAPIClient:
             notas = [n for n in notas if filtros['folio'].lower() in n.get('folio', '').lower()]
         return notas
     
+    def get_nota(self, nota_id: int) -> Optional[Dict]:
+        """Obtiene una nota de venta específica por su ID."""
+        return self._get(f"/notas/{nota_id}")
+    
+    def registrar_pago(self, nota_id: int, monto: float, fecha_pago: Any, metodo_pago: str, memo: str) -> Optional[Dict]:
+        """Registrar un pago a una nota de venta. fecha_pago debe ser un objeto date."""
+        datos_pago = {
+            "monto": monto,
+            "fecha_pago": fecha_pago.isoformat(), # Convertir date a string ISO
+            "metodo_pago": metodo_pago,
+            "memo": memo
+        }
+        return self._post(f"/notas/{nota_id}/pagar", datos_pago)
+
+    def eliminar_pago(self, pago_id: int) -> Optional[Dict]:
+        """Elimina un pago de nota de venta y devuelve la nota actualizada"""
+        return self._delete(f"/pagos/{pago_id}")
+    
+    def actualizar_nota(self, nota_id: int, nota_data: Dict, items: List[Dict]) -> Optional[Dict]:
+        """Actualiza una nota de venta existente."""
+        datos_completos = nota_data.copy()
+        datos_completos['items'] = items
+        # La fecha ya viene como string 'yyyy-MM-dd' desde notas_windows.py
+        return self._put(f"/notas/{nota_id}", datos_completos)
+    
+    def cancelar_nota(self, nota_id: int) -> Optional[Dict]:
+        """Marca una nota de venta como 'Cancelada'."""
+        # Usamos _post a la nueva ruta. No requiere enviar datos (data={}).
+        return self._post(f"/notas/{nota_id}/cancelar", data={})
+    
     # ==================== NOTAS DE PROVEEDOR ====================
 
     def get_all_notas_proveedor(self) -> List[Dict]:

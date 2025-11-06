@@ -244,8 +244,106 @@ async def crear_nota(datos: Dict[str, Any], db: Session = Depends(get_db)):
 
 @app.get("/notas")
 def get_notas(db: Session = Depends(get_db)):
-    notas = crud.get_all_notas_venta(db)
+    notas = crud.get_all_notas(db) 
     return [_nota_to_dict(n) for n in notas]
+
+@app.get("/notas/{nota_id}")
+def get_nota_por_id(nota_id: int, db: Session = Depends(get_db)):
+    nota = crud.get_nota(db, nota_id)
+    if nota:
+        return _nota_to_dict(nota)
+    raise HTTPException(status_code=404, detail="Nota no encontrada")
+
+@app.put("/notas/{nota_id}")
+async def actualizar_nota_api(nota_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        items = datos.pop('items', [])
+        
+        # Convertir fecha si viene
+        if 'fecha' in datos and isinstance(datos['fecha'], str):
+            try:
+                # El cliente GUI la envía como 'yyyy-MM-dd'
+                fecha_obj = datetime.strptime(datos['fecha'], '%Y-%m-%d').date()
+                datos['fecha'] = fecha_obj
+            except ValueError as ve:
+                print(f"Advertencia: Fecha inválida, no se actualizará: {e}")
+                datos.pop('fecha') # No actualizar si es inválida
+        
+        nota = crud.update_nota_venta(
+            db=db,
+            nota_id=nota_id,
+            nota_data=datos,
+            items=items
+        )
+        
+        if not nota:
+            raise HTTPException(status_code=404, detail="Nota no encontrada")
+            
+        await manager.broadcast({
+            "type": "nota_actualizada", # Usamos una señal genérica
+            "data": _nota_to_dict(nota)
+        })
+        return _nota_to_dict(nota)
+        
+    except Exception as e:
+        print(f"Error al actualizar nota API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@app.post("/notas/{nota_id}/cancelar")
+async def cancelar_nota_api(nota_id: int, db: Session = Depends(get_db)):
+    try:
+        # La función crud.cancelar_nota devuelve True/False
+        success = crud.cancelar_nota(db, nota_id)
+        if not success:
+             raise HTTPException(status_code=400, detail="No se pudo cancelar la nota (ya pagada o cancelada)")
+        
+        # Si fue exitoso, obtenemos la nota actualizada para devolverla
+        nota = crud.get_nota(db, nota_id) 
+        await manager.broadcast({
+            "type": "nota_actualizada",
+            "data": _nota_to_dict(nota)
+        })
+        return _nota_to_dict(nota)
+    
+    except Exception as e:
+        print(f"Error al cancelar nota API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/notas/{nota_id}/pagar")
+async def registrar_pago_api(nota_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        # El cliente enviará la fecha como string ISO (YYYY-MM-DD)
+        fecha_pago_obj = datetime.fromisoformat(datos['fecha_pago']).date()
+
+        nota = crud.registrar_pago_nota(
+            db=db,
+            nota_id=nota_id,
+            monto=float(datos['monto']),
+            fecha_pago=fecha_pago_obj,
+            metodo_pago=datos['metodo_pago'],
+            memo=datos['memo']
+        )
+        await manager.broadcast({
+            "type": "nota_actualizada", # Usamos una señal genérica
+            "data": _nota_to_dict(nota)
+        })
+        return _nota_to_dict(nota)
+    except Exception as e:
+        print(f"Error al registrar pago API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/pagos/{pago_id}")
+async def eliminar_pago_api(pago_id: int, db: Session = Depends(get_db)):
+    try:
+        nota = crud.eliminar_pago_nota(db, pago_id)
+        await manager.broadcast({
+            "type": "nota_actualizada",
+            "data": _nota_to_dict(nota)
+        })
+        return _nota_to_dict(nota)
+    except Exception as e:
+        print(f"Error al eliminar pago API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== MOVIMIENTOS INVENTARIO ====================
 @app.post("/inventario/movimiento")

@@ -492,6 +492,64 @@ def create_nota_venta(db: Session, nota_data: Dict[str, Any], items: List[Dict[s
     db.refresh(nueva_nota)
     return nueva_nota
 
+def update_nota_venta(
+    db: Session, 
+    nota_id: int, 
+    nota_data: Dict[str, Any], 
+    items: List[Dict[str, Any]]
+) -> Optional[NotaVenta]:
+    """
+    Actualizar una nota de venta existente.
+    Esto borrará los items anteriores y los reemplazará.
+    """
+    nota = get_nota(db, nota_id)
+    if not nota:
+        return None
+    
+    if nota.estado == 'Cancelada' or nota.estado == 'Pagado':
+        raise ValueError("No se puede modificar una nota Pagada o Cancelada.")
+    
+    # 1. Actualizar datos de la nota
+    for key, value in nota_data.items():
+        if hasattr(nota, key):
+            setattr(nota, key, value)
+    
+    # 2. Borrar items viejos
+    db.query(NotaVentaItem).filter(NotaVentaItem.nota_id == nota_id).delete()
+    
+    # 3. Agregar items nuevos y recalcular totales
+    subtotal = 0
+    impuestos_total = 0
+    
+    for item_data in items:
+        item = NotaVentaItem(nota_id=nota.id, **item_data)
+        db.add(item)
+        subtotal += item.importe
+        impuestos_total += (item.importe * item.impuesto / 100)
+    
+    nota.subtotal = subtotal
+    nota.impuestos = impuestos_total
+    nota.total = subtotal + impuestos_total
+    
+    # 4. Recalcular saldo
+    # (No se debe tocar el total_pagado, solo recalcular el saldo)
+    nota.saldo = nota.total - nota.total_pagado
+    
+    # 5. Re-evaluar estado (si el nuevo total es menor que lo pagado)
+    if nota.saldo <= 0.01:
+        nota.saldo = 0.0
+        nota.estado = 'Pagado'
+    elif nota.total_pagado > 0:
+        nota.estado = 'Pagado Parcialmente'
+    else:
+        nota.estado = 'Registrado'
+        
+    nota.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(nota)
+    return nota
+
 def cancelar_nota(db: Session, nota_id: int) -> bool:
     """Cancelar una nota de venta"""
     nota = get_nota(db, nota_id)
