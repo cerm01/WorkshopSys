@@ -287,7 +287,10 @@ def get_movimientos_inventario(
 
 def get_all_ordenes(db: Session, estado: Optional[str] = None) -> List[Orden]:
     """Obtener todas las órdenes (opcional: filtrar por estado)"""
-    query = db.query(Orden).options(joinedload(Orden.cliente))
+    query = db.query(Orden).options(
+        joinedload(Orden.cliente), 
+        joinedload(Orden.items)
+    )
     if estado:
         query = query.filter(Orden.estado == estado)
     return query.order_by(Orden.created_at.desc()).all()
@@ -365,15 +368,35 @@ def delete_orden(db: Session, orden_id: int) -> bool:
 
 def get_all_cotizaciones(db: Session, estado: Optional[str] = None) -> List[Cotizacion]:
     """Obtener todas las cotizaciones"""
-    query = db.query(Cotizacion)
+    query = db.query(Cotizacion).options(
+        joinedload(Cotizacion.cliente), 
+        joinedload(Cotizacion.items)
+    )
     if estado:
         query = query.filter(Cotizacion.estado == estado)
     return query.order_by(Cotizacion.created_at.desc()).all()
 
+def search_cotizaciones(db: Session, folio: Optional[str] = None, cliente_id: Optional[int] = None) -> List[Cotizacion]:
+    """Buscar cotizaciones por folio o cliente_id"""
+    query = db.query(Cotizacion).options(joinedload(Cotizacion.cliente))
+    if folio:
+        query = query.filter(Cotizacion.folio.ilike(f"%{folio}%"))
+    if cliente_id:
+        query = query.filter(Cotizacion.cliente_id == cliente_id)
+    return query.order_by(Cotizacion.created_at.desc()).all()
 
 def get_cotizacion(db: Session, cotizacion_id: int) -> Optional[Cotizacion]:
     """Obtener cotización por ID"""
     return db.query(Cotizacion).filter(Cotizacion.id == cotizacion_id).first()
+
+def search_cotizaciones_by_folio(db: Session, folio: str) -> List[Cotizacion]:
+    """Buscar cotizaciones por folio (búsqueda parcial)"""
+    return db.query(Cotizacion).options(
+        joinedload(Cotizacion.cliente),
+        joinedload(Cotizacion.items)
+    ).filter(
+        Cotizacion.folio.ilike(f"%{folio}%")
+    ).order_by(Cotizacion.created_at.desc()).all()
 
 
 def create_cotizacion(db: Session, cotizacion_data: Dict[str, Any], items: List[Dict[str, Any]]) -> Cotizacion:
@@ -408,15 +431,64 @@ def create_cotizacion(db: Session, cotizacion_data: Dict[str, Any], items: List[
     return nueva_cotizacion
 
 
-def update_cotizacion(db: Session, cotizacion_id: int, cotizacion_data: Dict[str, Any]) -> Optional[Cotizacion]:
-    """Actualizar cotización existente"""
+def update_cotizacion(
+    db: Session, 
+    cotizacion_id: int, 
+    cotizacion_data: Dict[str, Any], 
+    items: List[Dict[str, Any]],
+    nota_folio: Optional[str] = None
+) -> Optional[Cotizacion]:
+    """
+    Actualizar una cotización existente.
+    Borrará los items anteriores y los reemplazará.
+    """
+    # Usamos get_cotizacion (que ya debe cargar 'items' y 'cliente' por las correcciones anteriores)
     cotizacion = get_cotizacion(db, cotizacion_id)
-    if cotizacion:
-        for key, value in cotizacion_data.items():
+    if not cotizacion:
+        return None
+
+    if cotizacion.estado == 'Cancelada':
+            raise ValueError("No se puede modificar una cotización Cancelada.")
+
+    # 1. Actualizar datos de la cotización
+    for key, value in cotizacion_data.items():
+        if hasattr(cotizacion, key):
             setattr(cotizacion, key, value)
-        cotizacion.updated_at = datetime.now()
-        db.commit()
-        db.refresh(cotizacion)
+    
+    # 1.b. Actualizar el nota_folio si se proveyó (para "Generar Nota")
+    if nota_folio:
+        cotizacion.nota_folio = nota_folio
+        cotizacion.estado = 'Aceptada' # Marcar como Aceptada
+
+    # 2. Borrar items viejos
+    db.query(CotizacionItem).filter(CotizacionItem.cotizacion_id == cotizacion_id).delete()
+    
+    # 3. Agregar items nuevos y recalcular totales
+    subtotal = 0
+    impuestos_total = 0
+    
+    for item_data in items:
+        # Aseguramos que los items tengan los campos correctos
+        item_data_limpia = {
+            'cantidad': item_data.get('cantidad', 0),
+            'descripcion': item_data.get('descripcion', 'N/A'),
+            'precio_unitario': item_data.get('precio_unitario', 0),
+            'importe': item_data.get('importe', 0),
+            'impuesto': item_data.get('impuesto', 0)
+        }
+        item = CotizacionItem(cotizacion_id=cotizacion.id, **item_data_limpia)
+        db.add(item)
+        subtotal += item_data_limpia.get('importe', 0)
+        impuestos_total += (item_data_limpia.get('importe', 0) * item_data_limpia.get('impuesto', 0) / 100)
+    
+    cotizacion.subtotal = subtotal
+    cotizacion.impuestos = impuestos_total
+    cotizacion.total = subtotal + impuestos_total
+    
+    cotizacion.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(cotizacion)
     return cotizacion
 
 

@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
     QTableView, QLineEdit, QComboBox, QLabel, QHeaderView, QMessageBox
 )
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from datetime import datetime
 
@@ -36,9 +36,9 @@ class BuscarCotizacionesDialog(QDialog):
         super().__init__(parent)
         self.cotizacion_seleccionada = None
         self.setup_ui()
-        self.cargar_cotizaciones()
         if ws_client:
             ws_client.cotizacion_creada.connect(self.on_notificacion_remota)
+        QTimer.singleShot(1, self.cargar_cotizaciones)
 
 
     def on_notificacion_remota(self, data):

@@ -146,7 +146,7 @@ class MainWindow(QDialog):
         """Crea instancias de las ventanas principales para que abran rápido."""
         # Usamos un QTimer para hacerlo justo después de que la ventana principal se muestre,
         # para no bloquear el arranque inicial.
-        QTimer.singleShot(100, self._ejecutar_precalentado)
+        QTimer.singleShot(1, self._ejecutar_precalentado)
 
     def _ejecutar_precalentado(self):
         """Tarea en segundo plano para instanciar todas las ventanas."""

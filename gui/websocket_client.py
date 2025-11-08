@@ -13,6 +13,7 @@ class WebSocketClient(QThread):
     producto_actualizado = pyqtSignal(dict)
     orden_creada = pyqtSignal(dict)
     cotizacion_creada = pyqtSignal(dict)
+    cotizacion_actualizada = pyqtSignal(dict)
     nota_creada = pyqtSignal(dict)
     stock_actualizado = pyqtSignal(dict)
     nota_proveedor_actualizada = pyqtSignal(dict)
@@ -79,6 +80,8 @@ class WebSocketClient(QThread):
                 self.orden_creada.emit(event_data)
             elif event_type == 'cotizacion_creada':
                 self.cotizacion_creada.emit(event_data)
+            elif event_type == 'cotizacion_actualizada':
+                self.cotizacion_actualizada.emit(event_data)    
             elif event_type == 'nota_creada':
                 self.nota_creada.emit(event_data)
             elif event_type == 'stock_actualizado':

@@ -141,17 +141,51 @@ class TallerAPIClient:
         params = {"estado": estado} if estado else {}
         return self._get("/cotizaciones", params=params) or []
     
-    def crear_cotizacion(self, datos: Dict, items: List[Dict]) -> Optional[int]:
+    def buscar_cotizaciones(self, **filtros) -> List[Dict]:
+        """Busca cotizaciones usando filtros como 'folio' o 'cliente_id'."""
+        # Pasa los filtros como query parameters (ej: ?folio=COT-123)
+        return self._get("/cotizaciones/buscar", params=filtros) or []
+    
+    def crear_cotizacion(self, datos: Dict, items: List[Dict]) -> Optional[Dict]:
         datos['items'] = items
         result = self._post("/cotizaciones", datos)
-        return result['id'] if result else None
+        return result if result else None
     
     def get_cotizacion(self, cotizacion_id: int) -> Optional[Dict]:
-        cotizaciones = self.get_all_cotizaciones()
-        for cot in cotizaciones:
-            if cot['id'] == cotizacion_id:
-                return cot
-        return None
+        """Obtiene una cotización específica por su ID."""
+        return self._get(f"/cotizaciones/{cotizacion_id}")
+    
+    def buscar_cotizaciones(self, folio: str) -> List[Dict]:
+        """Busca cotizaciones por folio."""
+        return self._get(f"/cotizaciones/buscar", params={"folio": folio}) or []
+
+    def actualizar_cotizacion(self, cotizacion_id: int, cotizacion_data: Dict, items: List[Dict], nota_folio: Optional[str] = None) -> Optional[Dict]:
+        """Actualiza una cotización existente."""
+        datos_completos = cotizacion_data.copy()
+        datos_completos['items'] = items
+        
+        if nota_folio:
+            datos_completos['nota_folio'] = nota_folio
+        
+        # La fecha de vigencia ya viene como string "dd/MM/yyyy" desde cotizaciones_windows
+        return self._put(f"/cotizaciones/{cotizacion_id}", datos_completos)
+    
+    def actualizar_cotizacion(self, cotizacion_id: int, nota_data: Dict, items: List[Dict], nota_folio: Optional[str] = None) -> Optional[Dict]:
+        """Actualiza una cotización existente."""
+        datos_completos = nota_data.copy()
+        datos_completos['items'] = items
+        if nota_folio:
+            datos_completos['nota_folio'] = nota_folio
+        
+        # No tiene sentido enviar la fecha de creación en una actualización
+        datos_completos.pop('fecha', None) 
+        
+        return self._put(f"/cotizaciones/{cotizacion_id}", datos_completos)
+    
+    def cancelar_cotizacion(self, cotizacion_id: int) -> Optional[Dict]:
+        """Marca una cotización como 'Cancelada'."""
+        # Usamos _post a la nueva ruta. No requiere enviar datos (data={}).
+        return self._post(f"/cotizaciones/{cotizacion_id}/cancelar", data={})
     
     # ==================== NOTAS DE VENTA ====================
     

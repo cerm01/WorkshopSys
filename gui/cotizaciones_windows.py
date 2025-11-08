@@ -678,10 +678,20 @@ class CotizacionesWindow(QDialog):
             return
         
         try:
+            # Volvemos a consultar la cotización por si cambió de estado
             cotizacion_reciente = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
-            if cotizacion_reciente.get('estado') == 'Aceptada' or cotizacion_reciente.get('nota_folio'):
+            estado = cotizacion_reciente.get('estado')
+            
+            # --- INICIO DE MODIFICACIÓN ---
+            if estado == 'Aceptada' or cotizacion_reciente.get('nota_folio'):
                 self.mostrar_advertencia("No se puede editar una cotización que ya fue aceptada y/o convertida a nota.")
                 return
+            
+            if estado == 'Cancelada':
+                self.mostrar_advertencia("No se puede editar una cotización que está cancelada.")
+                return
+            # --- FIN DE MODIFICACIÓN ---
+                
         except Exception as e:
             self.mostrar_error(f"Error al verificar estado de cotización: {e}")
             return
@@ -690,8 +700,7 @@ class CotizacionesWindow(QDialog):
         self.controlar_estado_campos(True)
 
         if hasattr(self, 'botones') and len(self.botones) > 1:
-            self.botones[1].setText("Actualizar") 
-
+            self.botones[1].setText("Actualizar")
     def cancelar_cotizacion(self):
         """Cancelar cotización en BD y limpiar formulario"""
         if not self.cotizacion_actual_id:
@@ -734,25 +743,40 @@ class CotizacionesWindow(QDialog):
         else:
             self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
 
-        self.botones[0].setEnabled(True) 
-        self.botones[1].setEnabled(habilitar) 
-        self.botones[2].setEnabled(True) 
-        self.botones[3].setEnabled(True) 
-        self.botones[4].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) 
-        self.botones[5].setEnabled(True) 
-        self.botones[6].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) 
-        self.botones[7].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) 
+        # --- LÓGICA DE BOTONES (MODIFICADA) ---
+        self.botones[0].setEnabled(True)  # Nuevo
+        self.botones[1].setEnabled(habilitar) # Guardar/Actualizar
+        self.botones[2].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) # Cancelar
+        self.botones[3].setEnabled(True)  # Buscar
+        self.botones[4].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) # Editar
+        self.botones[5].setEnabled(True)  # Limpiar
+        self.botones[6].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) # Imprimir
+        self.botones[7].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) # Generar Nota
 
+        # Lógica de deshabilitación post-carga (si no estamos en modo edición)
         if not habilitar and self.cotizacion_actual_id:
             try:
+                # Usamos la cotización ya cargada (si existe) o la buscamos
                 cotizacion = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
-                if cotizacion.get('estado') == 'Aceptada' or cotizacion.get('nota_folio'):
-                    self.botones[7].setEnabled(False)
-                    self.botones[4].setEnabled(False) # Tampoco editar si ya fue aceptada
-                    self.botones[2].setEnabled(False) # Tampoco cancelar si ya fue aceptada
+                estado = cotizacion.get('estado')
+                
+                # Si está Aceptada, ya generó nota, O está Cancelada
+                if estado == 'Aceptada' or cotizacion.get('nota_folio') or estado == 'Cancelada':
+                    
+                    self.botones[7].setEnabled(False) # Generar Nota
+                    self.botones[4].setEnabled(False) # Editar
+                    self.botones[2].setEnabled(False) # Cancelar
+                    
                     if cotizacion.get('nota_folio'):
                         self.botones[7].setToolTip(f"Ya se generó la nota: {cotizacion['nota_folio']}")
-            except:
+                    elif estado == 'Cancelada':
+                        self.botones[4].setToolTip("No se puede editar una cotización cancelada")
+                        self.botones[2].setToolTip("La cotización ya está cancelada")
+                    else:
+                        self.botones[7].setToolTip("Esta cotización ya fue aceptada.")
+                        
+            except Exception as e:
+                print(f"Error en control de estados: {e}")
                 pass
 
 
@@ -829,7 +853,7 @@ class CotizacionesWindow(QDialog):
             return
             
         try:
-            fecha_hoy = QDate.currentDate().toPyDate()
+            fecha_hoy = QDate.currentDate().toString('yyyy-MM-dd')
             referencia = self.txt_proyecto.text()
 
             nota_data = {

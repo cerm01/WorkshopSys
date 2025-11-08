@@ -1,7 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import sys
 import os
 import traceback
@@ -185,6 +185,79 @@ async def crear_cotizacion(datos: Dict[str, Any], db: Session = Depends(get_db))
         "data": _cotizacion_to_dict(cotizacion)
     })
     return _cotizacion_to_dict(cotizacion)
+
+@app.get("/cotizaciones/buscar")
+def buscar_cotizaciones_api(folio: str, db: Session = Depends(get_db)):
+    """Busca cotizaciones por folio (usado por la UI)"""
+    cotizaciones = crud.search_cotizaciones_by_folio(db, folio)
+    return [_cotizacion_to_dict(c) for c in cotizaciones]
+
+@app.put("/cotizaciones/{cotizacion_id}")
+async def actualizar_cotizacion_api(cotizacion_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        items = datos.pop('items', [])
+        nota_folio = datos.pop('nota_folio', None) # Extraer el nota_folio
+
+        # Convertir fecha si viene
+        if 'vigencia' in datos and isinstance(datos['vigencia'], str):
+            try:
+                # El cliente GUI la envía como 'dd/MM/yyyy'
+                fecha_obj = datetime.strptime(datos['vigencia'], '%d/%m/%Y').date()
+                datos['vigencia'] = fecha_obj
+            except ValueError as e:
+                print(f"Advertencia: Fecha de vigencia inválida: {e}")
+                datos.pop('vigencia') 
+        
+        cotizacion = crud.update_cotizacion(
+            db=db,
+            cotizacion_id=cotizacion_id,
+            cotizacion_data=datos,
+            items=items,
+            nota_folio=nota_folio # Pasarlo al CRUD
+        )
+        
+        if not cotizacion:
+            raise HTTPException(status_code=404, detail="Cotización no encontrada")
+            
+        await manager.broadcast({
+            "type": "cotizacion_actualizada", 
+            "data": _cotizacion_to_dict(cotizacion)
+        })
+        return _cotizacion_to_dict(cotizacion)
+        
+    except Exception as e:
+        print(f"Error al actualizar cotización API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/cotizaciones/buscar")
+def buscar_cotizaciones_api(folio: Optional[str] = None, cliente_id: Optional[int] = None, db: Session = Depends(get_db)):
+    cotizaciones = crud.search_cotizaciones(db, folio=folio, cliente_id=cliente_id)
+    return [_cotizacion_to_dict(c) for c in cotizaciones]
+
+@app.get("/cotizaciones/{cotizacion_id}")
+def get_cotizacion_por_id(cotizacion_id: int, db: Session = Depends(get_db)):
+    cotizacion = crud.get_cotizacion(db, cotizacion_id)
+    if cotizacion:
+        return _cotizacion_to_dict(cotizacion)
+    raise HTTPException(status_code=404, detail="Cotización no encontrada")
+    
+@app.post("/cotizaciones/{cotizacion_id}/cancelar")
+async def cancelar_cotizacion_api(cotizacion_id: int, db: Session = Depends(get_db)):
+    try:
+        success = crud.cancelar_cotizacion(db, cotizacion_id)
+        if not success:
+             raise HTTPException(status_code=400, detail="No se pudo cancelar la cotización (ya aceptada o cancelada)")
+        
+        cotizacion = crud.get_cotizacion(db, cotizacion_id) 
+        await manager.broadcast({
+            "type": "cotizacion_actualizada", # Usamos señal genérica
+            "data": _cotizacion_to_dict(cotizacion)
+        })
+        return _cotizacion_to_dict(cotizacion)
+    
+    except Exception as e:
+        print(f"Error al cancelar cotización API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== NOTAS DE VENTA (CON DEBUG) ====================
 @app.post("/notas")
@@ -428,10 +501,23 @@ def _orden_to_dict(o):
         'vehiculo_marca': o.vehiculo_marca or '',
         'vehiculo_modelo': o.vehiculo_modelo or '',
         'vehiculo_ano': o.vehiculo_ano or '', 
+        'vehiculo_placas': o.vehiculo_placas or '', # Añadido
+        'vehiculo_vin': o.vehiculo_vin or '', # Añadido
+        'vehiculo_color': o.vehiculo_color or '', # Añadido
+        'vehiculo_kilometraje': o.vehiculo_kilometraje or '', # Añadido
         'estado': o.estado,
         'fecha_recepcion': o.fecha_recepcion.isoformat() if o.fecha_recepcion else '',
+        'fecha_promesa': o.fecha_promesa.isoformat() if o.fecha_promesa else '', # Añadido
+        'fecha_entrega': o.fecha_entrega.isoformat() if o.fecha_entrega else '', # Añadido
         'mecanico_asignado': o.mecanico_asignado or '',
-        'nota_folio': o.nota_folio or ''
+        'observaciones': o.observaciones or '', # Añadido
+        'nota_folio': o.nota_folio or '',
+        # --- ESTO ES LO QUE FALTABA ---
+        'items': [{
+            'id': i.id,
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion
+        } for i in o.items] if hasattr(o, 'items') else []
     }
 
 def _cotizacion_to_dict(c):
@@ -441,10 +527,24 @@ def _cotizacion_to_dict(c):
         'id': c.id,
         'folio': c.folio,
         'cliente_id': c.cliente_id,
+        'cliente_nombre': c.cliente.nombre if c.cliente else 'N/A',
         'estado': c.estado,
+        'vigencia': c.vigencia or '30 días',
         'subtotal': float(c.subtotal or 0),
+        'impuestos': float(c.impuestos or 0), 
         'total': float(c.total or 0),
-        'fecha': c.fecha_cotizacion.isoformat() if c.fecha_cotizacion else ''
+        'observaciones': c.observaciones or '',
+        'fecha': c.created_at.isoformat() if c.created_at else '', 
+
+        'nota_folio': c.nota_folio or '',
+        'items': [{
+            'id': i.id,
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion,
+            'precio_unitario': float(i.precio_unitario or 0),
+            'importe': float(i.importe or 0),
+            'impuesto': float(i.impuesto or 0)
+        } for i in c.items] if hasattr(c, 'items') else []
     }
 
 def _nota_to_dict(n):

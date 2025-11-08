@@ -903,7 +903,7 @@ class OrdenesWindow(QDialog):
         
         nota_data = {
             'cliente_id': cliente_id,
-            'fecha': datetime.now().date(),
+            'fecha': datetime.now().strftime('%Y-%m-%d'),
             'observaciones': observaciones_str,
             'metodo_pago': None 
         }
