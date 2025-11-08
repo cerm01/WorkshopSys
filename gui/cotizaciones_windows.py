@@ -1488,14 +1488,21 @@ class CotizacionesWindow(QDialog):
         self.fila_en_edicion = -1
 
     def abrir_ventana_cotizaciones(self):
-        """Abre ventana con todas las cotizaciones"""
-        if BuscarCotizacionesDialog is None:
-            self.mostrar_error("Error Crítico: No se pudo cargar el módulo de búsqueda (BuscarCotizacionesDialog).")
-            return
-            
-        dialog = BuscarCotizacionesDialog(self)
-        if dialog.exec_() == QDialog.Accepted and dialog.cotizacion_seleccionada:
-            self.cargar_cotizacion_en_formulario(dialog.cotizacion_seleccionada)
+            """Abre ventana con todas las cotizaciones"""
+            if BuscarCotizacionesDialog is None:
+                self.mostrar_error("Error Crítico: No se pudo cargar el módulo de búsqueda (BuscarCotizacionesDialog).")
+                return
+                
+            dialog = BuscarCotizacionesDialog(self)
+            if dialog.exec_() == QDialog.Accepted and dialog.cotizacion_seleccionada:
+                self.cargar_cotizacion_en_formulario(dialog.cotizacion_seleccionada)
+                estado = dialog.cotizacion_seleccionada.get('estado')
+                if estado == 'Cancelada':
+                    self.mostrar_advertencia(
+                                    "Esta cotización está cancelada y no puede ser editada o convertida a nota.")
+                elif estado == 'Aceptada' or dialog.cotizacion_seleccionada.get('nota_folio'):
+                    self.mostrar_advertencia(
+                                    "Esta cotización ya fue aceptada y/o convertida a nota. Solo puede ser consultada.")
     
     def closeEvent(self, event):
         """Evento que se dispara al cerrar la ventana  """
