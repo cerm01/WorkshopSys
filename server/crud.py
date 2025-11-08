@@ -74,12 +74,15 @@ def delete_cliente(db: Session, cliente_id: int, soft_delete: bool = True) -> bo
 
 
 def search_clientes(db: Session, busqueda: str) -> List[Cliente]:
-    """Buscar clientes por nombre, email o teléfono"""
+    """Buscar clientes por nombre, email o teléfono (solo activos)"""
     return db.query(Cliente).filter(
-        or_(
-            Cliente.nombre.ilike(f"%{busqueda}%"),
-            Cliente.email.ilike(f"%{busqueda}%"),
-            Cliente.telefono.ilike(f"%{busqueda}%")
+        and_(
+            Cliente.activo == True,
+            or_(
+                Cliente.nombre.ilike(f"%{busqueda}%"),
+                Cliente.email.ilike(f"%{busqueda}%"),
+                Cliente.telefono.ilike(f"%{busqueda}%")
+            )
         )
     ).all()
 

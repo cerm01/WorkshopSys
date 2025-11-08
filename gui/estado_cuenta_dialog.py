@@ -227,7 +227,7 @@ class EstadoCuentaClienteDialog(QDialog):
                     continue
                 
                 # 2. Agregar la Nota (Cargo)
-                nota_fecha = datetime.strptime(nota['fecha'], "%d/%m/%Y").date()
+                nota_fecha = datetime.fromisoformat(nota['fecha']).date()
                 if fecha_ini <= nota_fecha <= fecha_fin:
                     transacciones.append({
                         'fecha': nota_fecha,
@@ -240,7 +240,7 @@ class EstadoCuentaClienteDialog(QDialog):
                 
                 # 3. Agregar los Pagos (Abonos)
                 for pago in nota.get('pagos', []):
-                    pago_fecha = datetime.strptime(pago['fecha_pago'], "%d/%m/%Y %H:%M").date()
+                    pago_fecha = datetime.fromisoformat(pago['fecha_pago']).date()
                     if fecha_ini <= pago_fecha <= fecha_fin:
                         transacciones.append({
                             'fecha': pago_fecha,

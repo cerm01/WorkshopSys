@@ -253,12 +253,14 @@ class ClientesWindow(QDialog):
         layout_tabla.addWidget(lbl_titulo)
         
         self.tabla_model = QStandardItemModel()
+        self.tabla_model.setSortRole(Qt.UserRole)
         self.tabla_model.setHorizontalHeaderLabels([
             "ID", "Nombre", "Tipo", "Email", "Teléfono"
         ])
         
         self.tabla_clientes = QTableView()
         self.tabla_clientes.setModel(self.tabla_model)
+        self.tabla_clientes.setSortingEnabled(True)
         self.tabla_clientes.setSelectionBehavior(QTableView.SelectRows)
         self.tabla_clientes.setSelectionMode(QTableView.SingleSelection)
         self.tabla_clientes.setEditTriggers(QTableView.NoEditTriggers)
@@ -673,13 +675,46 @@ class ClientesWindow(QDialog):
         self.tabla_model.setRowCount(0)
         
         for cliente in clientes:
+            # Creamos los items manualmente
+            item_id = QStandardItem()
+            item_nombre = QStandardItem()
+            item_tipo = QStandardItem()
+            item_email = QStandardItem()
+            item_telefono = QStandardItem()
+            
+            # ID (Col 0) - Se ordena por el número (int)
+            item_id.setData(str(cliente['id']), Qt.DisplayRole)
+            item_id.setData(cliente['id'], Qt.UserRole)
+            item_id.setTextAlignment(Qt.AlignCenter)
+
+            # Nombre (Col 1) - Se ordena por texto
+            item_nombre.setData(cliente['nombre'], Qt.DisplayRole)
+            item_nombre.setData(cliente['nombre'], Qt.UserRole)
+            item_nombre.setTextAlignment(Qt.AlignCenter)
+
+            # Tipo (Col 2) - Se ordena por texto
+            item_tipo.setData(cliente['tipo'], Qt.DisplayRole)
+            item_tipo.setData(cliente['tipo'], Qt.UserRole)
+            item_tipo.setTextAlignment(Qt.AlignCenter)
+
+            # Email (Col 3) - Se ordena por texto
+            item_email.setData(cliente['email'], Qt.DisplayRole)
+            item_email.setData(cliente['email'], Qt.UserRole)
+            item_email.setTextAlignment(Qt.AlignCenter)
+
+            # Teléfono (Col 4) - Se ordena por texto
+            item_telefono.setData(cliente['telefono'], Qt.DisplayRole)
+            item_telefono.setData(cliente['telefono'], Qt.UserRole)
+            item_telefono.setTextAlignment(Qt.AlignCenter)
+
             fila = [
-                self._crear_item(str(cliente['id']), Qt.AlignCenter),
-                self._crear_item(cliente['nombre'], Qt.AlignCenter),
-                self._crear_item(cliente['tipo'], Qt.AlignCenter),
-                self._crear_item(cliente['email'], Qt.AlignCenter),
-                self._crear_item(cliente['telefono'], Qt.AlignCenter)
+                item_id,
+                item_nombre,
+                item_tipo,
+                item_email,
+                item_telefono
             ]
+            
             self.tabla_model.appendRow(fila)
 
     def _mostrar_mensaje(self, icono, titulo, mensaje):
