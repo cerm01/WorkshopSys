@@ -123,6 +123,28 @@ async def crear_proveedor(datos: Dict[str, Any], db: Session = Depends(get_db)):
     })
     return _proveedor_to_dict(proveedor)
 
+@app.put("/proveedores/{proveedor_id}")
+async def actualizar_proveedor_api(proveedor_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
+    proveedor = crud.update_proveedor(db, proveedor_id, datos)
+    if proveedor:
+        await manager.broadcast({
+            "type": "proveedor_actualizado",
+            "data": _proveedor_to_dict(proveedor)
+        })
+        return _proveedor_to_dict(proveedor)
+    raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+
+@app.delete("/proveedores/{proveedor_id}")
+async def eliminar_proveedor_api(proveedor_id: int, db: Session = Depends(get_db)):
+    success = crud.delete_proveedor(db, proveedor_id)
+    if success:
+        await manager.broadcast({
+            "type": "proveedor_eliminado",
+            "data": {"id": proveedor_id}
+        })
+        return {"success": True}
+    raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+
 # ==================== PRODUCTOS ====================
 @app.get("/productos")
 def get_productos(db: Session = Depends(get_db)):
@@ -546,6 +568,7 @@ def _proveedor_to_dict(p):
     return {
         'id': p.id,
         'nombre': p.nombre,
+        'tipo': p.tipo,
         'email': p.email or '',
         'telefono': p.telefono or '',
         'rfc': p.rfc or '',
