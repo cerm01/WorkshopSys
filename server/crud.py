@@ -305,6 +305,15 @@ def get_orden_by_folio(db: Session, folio: str) -> Optional[Orden]:
     """Obtener orden por folio"""
     return db.query(Orden).filter(Orden.folio == folio).first()
 
+def search_ordenes_by_folio(db: Session, folio: str) -> List[Orden]:
+    """Buscar órdenes por folio (búsqueda parcial)"""
+    return db.query(Orden).options(
+        joinedload(Orden.cliente),
+        joinedload(Orden.items)
+    ).filter(
+        Orden.folio.ilike(f"%{folio}%")
+    ).order_by(Orden.created_at.desc()).all()
+
 
 def create_orden(db: Session, orden_data: Dict[str, Any], items: List[Dict[str, Any]]) -> Orden:
     """Crear nueva orden de trabajo con items"""
@@ -329,15 +338,37 @@ def create_orden(db: Session, orden_data: Dict[str, Any], items: List[Dict[str, 
     return nueva_orden
 
 
-def update_orden(db: Session, orden_id: int, orden_data: Dict[str, Any]) -> Optional[Orden]:
-    """Actualizar orden existente"""
+def update_orden(
+    db: Session, 
+    orden_id: int, 
+    orden_data: Dict[str, Any], 
+    items: Optional[List[Dict[str, Any]]] = None
+) -> Optional[Orden]:
     orden = get_orden(db, orden_id)
-    if orden:
-        for key, value in orden_data.items():
+    if not orden:
+        return None
+
+    if orden.estado == 'Cancelada':
+        raise ValueError("No se puede modificar una orden cancelada.")
+
+    if orden.nota_folio and 'nota_folio' not in orden_data:
+        raise ValueError(f"Orden ligada a la nota {orden.nota_folio}, no se puede modificar.")
+
+    for key, value in orden_data.items():
+        if hasattr(orden, key):
             setattr(orden, key, value)
-        orden.updated_at = datetime.now()
-        db.commit()
-        db.refresh(orden)
+    
+    if items is not None:
+        db.query(OrdenItem).filter(OrdenItem.orden_id == orden_id).delete()
+        
+        for item_data in items:
+            item = OrdenItem(orden_id=orden.id, **item_data)
+            db.add(item)
+    
+    orden.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(orden)
     return orden
 
 

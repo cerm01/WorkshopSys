@@ -116,10 +116,14 @@ class TallerAPIClient:
         params = {"estado": estado} if estado else {}
         return self._get("/ordenes", params=params) or []
     
-    def crear_orden(self, datos: Dict, items: List[Dict]) -> Optional[int]:
-        datos['items'] = items
-        result = self._post("/ordenes", datos)
-        return result['id'] if result else None
+    def buscar_ordenes(self, **filtros) -> List[Dict]:
+        return self._get("/ordenes/buscar", params=filtros) or []
+    
+    def crear_orden(self, datos: Dict, items: List[Dict]) -> Optional[Dict]:
+        datos_completos = datos.copy()
+        datos_completos['items'] = items
+        result = self._post("/ordenes", datos_completos)
+        return result if result else None
     
     def get_orden(self, orden_id: int) -> Optional[Dict]:
         ordenes = self.get_all_ordenes()
@@ -128,12 +132,18 @@ class TallerAPIClient:
                 return orden
         return None
     
-    def actualizar_orden(self, orden_id: int, datos: Dict) -> bool:
-        result = self._put(f"/ordenes/{orden_id}", datos)
-        return result is not None
+    def actualizar_orden(self, orden_id: int, datos: Dict, items: Optional[List[Dict]] = None) -> Optional[Dict]:
+        datos_completos = datos.copy()
+        if items is not None:
+            datos_completos['items'] = items
+            
+        return self._put(f"/ordenes/{orden_id}", datos_completos)
     
-    def cancelar_orden(self, orden_id: int) -> bool:
-        return self.actualizar_orden(orden_id, {"estado": "Cancelada"})
+    def actualizar_orden_campos_simples(self, orden_id: int, datos: Dict) -> Optional[Dict]:
+        return self.actualizar_orden(orden_id, datos, items=None)
+    
+    def cancelar_orden(self, orden_id: int) -> Optional[Dict]:
+        return self._post(f"/ordenes/{orden_id}/cancelar", data={})
     
     # ==================== COTIZACIONES ====================
     

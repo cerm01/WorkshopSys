@@ -163,12 +163,75 @@ def get_ordenes(estado: str = None, db: Session = Depends(get_db)):
 @app.post("/ordenes")
 async def crear_orden(datos: Dict[str, Any], db: Session = Depends(get_db)):
     items = datos.pop('items', [])
+
+    if 'fecha_recepcion' in datos and isinstance(datos['fecha_recepcion'], str):
+        try:
+            datos['fecha_recepcion'] = datetime.fromisoformat(datos['fecha_recepcion'])
+        except ValueError:
+            datos['fecha_recepcion'] = datetime.now()
+    elif 'fecha_recepcion' not in datos:
+         datos['fecha_recepcion'] = datetime.now()
+
     orden = crud.create_orden(db, datos, items)
     await manager.broadcast({
         "type": "orden_creada",
         "data": _orden_to_dict(orden)
     })
     return _orden_to_dict(orden)
+
+@app.get("/ordenes/buscar")
+def buscar_ordenes_api(folio: str, db: Session = Depends(get_db)):
+    """Busca órdenes por folio (usado por la UI)"""
+    ordenes = crud.search_ordenes_by_folio(db, folio)
+    return [_orden_to_dict(o) for o in ordenes]
+
+@app.put("/ordenes/{orden_id}")
+async def actualizar_orden_api(orden_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        items = datos.pop('items', None) 
+
+        if 'fecha_recepcion' in datos and isinstance(datos['fecha_recepcion'], str):
+            try:
+                datos['fecha_recepcion'] = datetime.fromisoformat(datos['fecha_recepcion'])
+            except ValueError:
+                datos.pop('fecha_recepcion')
+        
+        orden = crud.update_orden(
+            db=db,
+            orden_id=orden_id,
+            orden_data=datos,
+            items=items
+        )
+        
+        if not orden:
+            raise HTTPException(status_code=404, detail="Orden no encontrada")
+            
+        await manager.broadcast({
+            "type": "orden_actualizada", 
+            "data": _orden_to_dict(orden)
+        })
+        return _orden_to_dict(orden)
+        
+    except Exception as e:
+        print(f"Error al actualizar orden API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/ordenes/{orden_id}/cancelar")
+async def cancelar_orden_api(orden_id: int, db: Session = Depends(get_db)):
+    try:
+        orden = crud.cambiar_estado_orden(db, orden_id, "Cancelada")
+        if not orden:
+             raise HTTPException(status_code=400, detail="No se pudo cancelar la orden")
+        
+        await manager.broadcast({
+            "type": "orden_actualizada",
+            "data": _orden_to_dict(orden)
+        })
+        return _orden_to_dict(orden)
+    
+    except Exception as e:
+        print(f"Error al cancelar orden API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== COTIZACIONES ====================
 @app.get("/cotizaciones")

@@ -447,24 +447,27 @@ class OrdenesWindow(QDialog):
             'vehiculo_ano': self.txt_ano.text(),
             'vehiculo_placas': self.txt_placa.text(),
             'estado': self.cmb_estado.currentText(),
-            'fecha_recepcion': datetime.now()
+            'fecha_recepcion': self.date_fecha.date().toPyDate().isoformat()
         }
         
         try:
             if self.orden_actual_id:
                 orden = db_helper.actualizar_orden(self.orden_actual_id, orden_data, items_a_guardar)
-                if orden:
-                    self.mostrar_exito("Orden actualizada")
-                    self.orden_actual_obj = orden
+                if not orden:
+                    raise Exception("La API no devolvió la orden actualizada.")
+
+                self.mostrar_exito("Orden actualizada")
+                self.orden_actual_obj = orden
             else:
                 orden = db_helper.crear_orden(orden_data, items_a_guardar)
-                if orden:
-                    self.mostrar_exito("Orden guardada")
-                    self.orden_actual_id = orden['id']
-                    self.orden_actual_obj = orden
+                if not orden:
+                    raise Exception("La API no devolvió la orden creada.")
+
+                self.mostrar_exito("Orden guardada")
+                self.orden_actual_id = orden['id']
+                self.orden_actual_obj = orden
             
-            if orden:
-                self.nueva_orden() 
+            self.nueva_orden() 
             
         except Exception as e:
             self.mostrar_error(f"Error al guardar: {e}")
@@ -537,6 +540,10 @@ class OrdenesWindow(QDialog):
         if self.orden_actual_obj and self.orden_actual_obj.get('nota_folio'):
             self.mostrar_advertencia(f"Esta orden ya generó la nota {self.orden_actual_obj['nota_folio']} y no puede ser modificada.")
             return
+
+        if self.orden_actual_obj and self.orden_actual_obj.get('estado') == 'Cancelada':
+            self.mostrar_advertencia("No se puede editar una orden que ya está cancelada.")
+            return
         
         self.modo_edicion = True
         self.controlar_estado_campos(True)
@@ -549,6 +556,10 @@ class OrdenesWindow(QDialog):
             self.mostrar_advertencia("No hay orden cargada.")
             return
         
+        if self.orden_actual_obj and self.orden_actual_obj.get('estado') == 'Cancelada':
+            self.mostrar_advertencia("Esta orden ya se encuentra cancelada.")
+            return
+        
         respuesta = QMessageBox.question(
             self, "Confirmar", 
             "¿Cancelar esta orden?",
@@ -557,13 +568,15 @@ class OrdenesWindow(QDialog):
         
         if respuesta == QMessageBox.Yes:
             try:
-                if db_helper.cancelar_orden(self.orden_actual_id):
+                orden_cancelada = db_helper.cancelar_orden(self.orden_actual_id)
+                if orden_cancelada:
                     self.mostrar_exito("Orden cancelada.")
-                    self.cmb_estado.setCurrentText("Cancelada")
+                    self.nueva_orden()
                 else:
-                    self.mostrar_error("No se pudo cancelar.")
+                    self.mostrar_error("No se pudo cancelar la orden.")
+
             except Exception as e:
-                self.mostrar_error(f"Error: {e}")
+                self.mostrar_error(f"Error al cancelar: {e}")
 
     def controlar_estado_campos(self, habilitar):
         self.txt_cliente.setReadOnly(not habilitar)
@@ -582,18 +595,33 @@ class OrdenesWindow(QDialog):
         self.btn_guardar.setEnabled(habilitar)
         
         orden_cargada = self.orden_actual_obj is not None
-        nota_generada = orden_cargada and bool(self.orden_actual_obj.get('nota_folio'))
+        nota_generada = False
+        esta_cancelada = False
         
-        self.btn_editar.setEnabled(not habilitar and orden_cargada and not nota_generada)
-        self.btn_cancelar.setEnabled(not habilitar and orden_cargada and not nota_generada)
-        
-        self.btn_mostrar_ordenes.setEnabled(True)
+        if orden_cargada:
+            nota_generada = bool(self.orden_actual_obj.get('nota_folio'))
+            esta_cancelada = (self.orden_actual_obj.get('estado') == 'Cancelada')
 
-        self.btn_generar_nota.setEnabled(not habilitar and orden_cargada and not nota_generada)
+        puede_modificar = orden_cargada and not habilitar and not nota_generada and not esta_cancelada
+
+        self.btn_editar.setEnabled(puede_modificar)
+        self.btn_cancelar.setEnabled(puede_modificar)
+        self.btn_generar_nota.setEnabled(puede_modificar)
+        self.btn_mostrar_ordenes.setEnabled(True)
         
+        tooltip = ""
         if nota_generada:
-            self.btn_generar_nota.setToolTip(f"Nota ya generada: {self.orden_actual_obj.get('nota_folio')}")
+            tooltip = f"Nota ya generada: {self.orden_actual_obj.get('nota_folio')}"
+        elif esta_cancelada:
+            tooltip = "La orden está cancelada y no puede ser modificada"
+        
+        if nota_generada or esta_cancelada:
+            self.btn_editar.setToolTip(tooltip)
+            self.btn_cancelar.setToolTip(tooltip)
+            self.btn_generar_nota.setToolTip(tooltip)
         else:
+            self.btn_editar.setToolTip("Habilitar edición para esta orden")
+            self.btn_cancelar.setToolTip("Cancelar esta orden")
             self.btn_generar_nota.setToolTip("Generar Nota de Venta a partir de esta orden")
 
     # ==================================================
@@ -749,7 +777,6 @@ class OrdenesWindow(QDialog):
                 self.tabla_items.setSpan(fila, 0, 1, 2)
             else:
                 self.tabla_items.setSpan(fila, 0, 1, 1)
-                self.tabla_items.setSpan(fila, 1, 1, 1)
 
     def eliminar_fila(self, fila):
         msg_box = QMessageBox(QMessageBox.Question, "Confirmar eliminación", 
