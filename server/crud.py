@@ -788,6 +788,105 @@ def get_nota_proveedor(db: Session, nota_id: int) -> Optional[NotaProveedor]:
     """Obtener nota de proveedor por ID"""
     return db.query(NotaProveedor).filter(NotaProveedor.id == nota_id).first()
 
+def search_notas_proveedor_by_folio(db: Session, folio: str) -> List[NotaProveedor]:
+    """Buscar notas de proveedor por folio (búsqueda parcial)"""
+    return db.query(NotaProveedor).options(
+        joinedload(NotaProveedor.proveedor)
+    ).filter(
+        NotaProveedor.folio.ilike(f"%{folio}%")
+    ).order_by(NotaProveedor.fecha.desc()).all()
+
+def create_nota_proveedor(db: Session, nota_data: Dict[str, Any], items: List[Dict[str, Any]]) -> NotaProveedor:
+    """Crear nueva nota de proveedor con items"""
+    # Generar folio único si no existe
+    if 'folio' not in nota_data:
+        ultimo_folio = db.query(NotaProveedor).order_by(NotaProveedor.id.desc()).first()
+        numero = 1 if not ultimo_folio else ultimo_folio.id + 1
+        nota_data['folio'] = f"NP-{datetime.now().year}-{numero:05d}"
+    
+    nota_data['estado'] = 'Registrado'
+    nota_data['total_pagado'] = 0.0
+    
+    # Crear nota
+    nueva_nota = NotaProveedor(**nota_data)
+    db.add(nueva_nota)
+    db.flush()
+    
+    # Agregar items y calcular totales
+    subtotal = 0
+    impuestos_total = 0
+    
+    for item_data in items:
+        item = NotaProveedorItem(nota_id=nueva_nota.id, **item_data)
+        db.add(item)
+        subtotal += item.importe
+        impuestos_total += (item.importe * item.impuesto / 100)
+    
+    nueva_nota.subtotal = subtotal
+    nueva_nota.impuestos = impuestos_total
+    nueva_nota.total = subtotal + impuestos_total
+    nueva_nota.saldo = nueva_nota.total
+    
+    db.commit()
+    db.refresh(nueva_nota)
+    return nueva_nota
+
+def update_nota_proveedor(
+    db: Session, 
+    nota_id: int, 
+    nota_data: Dict[str, Any], 
+    items: List[Dict[str, Any]]
+) -> Optional[NotaProveedor]:
+    """
+    Actualizar una nota de proveedor existente.
+    """
+    nota = get_nota_proveedor(db, nota_id)
+    if not nota:
+        return None
+    
+    if nota.estado == 'Cancelada' or nota.estado == 'Pagado':
+        raise ValueError("No se puede modificar una nota Pagada o Cancelada.")
+    
+    # 1. Actualizar datos de la nota
+    for key, value in nota_data.items():
+        if hasattr(nota, key):
+            setattr(nota, key, value)
+    
+    # 2. Borrar items viejos
+    db.query(NotaProveedorItem).filter(NotaProveedorItem.nota_id == nota_id).delete()
+    
+    # 3. Agregar items nuevos y recalcular totales
+    subtotal = 0
+    impuestos_total = 0
+    
+    for item_data in items:
+        item = NotaProveedorItem(nota_id=nota.id, **item_data)
+        db.add(item)
+        subtotal += item.importe
+        impuestos_total += (item.importe * item.impuesto / 100)
+    
+    nota.subtotal = subtotal
+    nota.impuestos = impuestos_total
+    nota.total = subtotal + impuestos_total
+    
+    # 4. Recalcular saldo
+    nota.saldo = nota.total - nota.total_pagado
+    
+    # 5. Re-evaluar estado
+    if nota.saldo <= 0.01:
+        nota.saldo = 0.0
+        nota.estado = 'Pagado'
+    elif nota.total_pagado > 0:
+        nota.estado = 'Pagado Parcialmente'
+    else:
+        nota.estado = 'Registrado'
+        
+    nota.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(nota)
+    return nota
+
 
 def create_nota_proveedor(db: Session, nota_data: Dict[str, Any], items: List[Dict[str, Any]]) -> NotaProveedor:
     """Crear nueva nota de proveedor con items"""

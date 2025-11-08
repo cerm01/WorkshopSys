@@ -261,11 +261,32 @@ class TallerAPIClient:
     
     # ==================== NOTAS DE PROVEEDOR ====================
 
+    def crear_nota_proveedor(self, datos: Dict, items: List[Dict]) -> Optional[Dict]:
+        """Crea una nueva nota de proveedor."""
+        datos_completos = datos.copy()
+        datos_completos['items'] = items
+        return self._post("/notas_proveedor", datos_completos)
+    
+    def actualizar_nota_proveedor(self, nota_id: int, datos: Dict, items: List[Dict]) -> Optional[Dict]:
+        """Actualiza una nota de proveedor existente."""
+        datos_completos = datos.copy()
+        datos_completos['items'] = items
+        return self._put(f"/notas_proveedor/{nota_id}", datos_completos)
+
     def get_all_notas_proveedor(self) -> List[Dict]:
         return self._get("/notas_proveedor") or []
 
     def get_nota_proveedor(self, nota_id: int) -> Optional[Dict]:
         return self._get(f"/notas_proveedor/{nota_id}")
+    
+    def buscar_notas_proveedor(self, folio: Optional[str] = None, proveedor_id: Optional[int] = None) -> List[Dict]:
+        """Busca notas de proveedor usando filtros (llamada al servidor)."""
+        params = {}
+        if folio:
+            params['folio'] = folio
+        if proveedor_id:
+            params['proveedor_id'] = proveedor_id
+        return self._get("/notas_proveedor/buscar", params=params) or []
 
     def registrar_pago_proveedor(self, nota_id: int, monto: float, fecha_pago: Any, metodo_pago: str, memo: str) -> Optional[Dict]:
         """Registrar un pago a proveedor. fecha_pago debe ser un objeto date."""
@@ -280,6 +301,11 @@ class TallerAPIClient:
     def eliminar_pago_proveedor(self, pago_id: int) -> Optional[Dict]:
         """Elimina un pago a proveedor y devuelve la nota actualizada"""
         return self._delete(f"/pagos_proveedor/{pago_id}")
+    
+    def cancelar_nota_proveedor(self, nota_id: int) -> Optional[Dict]:
+        """Marca una nota de proveedor como 'Cancelada'."""
+        # Usamos _post a la nueva ruta. No requiere enviar datos (data={}).
+        return self._post(f"/notas_proveedor/{nota_id}/cancelar", data={})
     
     # ==================== INVENTARIO ====================
     

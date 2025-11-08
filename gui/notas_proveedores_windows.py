@@ -542,12 +542,8 @@ class NotasProveedoresWindow(QDialog):
                 mensaje = "Nota guardada correctamente"
 
             if nota:
-                self.txt_folio.setText(nota['folio'])
-                self.nota_actual_id = nota['id']
-                self.txt_estado.setText(nota.get('estado', 'Registrado'))
-                self.modo_edicion = False
-                self.controlar_estado_campos(False)
                 self.mostrar_exito(f"{mensaje}: {nota['folio']}")
+                self.nueva_nota()
             else:
                 self.mostrar_error("No se pudo guardar la nota.")
             
@@ -619,7 +615,10 @@ class NotasProveedoresWindow(QDialog):
         self.txt_folio.setText(nota['folio'])
         self.date_fecha.setDate(QDate.fromString(nota['fecha'], "dd/MM/yyyy"))
         self.txt_referencia.setText(nota['observaciones'])
-        self.txt_estado.setText(nota.get('estado', 'Registrado'))
+        
+        ### CAMBIO: Capturar el estado para la alerta ###
+        estado_nota = nota.get('estado', 'Registrado')
+        self.txt_estado.setText(estado_nota)
         
         self.txt_proveedor.clear()
         for nombre, id_proveedor in self.proveedores_dict.items():
@@ -660,6 +659,11 @@ class NotasProveedoresWindow(QDialog):
 
         self.controlar_estado_campos(False)
 
+        if estado_nota == 'Cancelada':
+            self.mostrar_advertencia(
+                "Esta nota está cancelada y no puede ser editada."
+            )
+
     def cancelar_nota(self):
         if not self.nota_actual_id:
             self.mostrar_advertencia("No hay una nota para cancelar")
@@ -675,17 +679,18 @@ class NotasProveedoresWindow(QDialog):
         
         if respuesta == QMessageBox.Yes:
             try:
-                success = db_helper.cancelar_nota_proveedor(self.nota_actual_id)
+                # Esta llamada ahora devuelve la nota cancelada (dict) o None si falla
+                nota_cancelada = db_helper.cancelar_nota_proveedor(self.nota_actual_id)
 
-                if success:
-                    self.mostrar_exito("Nota cancelada")
-                    nota_actualizada = db_helper.get_nota_proveedor(self.nota_actual_id)
-                    if nota_actualizada:
-                        self.cargar_nota_en_formulario(nota_actualizada)
-                    else:
-                        self.nueva_nota() 
+                if nota_cancelada:
+                    folio = nota_cancelada.get('folio', self.txt_folio.text())
+                    self.mostrar_exito(f"Nota {folio} cancelada correctamente.")
+                    
+                    # Cumplimos con "limpiar todo"
+                    self.nueva_nota()
                 else:
-                    self.mostrar_error("No se pudo cancelar (puede estar ya cancelada o pagada)")
+                    # El API Client devuelve None si la API da un error (ej. 400)
+                    self.mostrar_error("No se pudo cancelar")
             except Exception as e:
                 self.mostrar_error(f"Error al cancelar: {e}")
 
@@ -981,8 +986,6 @@ class NotasProveedoresWindow(QDialog):
                 self.tabla_items.setSpan(fila, 0, 1, 5)
             else:
                 self.tabla_items.setSpan(fila, 0, 1, 1)
-                for col in range(1, 5):
-                    self.tabla_items.setSpan(fila, col, 1, 1)
     
     def eliminar_fila(self, fila):
         respuesta = QMessageBox.question(
@@ -1049,6 +1052,42 @@ class NotasProveedoresWindow(QDialog):
             self.botones[4].setEnabled(self.nota_actual_id is not None and not habilitar) 
             self.botones[5].setEnabled(True) 
             self.botones[6].setEnabled(self.nota_actual_id is not None) 
+            
+            # Limpiar tooltips antiguos
+            self.botones[1].setToolTip("") # Guardar
+            self.botones[2].setToolTip("") # Cancelar
+            self.botones[4].setToolTip("") # Editar
+
+            if self.nota_actual_id is not None and not habilitar:
+                estado = self.txt_estado.text()
+                
+                if estado == 'Cancelada':
+                    # Deshabilitar botones
+                    self.botones[1].setEnabled(False) # Guardar
+                    self.botones[2].setEnabled(False) # Cancelar
+                    self.botones[4].setEnabled(False) # Editar
+                    
+                    # Poner tooltips
+                    tooltip_cancelada = "No se puede modificar una nota cancelada"
+                    self.botones[1].setToolTip("No se puede guardar una nota cancelada")
+                    self.botones[2].setToolTip("La nota ya está cancelada")
+                    self.botones[4].setToolTip(tooltip_cancelada)
+                
+                elif estado == 'Pagado' or estado == 'Pagado Parcialmente':
+                    self.botones[1].setEnabled(False) # Guardar
+                    self.botones[2].setEnabled(False) # Cancelar
+                    self.botones[4].setEnabled(False) # Editar
+                    
+                    # Poner tooltips
+                    tooltip_pagada = "No se puede modificar una nota que ya tiene pagos"
+                    self.botones[1].setToolTip(tooltip_pagada)
+                    self.botones[2].setToolTip(tooltip_pagada)
+                    self.botones[4].setToolTip(tooltip_pagada)
+                
+                else:
+                    # Estado normal (Registrado), tooltips por defecto
+                    self.botones[2].setToolTip("Cancelar esta nota")
+                    self.botones[4].setToolTip("Habilitar edición para esta nota")
 
         if hasattr(self, 'tabla_items'):
             if habilitar:

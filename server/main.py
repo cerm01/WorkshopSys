@@ -684,9 +684,69 @@ def _nota_proveedor_to_dict(nota):
     }
 
 # ==================== NOTAS DE PROVEEDOR ====================
+@app.post("/notas_proveedor")
+async def crear_nota_proveedor_api(datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        items = datos.pop('items', [])
+        
+        if 'fecha' in datos and isinstance(datos['fecha'], str):
+            try:
+                datos['fecha'] = datetime.fromisoformat(datos['fecha'])
+            except ValueError:
+                datos['fecha'] = datetime.now()
+
+        nota = crud.create_nota_proveedor(db, nota_data=datos, items=items)
+        
+        await manager.broadcast({
+            "type": "nota_proveedor_creada", 
+            "data": _nota_proveedor_to_dict(nota)
+        })
+        return _nota_proveedor_to_dict(nota)
+        
+    except Exception as e:
+        print(f"Error al crear nota proveedor API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/notas_proveedor/{nota_id}")
+async def actualizar_nota_proveedor_api(nota_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        items = datos.pop('items', [])
+        
+        if 'fecha' in datos and isinstance(datos['fecha'], str):
+            try:
+                datos['fecha'] = datetime.fromisoformat(datos['fecha'])
+            except ValueError:
+                datos.pop('fecha') 
+        
+        nota = crud.update_nota_proveedor(
+            db=db,
+            nota_id=nota_id,
+            nota_data=datos,
+            items=items
+        )
+        
+        if not nota:
+            raise HTTPException(status_code=404, detail="Nota de proveedor no encontrada")
+            
+        await manager.broadcast({
+            "type": "nota_proveedor_actualizada", 
+            "data": _nota_proveedor_to_dict(nota)
+        })
+        return _nota_proveedor_to_dict(nota)
+        
+    except Exception as e:
+        print(f"Error al actualizar nota proveedor API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/notas_proveedor")
 def get_notas_proveedor(db: Session = Depends(get_db)):
     notas = crud.get_all_notas_proveedor(db)
+    return [_nota_proveedor_to_dict(n) for n in notas]
+
+@app.get("/notas_proveedor/buscar")
+def buscar_notas_proveedor_api(folio: str, db: Session = Depends(get_db)):
+    """Busca notas de proveedor por folio (usado por la UI de QInputDialog)"""
+    notas = crud.search_notas_proveedor_by_folio(db, folio)
     return [_nota_proveedor_to_dict(n) for n in notas]
 
 @app.get("/notas_proveedor/{nota_id}")
@@ -695,6 +755,12 @@ def get_nota_proveedor(nota_id: int, db: Session = Depends(get_db)):
     if nota:
         return _nota_proveedor_to_dict(nota)
     raise HTTPException(status_code=404, detail="Nota de proveedor no encontrada")
+
+@app.get("/notas_proveedor/buscar")
+def buscar_notas_proveedor_api(folio: str, db: Session = Depends(get_db)):
+    """Busca notas de proveedor por folio (usado por la UI de QInputDialog)"""
+    notas = crud.search_notas_proveedor_by_folio(db, folio)
+    return [_nota_proveedor_to_dict(n) for n in notas]
 
 @app.post("/notas_proveedor/{nota_id}/pagar")
 async def registrar_pago_proveedor_api(nota_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
@@ -727,6 +793,27 @@ async def eliminar_pago_proveedor_api(pago_id: int, db: Session = Depends(get_db
         })
         return _nota_proveedor_to_dict(nota)
     except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/notas_proveedor/{nota_id}/cancelar")
+async def cancelar_nota_proveedor_api(nota_id: int, db: Session = Depends(get_db)):
+    try:
+        # La función crud ya previene cancelar notas pagadas o canceladas
+        success = crud.cancelar_nota_proveedor(db, nota_id)
+        
+        if not success:
+             raise HTTPException(status_code=400, detail="No se pudo cancelar la nota (ya pagada o cancelada)")
+        
+        # Obtenemos la nota actualizada para notificar a todos
+        nota = crud.get_nota_proveedor(db, nota_id) 
+        await manager.broadcast({
+            "type": "nota_proveedor_actualizada",
+            "data": _nota_proveedor_to_dict(nota)
+        })
+        return _nota_proveedor_to_dict(nota)
+    
+    except Exception as e:
+        print(f"Error al cancelar nota proveedor API: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/")
