@@ -743,7 +743,6 @@ class CotizacionesWindow(QDialog):
         else:
             self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
 
-        # --- LÓGICA DE BOTONES (MODIFICADA) ---
         self.botones[0].setEnabled(True)  # Nuevo
         self.botones[1].setEnabled(habilitar) # Guardar/Actualizar
         self.botones[2].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) # Cancelar
@@ -753,14 +752,15 @@ class CotizacionesWindow(QDialog):
         self.botones[6].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) # Imprimir
         self.botones[7].setEnabled(bool(self.cotizacion_actual_id) and not habilitar) # Generar Nota
 
-        # Lógica de deshabilitación post-carga (si no estamos en modo edición)
         if not habilitar and self.cotizacion_actual_id:
             try:
-                # Usamos la cotización ya cargada (si existe) o la buscamos
-                cotizacion = db_helper.buscar_cotizaciones(folio=self.txt_folio.text())[0]
+                cotizacion = db_helper.get_cotizacion(self.cotizacion_actual_id)
+                if not cotizacion:
+                     print("Error: No se encontró la cotización para verificar estado.")
+                     return
+                     
                 estado = cotizacion.get('estado')
                 
-                # Si está Aceptada, ya generó nota, O está Cancelada
                 if estado == 'Aceptada' or cotizacion.get('nota_folio') or estado == 'Cancelada':
                     
                     self.botones[7].setEnabled(False) # Generar Nota
@@ -769,16 +769,25 @@ class CotizacionesWindow(QDialog):
                     
                     if cotizacion.get('nota_folio'):
                         self.botones[7].setToolTip(f"Ya se generó la nota: {cotizacion['nota_folio']}")
+                        self.botones[4].setToolTip(f"Nota ya generada: {cotizacion['nota_folio']}")
+                        self.botones[2].setToolTip(f"Nota ya generada: {cotizacion['nota_folio']}")
                     elif estado == 'Cancelada':
                         self.botones[4].setToolTip("No se puede editar una cotización cancelada")
                         self.botones[2].setToolTip("La cotización ya está cancelada")
+                        self.botones[7].setToolTip("No se puede generar nota de una cotización cancelada")
+
                     else:
                         self.botones[7].setToolTip("Esta cotización ya fue aceptada.")
-                        
+                        self.botones[4].setToolTip("Esta cotización ya fue aceptada.")
+                        self.botones[2].setToolTip("Esta cotización ya fue aceptada.")
+                else:
+                    self.botones[7].setToolTip("Generar Nota de Venta a partir de esta cotización.")
+                    self.botones[4].setToolTip("Habilitar edición para esta cotización")
+                    self.botones[2].setToolTip("Cancelar esta cotización")
+
             except Exception as e:
                 print(f"Error en control de estados: {e}")
                 pass
-
 
     def cargar_clientes_bd(self):
         """Cargar clientes y configurar autocompletado (Renombrado)"""

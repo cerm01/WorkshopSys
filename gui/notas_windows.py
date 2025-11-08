@@ -477,6 +477,15 @@ class NotasWindow(QDialog):
         dialog = BuscarNotasDialog(self)
         if dialog.exec_() == QDialog.Accepted and dialog.nota_seleccionada:
             self.cargar_nota_en_formulario(dialog.nota_seleccionada)
+            estado = dialog.nota_seleccionada.get('estado')
+            if estado == 'Cancelada':
+                self.mostrar_advertencia(
+                    "Esta nota está cancelada y no puede ser editada."
+                )
+            elif estado == 'Pagado' or estado == 'Pagado Parcialmente':
+                    self.mostrar_advertencia(
+                    "Esta nota ya tiene pagos registrados. Solo puede ser consultada."
+                )
     
     def abrir_ventana_ordenes_borrador(self):
         if not BuscarOrdenesBorradorDialog:
@@ -815,7 +824,39 @@ class NotasWindow(QDialog):
         self.txt_precio.setReadOnly(not habilitar)
         self.btn_agregar.setEnabled(habilitar)
         
-        self.tabla_items.setEditTriggers(QTableView.DoubleClicked if habilitar else QTableView.NoEditTriggers)
+        if habilitar:
+            self.tabla_items.setEditTriggers(QTableView.DoubleClicked)
+        else:
+            self.tabla_items.setEditTriggers(QTableView.NoEditTriggers)
+
+        nota_cargada = bool(self.nota_actual_id)
+        
+        if not hasattr(self, 'botones') or not self.botones:
+             return
+
+        self.botones[0].setEnabled(True)  # Nuevo (siempre)
+        self.botones[1].setEnabled(habilitar) # Guardar/Actualizar
+        self.botones[2].setEnabled(nota_cargada and not habilitar) # Cancelar
+        self.botones[3].setEnabled(True)  # Buscar (siempre)
+        self.botones[4].setEnabled(nota_cargada and not habilitar) # Editar
+        self.botones[5].setEnabled(True)  # Limpiar (siempre)
+        self.botones[6].setEnabled(nota_cargada and not habilitar) # Imprimir
+        
+        if nota_cargada and not habilitar:
+            estado = self.txt_estado.text()
+            if estado == 'Cancelada' or estado == 'Pagado' or estado == 'Pagado Parcialmente':
+                self.botones[4].setEnabled(False) # Editar
+                self.botones[2].setEnabled(False) # Cancelar
+                if estado == 'Cancelada':
+                    tooltip = "No se puede modificar una nota cancelada"
+                else:
+                    tooltip = "No se puede modificar una nota que ya tiene pagos"
+                    
+                self.botones[4].setToolTip(tooltip)
+                self.botones[2].setToolTip(tooltip)
+            else:
+                self.botones[4].setToolTip("Habilitar edición para esta nota")
+                self.botones[2].setToolTip("Cancelar esta nota")
     
     def abrir_ventana_pagos(self):
         if not PagosNotaDialog:

@@ -211,10 +211,23 @@ class TallerAPIClient:
     
     def buscar_notas(self, **filtros) -> List[Dict]:
         notas = self.get_all_notas_venta()
-        # Filtrado básico
+        notas_filtradas = notas
+        
         if 'folio' in filtros and filtros['folio']:
-            notas = [n for n in notas if filtros['folio'].lower() in n.get('folio', '').lower()]
-        return notas
+            folio_buscar = filtros['folio'].lower()
+            notas_filtradas = [
+                n for n in notas_filtradas 
+                if folio_buscar in n.get('folio', '').lower()
+            ]
+        
+        if 'orden_folio' in filtros and filtros['orden_folio']:
+            orden_folio_buscar = filtros['orden_folio'].lower()
+            notas_filtradas = [
+                n for n in notas_filtradas 
+                if n.get('orden_folio', '').lower() == orden_folio_buscar
+            ]
+            
+        return notas_filtradas
     
     def get_nota(self, nota_id: int) -> Optional[Dict]:
         """Obtiene una nota de venta específica por su ID."""

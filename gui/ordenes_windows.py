@@ -330,6 +330,11 @@ class OrdenesWindow(QDialog):
         dialog = BuscarOrdenesDialog(self)
         if dialog.exec_() == QDialog.Accepted and dialog.orden_seleccionada:
             self.cargar_orden_en_formulario(dialog.orden_seleccionada)
+            estado = dialog.orden_seleccionada.get('estado')
+            if estado == 'Cancelada':
+                self.mostrar_advertencia("Esta orden está cancelada y no puede ser editada o convertida a nota.")
+            elif estado == 'Facturada' or dialog.orden_seleccionada.get('nota_folio'):
+                self.mostrar_advertencia("Esta orden ya fue facturada y/o convertida a nota. Solo puede ser consultada.")
 
     def nueva_orden(self):
         self.orden_actual_id = None
