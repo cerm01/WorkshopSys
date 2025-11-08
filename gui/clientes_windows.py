@@ -736,11 +736,9 @@ class ClientesWindow(QDialog):
 
     def closeEvent(self, event):
         self.limpiar_formulario()
-        self.setGeometry(100, 100, 1400, 800)
         event.accept()
     
     def cerrar_ventana(self):
-        self.setGeometry(100, 100, 1400, 800)
         self.limpiar_formulario()
         self.close()
     
