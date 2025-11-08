@@ -210,24 +210,8 @@ class TallerAPIClient:
         return self._post("/notas", datos_completos)
     
     def buscar_notas(self, **filtros) -> List[Dict]:
-        notas = self.get_all_notas_venta()
-        notas_filtradas = notas
-        
-        if 'folio' in filtros and filtros['folio']:
-            folio_buscar = filtros['folio'].lower()
-            notas_filtradas = [
-                n for n in notas_filtradas 
-                if folio_buscar in n.get('folio', '').lower()
-            ]
-        
-        if 'orden_folio' in filtros and filtros['orden_folio']:
-            orden_folio_buscar = filtros['orden_folio'].lower()
-            notas_filtradas = [
-                n for n in notas_filtradas 
-                if n.get('orden_folio', '').lower() == orden_folio_buscar
-            ]
-            
-        return notas_filtradas
+        """Busca notas de venta usando filtros."""
+        return self._get("/notas/buscar", params=filtros) or []
     
     def get_nota(self, nota_id: int) -> Optional[Dict]:
         """Obtiene una nota de venta específica por su ID."""

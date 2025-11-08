@@ -560,6 +560,26 @@ def get_nota(db: Session, nota_id: int) -> Optional[NotaVenta]:
     """Obtener nota por ID"""
     return db.query(NotaVenta).filter(NotaVenta.id == nota_id).first()
 
+def search_notas(
+    db: Session, 
+    folio: Optional[str] = None, 
+    cliente_id: Optional[int] = None, 
+    estado: Optional[str] = None,
+    orden_folio: Optional[str] = None,
+    cotizacion_folio: Optional[str] = None
+) -> List[NotaVenta]:
+    query = db.query(NotaVenta).options(joinedload(NotaVenta.cliente))
+    if folio:
+        query = query.filter(NotaVenta.folio.ilike(f"%{folio}%"))
+    if cliente_id:
+        query = query.filter(NotaVenta.cliente_id == cliente_id)
+    if estado:
+        query = query.filter(NotaVenta.estado == estado)
+    if orden_folio:
+        query = query.filter(NotaVenta.orden_folio.ilike(f"%{orden_folio}%"))
+    if cotizacion_folio:
+        query = query.filter(NotaVenta.cotizacion_folio.ilike(f"%{cotizacion_folio}%"))
+    return query.order_by(NotaVenta.fecha.desc()).all()
 
 def create_nota_venta(db: Session, nota_data: Dict[str, Any], items: List[Dict[str, Any]], estado: Optional[str] = 'Registrado') -> NotaVenta:
     """Crear nueva nota de venta con items"""

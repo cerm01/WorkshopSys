@@ -383,6 +383,26 @@ def get_notas(db: Session = Depends(get_db)):
     notas = crud.get_all_notas(db) 
     return [_nota_to_dict(n) for n in notas]
 
+@app.get("/notas/buscar")
+def buscar_notas_api(
+    folio: Optional[str] = None, 
+    cliente_id: Optional[int] = None, 
+    estado: Optional[str] = None,
+    orden_folio: Optional[str] = None,
+    cotizacion_folio: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Busca notas de venta por varios criterios"""
+    notas = crud.search_notas(
+        db, 
+        folio=folio, 
+        cliente_id=cliente_id, 
+        estado=estado, 
+        orden_folio=orden_folio,
+        cotizacion_folio=cotizacion_folio
+    )
+    return [_nota_to_dict(n) for n in notas]
+
 @app.get("/notas/{nota_id}")
 def get_nota_por_id(nota_id: int, db: Session = Depends(get_db)):
     nota = crud.get_nota(db, nota_id)
