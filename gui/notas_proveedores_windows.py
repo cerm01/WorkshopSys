@@ -409,7 +409,7 @@ class NotasProveedoresWindow(QDialog):
         totales_grid.addWidget(self.lbl_total_valor, 3, 1)
         
         totales_grid.setColumnMinimumWidth(0, 80)
-        totales_grid.setColumnMinimumWidth(1, 120)
+        totales_grid.setColumnMinimumWidth(1, 180)
         
         totales_container = QWidget()
         totales_container.setLayout(totales_grid)

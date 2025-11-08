@@ -1322,11 +1322,11 @@ class CotizacionesWindow(QDialog):
         totales_grid.addWidget(self.lbl_total_valor, 3, 1)
         
         totales_grid.setColumnMinimumWidth(0, 80)
-        totales_grid.setColumnMinimumWidth(1, 120)
+        totales_grid.setColumnMinimumWidth(1, 180)
         
         totales_container = QWidget()
         totales_container.setLayout(totales_grid)
-        totales_container.setFixedWidth(220)
+        totales_container.setFixedWidth(280)
         
         main_totales_layout.addWidget(totales_container)
         totales_frame.setLayout(main_totales_layout)

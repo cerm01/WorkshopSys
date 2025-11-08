@@ -319,10 +319,13 @@ class NotasWindow(QDialog):
         
         totales_grid.addWidget(QLabel("Total:", styleSheet=label_style + "font-weight: bold;"), 3, 0)
         totales_grid.addWidget(self.lbl_total_valor, 3, 1)
+
+        totales_grid.setColumnMinimumWidth(0, 80)
+        totales_grid.setColumnMinimumWidth(1, 180)
         
         totales_container = QWidget()
         totales_container.setLayout(totales_grid)
-        totales_container.setFixedWidth(220)
+        totales_container.setFixedWidth(280)
         
         totales_layout = QHBoxLayout()
         totales_layout.addStretch()
