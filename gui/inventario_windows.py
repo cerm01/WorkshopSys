@@ -1,3 +1,4 @@
+from datetime import datetime
 import sys
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
@@ -242,6 +243,7 @@ class InventarioWindow(QDialog):
         self.spin_stock_actual = QSpinBox()
         self.spin_stock_actual.setRange(0, 99999)
         self.spin_stock_actual.setStyleSheet(input_style_inventario)
+        self.spin_stock_actual.setReadOnly(True) # No editable por defecto
         grid.addWidget(self.spin_stock_actual, row, 1)
         
         lbl = QLabel("Descripción:")
@@ -548,6 +550,13 @@ class InventarioWindow(QDialog):
                 widget.setText(str(valor) if valor else "---") 
                 break
     
+    def _limpiar_panel_detalle_producto(self):
+        if not hasattr(self, 'labels_detalle_prod'):
+            return
+        
+        for key, frame in self.labels_detalle_prod.items():
+            self.actualizar_label_valor(frame, "---")
+    
     def conectar_senales(self):
         self.tabla_productos.doubleClicked.connect(self.editar_producto)
         self.tabla_productos.selectionModel().currentChanged.connect(
@@ -565,6 +574,7 @@ class InventarioWindow(QDialog):
     
     def nuevo_producto(self):
         self.limpiar_formulario_producto()
+        self.spin_stock_actual.setReadOnly(False)
         self.txt_codigo.setFocus()
     
     def guardar_producto(self):
@@ -606,6 +616,7 @@ class InventarioWindow(QDialog):
         if producto:
             self.cargar_productos_desde_bd()
             self.limpiar_formulario_producto()
+            self.spin_stock_actual.setReadOnly(True)
             self.mostrar_exito("Producto agregado correctamente.")
         else:
             self.mostrar_error("No se pudo agregar el producto.")
@@ -621,7 +632,6 @@ class InventarioWindow(QDialog):
             'ubicacion': self.txt_ubicacion.text().strip(),
             'precio_compra': self.spin_precio_compra.value(),
             'precio_venta': self.spin_precio_venta.value(),
-            'stock_actual': self.spin_stock_actual.value(),
             'stock_min': self.spin_stock_min.value(),
             'descripcion': self.txt_descripcion.text().strip()
         }
@@ -643,6 +653,7 @@ class InventarioWindow(QDialog):
         if producto:
             self.cargar_productos_desde_bd() 
             self.limpiar_formulario_producto()
+            self.spin_stock_actual.setReadOnly(True)
             self.mostrar_exito("Producto actualizado correctamente.")
         else:
             self.mostrar_error("No se pudo actualizar el producto.")
@@ -659,6 +670,7 @@ class InventarioWindow(QDialog):
         
         if producto:
             self.cargar_datos_formulario_producto(producto)
+            self.spin_stock_actual.setReadOnly(True)
             self.modo_edicion = True
             self.producto_en_edicion_id = producto_id
             self.txt_codigo.setFocus()
@@ -714,12 +726,12 @@ class InventarioWindow(QDialog):
                 )
                 
                 if ok2:
-                    if db_helper.registrar_movimiento(producto_id, "Entrada", cantidad, motivo, "Admin"):
+                    if db_helper.registrar_movimiento_inventario(producto_id, "Entrada", cantidad, motivo, "Admin"):
                         self.cargar_productos_desde_bd() 
                         self.mostrar_exito(f"Se agregaron {cantidad} unidades.")
                     else:
                         self.mostrar_error("No se pudo registrar la entrada.")
-    
+
     def registrar_salida(self):
         fila = self.tabla_productos.currentIndex().row()
         if fila < 0:
@@ -750,7 +762,7 @@ class InventarioWindow(QDialog):
                 )
                 
                 if ok2:
-                    if db_helper.registrar_movimiento(producto_id, "Salida", cantidad, motivo, "Admin"):
+                    if db_helper.registrar_movimiento_inventario(producto_id, "Salida", cantidad, motivo, "Admin"):
                         self.cargar_productos_desde_bd() 
                         self.mostrar_exito(f"Se retiraron {cantidad} unidades.")
                     else:
@@ -845,10 +857,13 @@ class InventarioWindow(QDialog):
     
     def actualizar_tabla_movimientos(self):
         try:
-            if hasattr(db_helper, 'get_movimientos'):
-                movimientos = db_helper.get_movimientos()
+            # CAMBIO 1: Usar el nombre correcto de la función
+            if hasattr(db_helper, 'get_movimientos_inventario'):
+                # CAMBIO 2: Usar el nombre correcto de la función
+                movimientos = db_helper.get_movimientos_inventario()
             else:
-                print("ADVERTENCIA: 'db_helper.get_movimientos()' no existe. Mostrando tabla vacía.")
+                # CAMBIO 3: Actualizar el mensaje de advertencia
+                print("ADVERTENCIA: 'db_helper.get_movimientos_inventario()' no existe. Mostrando tabla vacía.")
                 movimientos = []
         except Exception as e:
             self.mostrar_error(f"No se pudo leer movimientos: {e}")
@@ -860,9 +875,18 @@ class InventarioWindow(QDialog):
         ])
         
         for mov in reversed(movimientos):
+            
+            fecha_str = mov.get('fecha', 'N/A')
+            if fecha_str != 'N/A' and fecha_str:
+                try:
+                    fecha_dt = datetime.fromisoformat(fecha_str)
+                    fecha_str = fecha_dt.strftime("%d/%m/%Y %H:%M")
+                except ValueError:
+                    pass 
+            
             fila = [
                 self._crear_item(mov.get('id', 'N/A'), Qt.AlignCenter),
-                self._crear_item(mov.get('fecha', 'N/A'), Qt.AlignCenter),
+                self._crear_item(fecha_str, Qt.AlignCenter), # <-- LÍNEA NUEVA
                 self._crear_item(mov.get('tipo', 'N/A'), Qt.AlignCenter),
                 self._crear_item(mov.get('producto', 'N/A'), Qt.AlignLeft | Qt.AlignVCenter),
                 self._crear_item(mov.get('cantidad', 0), Qt.AlignCenter),
@@ -968,10 +992,10 @@ class InventarioWindow(QDialog):
     
     def filtrar_movimientos(self, tipo):
         try:
-            if hasattr(db_helper, 'get_movimientos'):
-                todos_mov = db_helper.get_movimientos()
+            if hasattr(db_helper, 'get_movimientos_inventario'):
+                todos_mov = db_helper.get_movimientos_inventario()
             else:
-                print("ADVERTENCIA: 'db_helper.get_movimientos()' no existe. Mostrando tabla vacía.")
+                print("ADVERTENCIA: 'db_helper.get_movimientos_inventario()' no existe. Mostrando tabla vacía.")
                 todos_mov = []
 
             if tipo == "Todos":
@@ -988,9 +1012,18 @@ class InventarioWindow(QDialog):
         ])
         
         for mov in reversed(movimientos):
+
+            fecha_str = mov.get('fecha', 'N/A')
+            if fecha_str != 'N/A' and fecha_str:
+                try:
+                    fecha_dt = datetime.fromisoformat(fecha_str)
+                    fecha_str = fecha_dt.strftime("%d/%m/%Y %H:%M")
+                except ValueError:
+                    pass
+            
             fila = [
                 self._crear_item(mov.get('id', 'N/A'), Qt.AlignCenter),
-                self._crear_item(mov.get('fecha', 'N/A'), Qt.AlignCenter),
+                self._crear_item(fecha_str, Qt.AlignCenter), # <-- LÍNEA NUEVA
                 self._crear_item(mov.get('tipo', 'N/A'), Qt.AlignCenter),
                 self._crear_item(mov.get('producto', 'N/A'), Qt.AlignLeft | Qt.AlignVCenter),
                 self._crear_item(mov.get('cantidad', 0), Qt.AlignCenter),
@@ -1066,6 +1099,8 @@ class InventarioWindow(QDialog):
         self.spin_stock_actual.setValue(0)
         self.spin_stock_min.setValue(0)
         self.txt_descripcion.clear()
+        self.spin_stock_actual.setReadOnly(False)
+        self._limpiar_panel_detalle_producto()        
         self.cancelar_edicion()
     
     def cancelar_edicion(self):

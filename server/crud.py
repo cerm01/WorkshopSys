@@ -169,9 +169,27 @@ def get_producto_by_codigo(db: Session, codigo: str) -> Optional[Producto]:
 
 def create_producto(db: Session, producto_data: Dict[str, Any]) -> Producto:
     """Crear nuevo producto"""
+    stock_inicial = producto_data.pop('stock_actual', 0)
+    producto_data['stock_actual'] = 0 
+    
     nuevo_producto = Producto(**producto_data)
     db.add(nuevo_producto)
-    db.commit()
+    db.flush()
+    
+    if stock_inicial > 0:
+        registrar_movimiento_inventario(
+            db=db,
+            producto_id=nuevo_producto.id,
+            tipo="Entrada",
+            cantidad=stock_inicial,
+            motivo="Stock Inicial",
+            usuario="Sistema"
+        )
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
     db.refresh(nuevo_producto)
     return nuevo_producto
 
@@ -180,6 +198,9 @@ def update_producto(db: Session, producto_id: int, producto_data: Dict[str, Any]
     """Actualizar producto existente"""
     producto = get_producto(db, producto_id)
     if producto:
+        if 'stock_actual' in producto_data:
+            del producto_data['stock_actual']
+
         for key, value in producto_data.items():
             setattr(producto, key, value)
         producto.updated_at = datetime.now()
@@ -235,9 +256,6 @@ def registrar_movimiento_inventario(
     motivo: str,
     usuario: str
 ) -> Optional[MovimientoInventario]:
-    """
-    Registrar movimiento de inventario y actualizar stock
-    """
     producto = get_producto(db, producto_id)
     if not producto:
         return None
@@ -262,10 +280,7 @@ def registrar_movimiento_inventario(
     )
     
     db.add(movimiento)
-    db.commit()
-    db.refresh(movimiento)
-    db.refresh(producto)
-    
+
     return movimiento
 
 
@@ -276,7 +291,9 @@ def get_movimientos_inventario(
     limit: int = 100
 ) -> List[MovimientoInventario]:
     """Obtener historial de movimientos"""
-    query = db.query(MovimientoInventario)
+    query = db.query(MovimientoInventario).options(
+        joinedload(MovimientoInventario.producto)
+    )
     
     if producto_id:
         query = query.filter(MovimientoInventario.producto_id == producto_id)

@@ -163,6 +163,17 @@ async def crear_producto(datos: Dict[str, Any], db: Session = Depends(get_db)):
         "type": "producto_creado",
         "data": _producto_to_dict(producto)
     })
+    
+    if producto.stock_actual > 0:
+        await manager.broadcast({
+            "type": "stock_actualizado",
+            "data": {
+                "producto_id": producto.id,
+                "tipo": "Entrada",
+                "cantidad": producto.stock_actual
+            }
+        })
+        
     return _producto_to_dict(producto)
 
 @app.put("/productos/{producto_id}")
@@ -175,6 +186,18 @@ async def actualizar_producto(producto_id: int, datos: Dict[str, Any], db: Sessi
         })
         return _producto_to_dict(producto)
     raise HTTPException(status_code=404)
+
+@app.delete("/productos/{producto_id}")
+async def eliminar_producto_api(producto_id: int, db: Session = Depends(get_db)):
+    # Usamos soft_delete=True por defecto como en crud.py
+    success = crud.delete_producto(db, producto_id, soft_delete=True)
+    if success:
+        await manager.broadcast({
+            "type": "producto_eliminado",
+            "data": {"id": producto_id}
+        })
+        return {"success": True}
+    raise HTTPException(status_code=404, detail="Producto no encontrado")
 
 # ==================== ORDENES ====================
 @app.get("/ordenes")
@@ -524,6 +547,26 @@ async def eliminar_pago_api(pago_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== MOVIMIENTOS INVENTARIO ====================
+@app.get("/inventario/movimientos")
+def get_movimientos_api(
+    producto_id: Optional[int] = None, 
+    tipo: Optional[str] = None, 
+    limit: int = 100, 
+    db: Session = Depends(get_db)
+):
+    try:
+        movimientos = crud.get_movimientos_inventario(
+            db, 
+            producto_id=producto_id, 
+            tipo=tipo, 
+            limit=limit
+        )
+        # Usamos el nuevo _movimiento_to_dict que añadiremos abajo
+        return [_movimiento_to_dict(m) for m in movimientos]
+    except Exception as e:
+        print(f"Error al obtener movimientos API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/inventario/movimiento")
 async def crear_movimiento(datos: Dict[str, Any], db: Session = Depends(get_db)):
     movimiento = crud.registrar_movimiento_inventario(
@@ -534,6 +577,15 @@ async def crear_movimiento(datos: Dict[str, Any], db: Session = Depends(get_db))
         motivo=datos['motivo'],
         usuario=datos.get('usuario', 'Sistema')
     )
+    
+    try:
+        db.commit()
+        db.refresh(movimiento)
+    except Exception as e:
+        db.rollback()
+        print(f"Error al hacer commit del movimiento: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al guardar: {e}")
+
     await manager.broadcast({
         "type": "stock_actualizado",
         "data": {
@@ -724,6 +776,20 @@ def _nota_proveedor_to_dict(nota):
             'impuesto': float(i.impuesto or 0)
         } for i in nota.items],
         'pagos': [_pago_proveedor_to_dict(p) for p in nota.pagos]
+    }
+
+def _movimiento_to_dict(m):
+    if not m:
+        return None
+    return {
+        'id': m.id,
+        'producto_id': m.producto_id,
+        'producto': m.producto.nombre if m.producto else 'N/A', 
+        'tipo': m.tipo,
+        'cantidad': m.cantidad,
+        'motivo': m.motivo or '',
+        'usuario': m.usuario or '',
+        'fecha': m.created_at.isoformat() if m.created_at else ''
     }
 
 # ==================== NOTAS DE PROVEEDOR ====================

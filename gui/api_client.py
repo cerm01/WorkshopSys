@@ -304,10 +304,15 @@ class TallerAPIClient:
         }
         return self._post("/inventario/movimiento", datos)
     
-    def get_movimientos_inventario(self, producto_id: int = None, 
-                                   tipo: str = None, limit: int = 100) -> List[Dict]:
-        # Por ahora retorna lista vacía, implementar endpoint en servidor si necesario
-        return []
+    def get_movimientos_inventario(self, producto_id: int = None, tipo: str = None, limit: int = 100) -> List[Dict]:
+        params = {}
+        if producto_id:
+            params['producto_id'] = producto_id
+        if tipo:
+            params['tipo'] = tipo
+        if limit:
+            params['limit'] = limit
+        return self._get("/inventario/movimientos", params=params) or []
     
     # ==================== MÉTODOS DE COMPATIBILIDAD ====================
     
