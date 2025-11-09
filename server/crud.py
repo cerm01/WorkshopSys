@@ -1185,6 +1185,10 @@ def crear_usuario_crud(db: Session, datos: Dict) -> Optional[Usuario]:
         if existe:
             raise ValueError("El nombre de usuario ya existe")
         
+        # Convertir email vacío ('') a None (NULL) para evitar error UNIQUE
+        if 'email' in datos and datos['email'] == '':
+            datos['email'] = None
+            
         nuevo_usuario = Usuario(**datos)
         db.add(nuevo_usuario)
         db.commit()

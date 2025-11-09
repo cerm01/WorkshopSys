@@ -44,7 +44,7 @@ def cargar_datos_ejemplo():
                 password_hash=generar_hash_password("mec123"),
                 nombre_completo="Juan Pérez Mecánico",
                 email="mecanico@taller.com",
-                rol="Mecánico",
+                rol="Mecanico",
                 activo=True
             ),
             Usuario(
