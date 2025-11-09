@@ -4,3 +4,5 @@ gui/pruebas.py
 server/__pycache__/
 dialogs/__pycache__/
 taller.db
+generar_final.py
+ml/__pycache__/
