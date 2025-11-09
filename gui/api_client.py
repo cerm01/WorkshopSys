@@ -2,6 +2,7 @@ import requests
 from typing import List, Dict, Optional, Any
 import json
 from datetime import datetime
+import base64 # Requerido para manejar el logo
 
 class TallerAPIClient:
     def __init__(self, base_url: str = "http://localhost:8000"):
@@ -12,7 +13,7 @@ class TallerAPIClient:
     def _get(self, endpoint: str, params: dict = None):
         """GET request"""
         try:
-            response = self.session.get(f"{self.base_url}{endpoint}", params=params)
+            response = self.session.get(f"{self.base_url}{endpoint}", params=params, timeout=10)
             response.raise_for_status()
             return response.json()
         except Exception as e:
@@ -21,7 +22,7 @@ class TallerAPIClient:
     
     def _post(self, endpoint: str, data: dict):
         try:
-            response = self.session.post(f"{self.base_url}{endpoint}", json=data)
+            response = self.session.post(f"{self.base_url}{endpoint}", json=data, timeout=10)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
@@ -34,7 +35,7 @@ class TallerAPIClient:
     def _put(self, endpoint: str, data: dict):
         """PUT request"""
         try:
-            response = self.session.put(f"{self.base_url}{endpoint}", json=data)
+            response = self.session.put(f"{self.base_url}{endpoint}", json=data, timeout=10)
             response.raise_for_status()
             return response.json()
         except Exception as e:
@@ -44,7 +45,7 @@ class TallerAPIClient:
     def _delete(self, endpoint: str):
         """DELETE request"""
         try:
-            response = self.session.delete(f"{self.base_url}{endpoint}")
+            response = self.session.delete(f"{self.base_url}{endpoint}", timeout=10)
             response.raise_for_status()
             return response.json()
         except Exception as e:
@@ -75,9 +76,7 @@ class TallerAPIClient:
         return self._get("/proveedores") or []
     
     def buscar_proveedores(self, texto: str) -> List[Dict]:
-        proveedores = self.get_proveedores()
-        texto = texto.lower()
-        return [p for p in proveedores if texto in p['nombre'].lower()]
+        return self._get(f"/proveedores/buscar/{texto}") or []
     
     def crear_proveedor(self, datos: Dict) -> Optional[Dict]:
         return self._post("/proveedores", datos)
@@ -98,8 +97,7 @@ class TallerAPIClient:
         return self._get(f"/productos/buscar/{texto}") or []
     
     def get_productos_bajo_stock(self) -> List[Dict]:
-        productos = self.get_productos()
-        return [p for p in productos if p['stock_actual'] <= p['stock_min']]
+        return self._get("/reportes/inventario_bajo") or []
     
     def crear_producto(self, datos: Dict) -> Optional[Dict]:
         return self._post("/productos", datos)
@@ -127,11 +125,7 @@ class TallerAPIClient:
         return result if result else None
     
     def get_orden(self, orden_id: int) -> Optional[Dict]:
-        ordenes = self.get_all_ordenes()
-        for orden in ordenes:
-            if orden['id'] == orden_id:
-                return orden
-        return None
+        return self._get(f"/ordenes/{orden_id}")
     
     def actualizar_orden(self, orden_id: int, datos: Dict, items: Optional[List[Dict]] = None) -> Optional[Dict]:
         datos_completos = datos.copy()
@@ -154,7 +148,6 @@ class TallerAPIClient:
     
     def buscar_cotizaciones(self, **filtros) -> List[Dict]:
         """Busca cotizaciones usando filtros como 'folio' o 'cliente_id'."""
-        # Pasa los filtros como query parameters (ej: ?folio=COT-123)
         return self._get("/cotizaciones/buscar", params=filtros) or []
     
     def crear_cotizacion(self, datos: Dict, items: List[Dict]) -> Optional[Dict]:
@@ -166,10 +159,6 @@ class TallerAPIClient:
         """Obtiene una cotización específica por su ID."""
         return self._get(f"/cotizaciones/{cotizacion_id}")
     
-    def buscar_cotizaciones(self, folio: str) -> List[Dict]:
-        """Busca cotizaciones por folio."""
-        return self._get(f"/cotizaciones/buscar", params={"folio": folio}) or []
-
     def actualizar_cotizacion(self, cotizacion_id: int, cotizacion_data: Dict, items: List[Dict], nota_folio: Optional[str] = None) -> Optional[Dict]:
         """Actualiza una cotización existente."""
         datos_completos = cotizacion_data.copy()
@@ -178,24 +167,10 @@ class TallerAPIClient:
         if nota_folio:
             datos_completos['nota_folio'] = nota_folio
         
-        # La fecha de vigencia ya viene como string "dd/MM/yyyy" desde cotizaciones_windows
-        return self._put(f"/cotizaciones/{cotizacion_id}", datos_completos)
-    
-    def actualizar_cotizacion(self, cotizacion_id: int, nota_data: Dict, items: List[Dict], nota_folio: Optional[str] = None) -> Optional[Dict]:
-        """Actualiza una cotización existente."""
-        datos_completos = nota_data.copy()
-        datos_completos['items'] = items
-        if nota_folio:
-            datos_completos['nota_folio'] = nota_folio
-        
-        # No tiene sentido enviar la fecha de creación en una actualización
-        datos_completos.pop('fecha', None) 
-        
         return self._put(f"/cotizaciones/{cotizacion_id}", datos_completos)
     
     def cancelar_cotizacion(self, cotizacion_id: int) -> Optional[Dict]:
         """Marca una cotización como 'Cancelada'."""
-        # Usamos _post a la nueva ruta. No requiere enviar datos (data={}).
         return self._post(f"/cotizaciones/{cotizacion_id}/cancelar", data={})
     
     # ==================== NOTAS DE VENTA ====================
@@ -236,12 +211,10 @@ class TallerAPIClient:
         """Actualiza una nota de venta existente."""
         datos_completos = nota_data.copy()
         datos_completos['items'] = items
-        # La fecha ya viene como string 'yyyy-MM-dd' desde notas_windows.py
         return self._put(f"/notas/{nota_id}", datos_completos)
     
     def cancelar_nota(self, nota_id: int) -> Optional[Dict]:
         """Marca una nota de venta como 'Cancelada'."""
-        # Usamos _post a la nueva ruta. No requiere enviar datos (data={}).
         return self._post(f"/notas/{nota_id}/cancelar", data={})
     
     # ==================== NOTAS DE PROVEEDOR ====================
@@ -264,14 +237,9 @@ class TallerAPIClient:
     def get_nota_proveedor(self, nota_id: int) -> Optional[Dict]:
         return self._get(f"/notas_proveedor/{nota_id}")
     
-    def buscar_notas_proveedor(self, folio: Optional[str] = None, proveedor_id: Optional[int] = None) -> List[Dict]:
+    def buscar_notas_proveedor(self, **filtros) -> List[Dict]:
         """Busca notas de proveedor usando filtros (llamada al servidor)."""
-        params = {}
-        if folio:
-            params['folio'] = folio
-        if proveedor_id:
-            params['proveedor_id'] = proveedor_id
-        return self._get("/notas_proveedor/buscar", params=params) or []
+        return self._get("/notas_proveedor/buscar", params=filtros) or []
 
     def registrar_pago_proveedor(self, nota_id: int, monto: float, fecha_pago: Any, metodo_pago: str, memo: str) -> Optional[Dict]:
         """Registrar un pago a proveedor. fecha_pago debe ser un objeto date."""
@@ -289,7 +257,6 @@ class TallerAPIClient:
     
     def cancelar_nota_proveedor(self, nota_id: int) -> Optional[Dict]:
         """Marca una nota de proveedor como 'Cancelada'."""
-        # Usamos _post a la nueva ruta. No requiere enviar datos (data={}).
         return self._post(f"/notas_proveedor/{nota_id}/cancelar", data={})
     
     # ==================== INVENTARIO ====================
@@ -349,24 +316,66 @@ class TallerAPIClient:
         """Obtiene el reporte de cuentas por cobrar (no usa fechas)."""
         return self._get("/reportes/cxc") or []
     
-    # ==================== MÉTODOS DE COMPATIBILIDAD ====================
+    # ==================== LOGIN / USUARIOS / CONFIG (¡ACTUALIZADO!) ====================
     
     def close(self):
         """Cerrar sesión (compatibilidad con db_helper)"""
         self.session.close()
     
     def get_config_empresa(self) -> Optional[Dict]:
-        """Configuración empresa (retorna None por ahora)"""
-        return None
-    
+        """Obtener configuración de empresa desde API"""
+        config = self._get("/configuracion")
+        if config and 'logo_data' in config and config['logo_data']:
+            try:
+                # Decodificar Base64 a bytes
+                config['logo_data'] = base64.b64decode(config['logo_data'].encode('utf-8'))
+            except Exception as e:
+                print(f"Error al decodificar logo: {e}")
+                config['logo_data'] = None
+        return config
+
     def guardar_config_empresa(self, datos: Dict) -> bool:
-        """Guardar config empresa"""
-        return False
+        """Guardar config empresa vía API"""
+        datos_serializados = datos.copy()
+        # Codificar logo (bytes) a Base64 (string) para JSON
+        if 'logo_data' in datos_serializados and datos_serializados['logo_data']:
+            try:
+                datos_serializados['logo_data'] = base64.b64encode(datos_serializados['logo_data']).decode('utf-8')
+            except Exception as e:
+                print(f"Error al codificar logo: {e}")
+                datos_serializados['logo_data'] = None
+                
+        result = self._post("/configuracion", datos_serializados)
+        return result and result.get('success', False)
     
     def get_usuarios(self) -> List[Dict]:
-        """Lista de usuarios"""
-        return []
-    
+        """Lista de usuarios desde API"""
+        return self._get("/usuarios") or []
+
+    def get_usuario(self, usuario_id: int) -> Optional[Dict]:
+        """Obtener un usuario por ID desde API"""
+        return self._get(f"/usuarios/{usuario_id}")
+
+    def crear_usuario(self, datos: Dict) -> Optional[Dict]:
+        """Crear nuevo usuario vía API"""
+        return self._post("/usuarios", datos)
+
+    def actualizar_usuario(self, usuario_id: int, datos: Dict) -> Optional[Dict]:
+        """Actualizar usuario existente vía API"""
+        return self._put(f"/usuarios/{usuario_id}", datos)
+
+    def contar_admins_activos(self) -> int:
+        """Contar admins activos en el sistema vía API"""
+        result = self._get("/usuarios/contar_admins")
+        if result and 'admins_activos' in result:
+            return result['admins_activos']
+        return 0
+
+    def eliminar_usuario(self, usuario_id: int) -> bool:
+        """Eliminar usuario (soft delete) vía API"""
+        result = self._delete(f"/usuarios/{usuario_id}")
+        return result and result.get('success', False)
+
     def validar_login(self, username: str, password: str) -> Optional[Dict]:
         """Verificar login contra el servidor API."""
         data = {"username": username, "password": password}

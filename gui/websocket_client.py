@@ -8,15 +8,32 @@ class WebSocketClient(QThread):
     cliente_creado = pyqtSignal(dict)
     cliente_actualizado = pyqtSignal(dict)
     cliente_eliminado = pyqtSignal(dict)
+    
     proveedor_creado = pyqtSignal(dict)
+    proveedor_actualizado = pyqtSignal(dict)
+    proveedor_eliminado = pyqtSignal(dict)
+    
     producto_creado = pyqtSignal(dict)
     producto_actualizado = pyqtSignal(dict)
+    stock_actualizado = pyqtSignal(dict)
+    
     orden_creada = pyqtSignal(dict)
+    orden_actualizada = pyqtSignal(dict)
+    
     cotizacion_creada = pyqtSignal(dict)
     cotizacion_actualizada = pyqtSignal(dict)
+    
     nota_creada = pyqtSignal(dict)
-    stock_actualizado = pyqtSignal(dict)
+    nota_actualizada = pyqtSignal(dict)
+    
+    nota_proveedor_creada = pyqtSignal(dict)
     nota_proveedor_actualizada = pyqtSignal(dict)
+
+    usuario_creado = pyqtSignal(dict)
+    usuario_actualizado = pyqtSignal(dict)
+    usuario_eliminado = pyqtSignal(dict)
+    config_actualizada = pyqtSignal(dict)
+
     connection_status = pyqtSignal(bool)  # True=conectado, False=desconectado
     
     def __init__(self, server_url: str = "localhost:8000"):
@@ -72,23 +89,41 @@ class WebSocketClient(QThread):
                 self.cliente_eliminado.emit(event_data)
             elif event_type == 'proveedor_creado':
                 self.proveedor_creado.emit(event_data)
+            elif event_type == 'proveedor_actualizado':
+                self.proveedor_actualizado.emit(event_data)
+            elif event_type == 'proveedor_eliminado':
+                self.proveedor_eliminado.emit(event_data)   
             elif event_type == 'producto_creado':
                 self.producto_creado.emit(event_data)
             elif event_type == 'producto_actualizado':
                 self.producto_actualizado.emit(event_data)
+            elif event_type == 'stock_actualizado':
+                self.stock_actualizado.emit(event_data)
             elif event_type == 'orden_creada':
                 self.orden_creada.emit(event_data)
+            elif event_type == 'orden_actualizada':
+                self.orden_actualizada.emit(event_data)
             elif event_type == 'cotizacion_creada':
                 self.cotizacion_creada.emit(event_data)
             elif event_type == 'cotizacion_actualizada':
                 self.cotizacion_actualizada.emit(event_data)    
             elif event_type == 'nota_creada':
                 self.nota_creada.emit(event_data)
-            elif event_type == 'stock_actualizado':
-                self.stock_actualizado.emit(event_data)
+            elif event_type == 'nota_actualizada':
+                self.nota_actualizada.emit(event_data)
+            elif event_type == 'nota_proveedor_creada':
+                self.nota_proveedor_creada.emit(event_data)
             elif event_type == 'nota_proveedor_actualizada':
                 self.nota_proveedor_actualizada.emit(event_data)
-            
+            elif event_type == 'usuario_creado':
+                self.usuario_creado.emit(event_data)
+            elif event_type == 'usuario_actualizado':
+                self.usuario_actualizado.emit(event_data)
+            elif event_type == 'usuario_eliminado':
+                self.usuario_eliminado.emit(event_data)
+            elif event_type == 'config_actualizada':
+                self.config_actualizada.emit(event_data)
+                
         except Exception as e:
             print(f"Error procesando mensaje: {e}")
     

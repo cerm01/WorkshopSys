@@ -5,6 +5,9 @@ from typing import List, Dict, Any, Optional
 import sys
 import os
 import traceback
+import base64
+from sqlalchemy.orm import joinedload
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from server.database import get_db_sync, SessionLocal
@@ -16,7 +19,8 @@ from server.models import (
     Cliente, Proveedor, Producto, MovimientoInventario,
     Orden, OrdenItem, Cotizacion, CotizacionItem,
     NotaVenta, NotaVentaItem, NotaVentaPago, Usuario,
-    NotaProveedor, NotaProveedorItem, NotaProveedorPago
+    NotaProveedor, NotaProveedorItem, NotaProveedorPago,
+    ConfigEmpresa
 )
 
 from pydantic import BaseModel
@@ -131,6 +135,11 @@ async def eliminar_cliente(cliente_id: int, db: Session = Depends(get_db)):
 @app.get("/proveedores")
 def get_proveedores(db: Session = Depends(get_db)):
     proveedores = crud.get_all_proveedores(db)
+    return [_proveedor_to_dict(p) for p in proveedores]
+
+@app.get("/proveedores/buscar/{texto}")
+def buscar_proveedores_api(texto: str, db: Session = Depends(get_db)):
+    proveedores = crud.search_proveedores(db, texto)
     return [_proveedor_to_dict(p) for p in proveedores]
 
 @app.post("/proveedores")
@@ -665,216 +674,6 @@ def get_reporte_cxc(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==================== CONVERSORES ====================
-def _cliente_to_dict(c):
-    if not c:
-        return None
-    return {
-        'id': c.id,
-        'nombre': c.nombre,
-        'tipo': c.tipo,
-        'email': c.email or '',
-        'telefono': c.telefono or '',
-        'rfc': c.rfc or '',
-        'calle': c.calle or '',
-        'colonia': c.colonia or '',
-        'ciudad': c.ciudad or '',
-        'estado': c.estado or '',
-        'cp': c.cp or '',
-    }
-
-def _proveedor_to_dict(p):
-    if not p:
-        return None
-    return {
-        'id': p.id,
-        'nombre': p.nombre,
-        'tipo': p.tipo,
-        'email': p.email or '',
-        'telefono': p.telefono or '',
-        'rfc': p.rfc or '',
-        'calle': p.calle or '',
-        'colonia': p.colonia or '',
-        'ciudad': p.ciudad or '',
-        'estado': p.estado or '',
-        'cp': p.cp or ''
-    }
-
-def _producto_to_dict(p):
-    if not p:
-        return None
-    return {
-        'id': p.id,
-        'codigo': p.codigo,
-        'nombre': p.nombre,
-        'categoria': p.categoria or '',
-        'ubicacion': p.ubicacion or '',
-        'proveedor_id': p.proveedor_id,
-        'precio_compra': float(p.precio_compra or 0),
-        'precio_venta': float(p.precio_venta or 0),
-        'stock_actual': p.stock_actual or 0,
-        'stock_min': p.stock_min or 0,
-        'descripcion': p.descripcion or ''
-    }
-
-def _orden_to_dict(o):
-    if not o:
-        return None
-    return {
-        'id': o.id,
-        'folio': o.folio,
-        'cliente_id': o.cliente_id,
-        'cliente_nombre': o.cliente.nombre if o.cliente else 'N/A',
-        'vehiculo_marca': o.vehiculo_marca or '',
-        'vehiculo_modelo': o.vehiculo_modelo or '',
-        'vehiculo_ano': o.vehiculo_ano or '', 
-        'vehiculo_placas': o.vehiculo_placas or '', # Añadido
-        'vehiculo_vin': o.vehiculo_vin or '', # Añadido
-        'vehiculo_color': o.vehiculo_color or '', # Añadido
-        'vehiculo_kilometraje': o.vehiculo_kilometraje or '', # Añadido
-        'estado': o.estado,
-        'fecha_recepcion': o.fecha_recepcion.isoformat() if o.fecha_recepcion else '',
-        'fecha_promesa': o.fecha_promesa.isoformat() if o.fecha_promesa else '', # Añadido
-        'fecha_entrega': o.fecha_entrega.isoformat() if o.fecha_entrega else '', # Añadido
-        'mecanico_asignado': o.mecanico_asignado or '',
-        'observaciones': o.observaciones or '', # Añadido
-        'nota_folio': o.nota_folio or '',
-        # --- ESTO ES LO QUE FALTABA ---
-        'items': [{
-            'id': i.id,
-            'cantidad': i.cantidad,
-            'descripcion': i.descripcion
-        } for i in o.items] if hasattr(o, 'items') else []
-    }
-
-def _cotizacion_to_dict(c):
-    if not c:
-        return None
-    return {
-        'id': c.id,
-        'folio': c.folio,
-        'cliente_id': c.cliente_id,
-        'cliente_nombre': c.cliente.nombre if c.cliente else 'N/A',
-        'estado': c.estado,
-        'vigencia': c.vigencia or '30 días',
-        'subtotal': float(c.subtotal or 0),
-        'impuestos': float(c.impuestos or 0), 
-        'total': float(c.total or 0),
-        'observaciones': c.observaciones or '',
-        'fecha': c.created_at.isoformat() if c.created_at else '', 
-
-        'nota_folio': c.nota_folio or '',
-        'items': [{
-            'id': i.id,
-            'cantidad': i.cantidad,
-            'descripcion': i.descripcion,
-            'precio_unitario': float(i.precio_unitario or 0),
-            'importe': float(i.importe or 0),
-            'impuesto': float(i.impuesto or 0)
-        } for i in c.items] if hasattr(c, 'items') else []
-    }
-
-def _nota_to_dict(n):
-    if not n:
-        return None
-    return {
-        'id': n.id,
-        'folio': n.folio,
-        'cliente_id': n.cliente_id,
-        'cliente_nombre': n.cliente.nombre if n.cliente else '',
-        'estado': n.estado,
-        'metodo_pago': n.metodo_pago or '',
-        'subtotal': float(n.subtotal or 0),
-        'impuestos': float(n.impuestos or 0),
-        'total': float(n.total or 0),
-        'total_pagado': float(n.total_pagado or 0),
-        'saldo': float(n.saldo or 0),
-        'fecha': n.fecha.isoformat() if n.fecha else '',
-        'observaciones': n.observaciones or '',
-        'cotizacion_folio': n.cotizacion_folio or '',
-        'orden_folio': n.orden_folio or '',
-        'items': [{
-            'id': i.id,
-            'cantidad': i.cantidad,
-            'descripcion': i.descripcion,
-            'precio_unitario': float(i.precio_unitario or 0),
-            'importe': float(i.importe or 0),
-            'impuesto': float(i.impuesto or 0)
-        } for i in n.items] if hasattr(n, 'items') else [],
-        'pagos': [{
-            'id': p.id,
-            'monto': float(p.monto),
-            'fecha_pago': p.fecha_pago.isoformat() if p.fecha_pago else '',
-            'metodo_pago': p.metodo_pago,
-            'memo': p.memo or ''
-        } for p in n.pagos] if hasattr(n, 'pagos') else []
-    }
-
-def _pago_proveedor_to_dict(pago):
-    if not pago: return {}
-    return {
-        'id': pago.id,
-        'nota_id': pago.nota_id,
-        'monto': float(pago.monto),
-        'fecha_pago': pago.fecha_pago.strftime("%d/%m/%Y %H:%M"),
-        'metodo_pago': pago.metodo_pago,
-        'memo': pago.memo or ''
-    }
-
-def _nota_proveedor_to_dict(nota):
-    if not nota: return {}
-    return {
-        'id': nota.id,
-        'folio': nota.folio,
-        'proveedor_id': nota.proveedor_id,
-        'proveedor_nombre': nota.proveedor.nombre if nota.proveedor else '',
-        'estado': nota.estado or 'Registrado',
-        'metodo_pago': nota.metodo_pago or 'Efectivo',
-        'fecha': nota.fecha.strftime("%d/%m/%Y") if nota.fecha else '',
-        'observaciones': nota.observaciones or '',
-        'subtotal': float(nota.subtotal or 0),
-        'impuestos': float(nota.impuestos or 0),
-        'total': float(nota.total or 0),
-        'total_pagado': float(nota.total_pagado or 0),
-        'saldo': float(nota.saldo or 0),
-        'items': [{
-            'cantidad': i.cantidad,
-            'descripcion': i.descripcion,
-            'precio_unitario': float(i.precio_unitario or 0),
-            'importe': float(i.importe or 0),
-            'impuesto': float(i.impuesto or 0)
-        } for i in nota.items],
-        'pagos': [_pago_proveedor_to_dict(p) for p in nota.pagos]
-    }
-
-def _movimiento_to_dict(m):
-    if not m:
-        return None
-    return {
-        'id': m.id,
-        'producto_id': m.producto_id,
-        'producto': m.producto.nombre if m.producto else 'N/A', 
-        'tipo': m.tipo,
-        'cantidad': m.cantidad,
-        'motivo': m.motivo or '',
-        'usuario': m.usuario or '',
-        'fecha': m.created_at.isoformat() if m.created_at else ''
-    }
-
-def _usuario_to_dict(usuario):
-    if not usuario: 
-        return None
-    return {
-        'id': usuario.id,
-        'username': usuario.username,
-        'password_hash': usuario.password_hash,
-        'nombre_completo': usuario.nombre_completo,
-        'email': usuario.email or '',
-        'rol': usuario.rol,
-        'activo': usuario.activo,
-        'ultimo_acceso': usuario.ultimo_acceso.isoformat() if usuario.ultimo_acceso else ''
-    }
-
 # ==================== NOTAS DE PROVEEDOR ====================
 @app.post("/notas_proveedor")
 async def crear_nota_proveedor_api(datos: Dict[str, Any], db: Session = Depends(get_db)):
@@ -883,6 +682,7 @@ async def crear_nota_proveedor_api(datos: Dict[str, Any], db: Session = Depends(
         
         if 'fecha' in datos and isinstance(datos['fecha'], str):
             try:
+                # Convertir de ISO 'YYYY-MM-DD'
                 datos['fecha'] = datetime.fromisoformat(datos['fecha'])
             except ValueError:
                 datos['fecha'] = datetime.now()
@@ -906,6 +706,7 @@ async def actualizar_nota_proveedor_api(nota_id: int, datos: Dict[str, Any], db:
         
         if 'fecha' in datos and isinstance(datos['fecha'], str):
             try:
+                # Convertir de ISO 'YYYY-MM-DD'
                 datos['fecha'] = datetime.fromisoformat(datos['fecha'])
             except ValueError:
                 datos.pop('fecha') 
@@ -936,10 +737,20 @@ def get_notas_proveedor(db: Session = Depends(get_db)):
     return [_nota_proveedor_to_dict(n) for n in notas]
 
 @app.get("/notas_proveedor/buscar")
-def buscar_notas_proveedor_api(folio: str, db: Session = Depends(get_db)):
-    """Busca notas de proveedor por folio (usado por la UI de QInputDialog)"""
-    notas = crud.search_notas_proveedor_by_folio(db, folio)
+def buscar_notas_proveedor_api(
+    folio: Optional[str] = None, 
+    proveedor_id: Optional[int] = None, 
+    db: Session = Depends(get_db)
+):
+    query = db.query(NotaProveedor).options(joinedload(NotaProveedor.proveedor))
+    if folio:
+        query = query.filter(NotaProveedor.folio.ilike(f"%{folio}%"))
+    if proveedor_id:
+        query = query.filter(NotaProveedor.proveedor_id == proveedor_id)
+    
+    notas = query.order_by(NotaProveedor.fecha.desc()).all()
     return [_nota_proveedor_to_dict(n) for n in notas]
+
 
 @app.get("/notas_proveedor/{nota_id}")
 def get_nota_proveedor(nota_id: int, db: Session = Depends(get_db)):
@@ -947,12 +758,6 @@ def get_nota_proveedor(nota_id: int, db: Session = Depends(get_db)):
     if nota:
         return _nota_proveedor_to_dict(nota)
     raise HTTPException(status_code=404, detail="Nota de proveedor no encontrada")
-
-@app.get("/notas_proveedor/buscar")
-def buscar_notas_proveedor_api(folio: str, db: Session = Depends(get_db)):
-    """Busca notas de proveedor por folio (usado por la UI de QInputDialog)"""
-    notas = crud.search_notas_proveedor_by_folio(db, folio)
-    return [_nota_proveedor_to_dict(n) for n in notas]
 
 @app.post("/notas_proveedor/{nota_id}/pagar")
 async def registrar_pago_proveedor_api(nota_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
@@ -1008,10 +813,356 @@ async def cancelar_nota_proveedor_api(nota_id: int, db: Session = Depends(get_db
         print(f"Error al cancelar nota proveedor API: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+# ==================== NUEVO: CONFIGURACION ====================
+
+@app.get("/configuracion")
+def get_configuracion_api(db: Session = Depends(get_db)):
+    config = crud.get_config_empresa(db)
+    return _config_to_dict(config)
+
+@app.post("/configuracion")
+async def guardar_configuracion_api(datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        # Decodificar logo si existe
+        if 'logo_data' in datos and datos['logo_data']:
+            datos['logo_data'] = base64.b64decode(datos['logo_data'].encode('utf-8'))
+        
+        success = crud.guardar_config_empresa(db, datos)
+        if success:
+            config = crud.get_config_empresa(db)
+            await manager.broadcast({
+                "type": "config_actualizada",
+                "data": _config_to_dict(config)
+            })
+            return {"success": True}
+        else:
+            raise HTTPException(status_code=500, detail="No se pudo guardar la configuración")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==================== NUEVO: USUARIOS ====================
+
+@app.get("/usuarios")
+def get_usuarios_api(db: Session = Depends(get_db)):
+    usuarios = crud.get_usuarios(db)
+    return [_usuario_to_dict(u) for u in usuarios]
+
+@app.get("/usuarios/{usuario_id}")
+def get_usuario_api(usuario_id: int, db: Session = Depends(get_db)):
+    usuario = crud.get_usuario(db, usuario_id)
+    if usuario:
+        return _usuario_to_dict(usuario)
+    raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+@app.get("/usuarios/contar_admins")
+def get_contar_admins_api(db: Session = Depends(get_db)):
+    count = crud.contar_admins_activos(db)
+    return {"admins_activos": count}
+
+@app.post("/usuarios")
+async def crear_usuario_api(datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        usuario = crud.crear_usuario_crud(db, datos)
+        if usuario:
+            await manager.broadcast({
+                "type": "usuario_creado",
+                "data": _usuario_to_dict(usuario)
+            })
+            return _usuario_to_dict(usuario)
+        else:
+            raise HTTPException(status_code=400, detail="No se pudo crear el usuario (¿username duplicado?)")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/usuarios/{usuario_id}")
+async def actualizar_usuario_api(usuario_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
+    try:
+        usuario = crud.actualizar_usuario(db, usuario_id, datos)
+        if usuario:
+            await manager.broadcast({
+                "type": "usuario_actualizado",
+                "data": _usuario_to_dict(usuario)
+            })
+            return _usuario_to_dict(usuario)
+        else:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/usuarios/{usuario_id}")
+async def eliminar_usuario_api(usuario_id: int, db: Session = Depends(get_db)):
+    try:
+        success = crud.eliminar_usuario(db, usuario_id)
+        if success:
+            await manager.broadcast({
+                "type": "usuario_eliminado",
+                "data": {"id": usuario_id}
+            })
+            return {"success": True}
+        else:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==================== CONVERSORES (Serializers) ====================
+def _cliente_to_dict(c):
+    if not c:
+        return None
+    return {
+        'id': c.id,
+        'nombre': c.nombre,
+        'tipo': c.tipo,
+        'email': c.email or '',
+        'telefono': c.telefono or '',
+        'rfc': c.rfc or '',
+        'calle': c.calle or '',
+        'colonia': c.colonia or '',
+        'ciudad': c.ciudad or '',
+        'estado': c.estado or '',
+        'cp': c.cp or '',
+        'pais': c.pais or 'México',
+    }
+
+def _proveedor_to_dict(p):
+    if not p:
+        return None
+    return {
+        'id': p.id,
+        'nombre': p.nombre,
+        'tipo': p.tipo,
+        'email': p.email or '',
+        'telefono': p.telefono or '',
+        'rfc': p.rfc or '',
+        'calle': p.calle or '',
+        'colonia': p.colonia or '',
+        'ciudad': p.ciudad or '',
+        'estado': p.estado or '',
+        'cp': p.cp or '',
+        'pais': p.pais or 'México',
+    }
+
+def _producto_to_dict(p):
+    if not p:
+        return None
+    return {
+        'id': p.id,
+        'codigo': p.codigo,
+        'nombre': p.nombre,
+        'categoria': p.categoria or '',
+        'ubicacion': p.ubicacion or '',
+        'proveedor_id': p.proveedor_id,
+        'precio_compra': float(p.precio_compra or 0),
+        'precio_venta': float(p.precio_venta or 0),
+        'stock_actual': p.stock_actual or 0,
+        'stock_min': p.stock_min or 0,
+        'descripcion': p.descripcion or ''
+    }
+
+def _orden_to_dict(o):
+    if not o:
+        return None
+    return {
+        'id': o.id,
+        'folio': o.folio,
+        'cliente_id': o.cliente_id,
+        'cliente_nombre': o.cliente.nombre if o.cliente else 'N/A',
+        'vehiculo_marca': o.vehiculo_marca or '',
+        'vehiculo_modelo': o.vehiculo_modelo or '',
+        'vehiculo_ano': o.vehiculo_ano or '', 
+        'vehiculo_placas': o.vehiculo_placas or '', # Añadido
+        'vehiculo_vin': o.vehiculo_vin or '', # Añadido
+        'vehiculo_color': o.vehiculo_color or '', # Añadido
+        'vehiculo_kilometraje': o.vehiculo_kilometraje or '', # Añadido
+        'estado': o.estado,
+        'fecha_recepcion': o.fecha_recepcion.isoformat() if o.fecha_recepcion else '',
+        'fecha_promesa': o.fecha_promesa.isoformat() if o.fecha_promesa else '', # Añadido
+        'fecha_entrega': o.fecha_entrega.isoformat() if o.fecha_entrega else '', # Añadido
+        'mecanico_asignado': o.mecanico_asignado or '',
+        'observaciones': o.observaciones or '', # Añadido
+        'nota_folio': o.nota_folio or '',
+        'items': [{
+            'id': i.id,
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion
+        } for i in o.items] if hasattr(o, 'items') else []
+    }
+
+def _cotizacion_to_dict(c):
+    if not c:
+        return None
+    return {
+        'id': c.id,
+        'folio': c.folio,
+        'cliente_id': c.cliente_id,
+        'cliente_nombre': c.cliente.nombre if c.cliente else 'N/A',
+        'estado': c.estado,
+        'vigencia': c.vigencia or '30 días',
+        'subtotal': float(c.subtotal or 0),
+        'impuestos': float(c.impuestos or 0), 
+        'total': float(c.total or 0),
+        'observaciones': c.observaciones or '',
+        'fecha': c.created_at.isoformat() if c.created_at else '', # Cambiado a 'fecha' para consistencia
+        'created_at': c.created_at.isoformat() if c.created_at else '', # Mantenemos created_at
+
+        'nota_folio': c.nota_folio or '',
+        'items': [{
+            'id': i.id,
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion,
+            'precio_unitario': float(i.precio_unitario or 0),
+            'importe': float(i.importe or 0),
+            'impuesto': float(i.impuesto or 0)
+        } for i in c.items] if hasattr(c, 'items') else []
+    }
+
+def _nota_to_dict(n):
+    if not n:
+        return None
+    return {
+        'id': n.id,
+        'folio': n.folio,
+        'cliente_id': n.cliente_id,
+        'cliente_nombre': n.cliente.nombre if n.cliente else '',
+        'estado': n.estado,
+        'metodo_pago': n.metodo_pago or '',
+        'subtotal': float(n.subtotal or 0),
+        'impuestos': float(n.impuestos or 0),
+        'total': float(n.total or 0),
+        'total_pagado': float(n.total_pagado or 0),
+        'saldo': float(n.saldo or 0),
+        'fecha': n.fecha.isoformat() if n.fecha else '',
+        'observaciones': n.observaciones or '',
+        'cotizacion_folio': n.cotizacion_folio or '',
+        'orden_folio': n.orden_folio or '',
+        'items': [{
+            'id': i.id,
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion,
+            'precio_unitario': float(i.precio_unitario or 0),
+            'importe': float(i.importe or 0),
+            'impuesto': float(i.impuesto or 0)
+        } for i in n.items] if hasattr(n, 'items') else [],
+        'pagos': [{
+            'id': p.id,
+            'monto': float(p.monto),
+            'fecha_pago': p.fecha_pago.isoformat() if p.fecha_pago else '',
+            'metodo_pago': p.metodo_pago,
+            'memo': p.memo or ''
+        } for p in n.pagos] if hasattr(n, 'pagos') else []
+    }
+
+def _pago_proveedor_to_dict(pago):
+    if not pago: return {}
+    return {
+        'id': pago.id,
+        'nota_id': pago.nota_id,
+        'monto': float(pago.monto),
+        # Corregido a ISO para consistencia
+        'fecha_pago': pago.fecha_pago.isoformat() if pago.fecha_pago else '',
+        'metodo_pago': pago.metodo_pago,
+        'memo': pago.memo or ''
+    }
+
+def _nota_proveedor_to_dict(nota):
+    if not nota: return {}
+    return {
+        'id': nota.id,
+        'folio': nota.folio,
+        'proveedor_id': nota.proveedor_id,
+        'proveedor_nombre': nota.proveedor.nombre if nota.proveedor else '',
+        'estado': nota.estado or 'Registrado',
+        'metodo_pago': nota.metodo_pago or 'Efectivo',
+        'fecha': nota.fecha.isoformat() if nota.fecha else '', # Corregido a ISO
+        'observaciones': nota.observaciones or '',
+        'subtotal': float(nota.subtotal or 0),
+        'impuestos': float(nota.impuestos or 0),
+        'total': float(nota.total or 0),
+        'total_pagado': float(nota.total_pagado or 0),
+        'saldo': float(nota.saldo or 0),
+        'items': [{
+            'id': i.id, # Agregado ID de item
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion,
+            'precio_unitario': float(i.precio_unitario or 0),
+            'importe': float(i.importe or 0),
+            'impuesto': float(i.impuesto or 0)
+        } for i in nota.items],
+        'pagos': [_pago_proveedor_to_dict(p) for p in nota.pagos]
+    }
+
+def _movimiento_to_dict(m):
+    if not m:
+        return None
+    return {
+        'id': m.id,
+        'producto_id': m.producto_id,
+        'producto': m.producto.nombre if m.producto else 'N/A', 
+        'tipo': m.tipo,
+        'cantidad': m.cantidad,
+        'motivo': m.motivo or '',
+        'usuario': m.usuario or '',
+        'fecha': m.created_at.isoformat() if m.created_at else ''
+    }
+
+# --- NUEVO SERIALIZER ---
+def _config_to_dict(c: Optional[ConfigEmpresa]) -> Optional[Dict]:
+    """Convierte un objeto ConfigEmpresa ORM a dict, codificando el logo."""
+    if not c:
+        return None
+    
+    logo_b64 = None
+    if c.logo_data:
+        logo_b64 = base64.b64encode(c.logo_data).decode('utf-8')
+        
+    return {
+        'id': c.id,
+        'nombre_comercial': c.nombre_comercial,
+        'razon_social': c.razon_social or '',
+        'rfc': c.rfc or '',
+        'calle': c.calle or '',
+        'colonia': c.colonia or '',
+        'ciudad': c.ciudad or '',
+        'estado': c.estado or '',
+        'cp': c.cp or '',
+        'pais': c.pais or 'México',
+        'telefono1': c.telefono1 or '',
+        'telefono2': c.telefono2 or '',
+        'email': c.email or '',
+        'sitio_web': c.sitio_web or '',
+        'logo_data': logo_b64 # Enviar como string Base64
+    }
+
+# --- SERIALIZER ACTUALIZADO ---
+def _usuario_to_dict(usuario: Optional[Usuario]) -> Optional[Dict]:
+    """Convierte un objeto Usuario ORM a dict."""
+    if not usuario: 
+        return None
+    return {
+        'id': usuario.id,
+        'username': usuario.username,
+        'password_hash': usuario.password_hash, # Necesario para login
+        'nombre_completo': usuario.nombre_completo,
+        'email': usuario.email or '',
+        'rol': usuario.rol,
+        'activo': usuario.activo,
+        'ultimo_acceso': usuario.ultimo_acceso.isoformat() if usuario.ultimo_acceso else ''
+    }
+
+# ==================== RUTA RAÍZ ====================
 @app.get("/")
 def root():
     return {"message": "Taller API Distribuida - Sistema funcionando"}
 
 if __name__ == "__main__":
     import uvicorn
+    # Asegúrate de importar los modelos antes de crear tablas
+    from server import models
+    from server.database import crear_tablas
+    
+    print("Creando tablas si no existen...")
+    crear_tablas() # Esto es seguro, no borra datos existentes
+    
+    print("Iniciando servidor Uvicorn en 0.0.0.0:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)

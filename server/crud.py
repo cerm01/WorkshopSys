@@ -8,7 +8,8 @@ from server.models import (
     Cliente, Proveedor, Producto, MovimientoInventario,
     Orden, OrdenItem, Cotizacion, CotizacionItem,
     NotaVenta, NotaVentaItem, NotaVentaPago, Usuario,
-    NotaProveedor, NotaProveedorItem, NotaProveedorPago
+    NotaProveedor, NotaProveedorItem, NotaProveedorPago,
+    ConfigEmpresa
 )
 
 
@@ -1126,6 +1127,121 @@ def create_usuario(db: Session, usuario_data: Dict[str, Any]) -> Usuario:
     db.refresh(nuevo_usuario)
     return nuevo_usuario
 
+# ==================== CONFIGURACIÓN EMPRESA ====================
+
+def get_config_empresa(db: Session) -> Optional[ConfigEmpresa]:
+    """Obtener configuración de empresa"""
+    try:
+        config = db.query(ConfigEmpresa).first()
+        return config
+    except Exception as e:
+        print(f"Error get_config_empresa: {e}")
+        return None
+
+def guardar_config_empresa(db: Session, datos: Dict) -> bool:
+    """Guardar o actualizar configuración de empresa"""
+    try:
+        config = db.query(ConfigEmpresa).first()
+        
+        if config:
+            for key, value in datos.items():
+                if hasattr(config, key):
+                    setattr(config, key, value)
+        else:
+            config = ConfigEmpresa(**datos)
+            db.add(config)
+        
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"Error guardar_config_empresa: {e}")
+        db.rollback()
+        return False
+
+# ==================== USUARIOS (CRUD) ====================
+
+def get_usuarios(db: Session) -> List[Usuario]:
+    """Obtener todos los usuarios ACTIVOS"""
+    try:
+        # Añadimos el filtro para mostrar solo los activos
+        return db.query(Usuario).filter(Usuario.activo == True).all()
+    except Exception as e:
+        print(f"Error get_usuarios: {e}")
+        return []
+
+def get_usuario(db: Session, usuario_id: int) -> Optional[Usuario]:
+    """Obtener usuario por ID"""
+    try:
+        return db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    except Exception as e:
+        print(f"Error get_usuario: {e}")
+        return None
+
+def crear_usuario_crud(db: Session, datos: Dict) -> Optional[Usuario]:
+    """Crear nuevo usuario (adaptado de db_helper)"""
+    try:
+        # Validar username único
+        existe = db.query(Usuario).filter(Usuario.username == datos['username']).first()
+        if existe:
+            raise ValueError("El nombre de usuario ya existe")
+        
+        nuevo_usuario = Usuario(**datos)
+        db.add(nuevo_usuario)
+        db.commit()
+        db.refresh(nuevo_usuario)
+        return nuevo_usuario
+    except Exception as e:
+        print(f"Error crear_usuario: {e}")
+        db.rollback()
+        return None
+
+def actualizar_usuario(db: Session, usuario_id: int, datos: Dict) -> Optional[Usuario]:
+    """Actualizar usuario existente"""
+    try:
+        usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+        
+        if not usuario:
+            return None
+        
+        for key, value in datos.items():
+            if hasattr(usuario, key):
+                setattr(usuario, key, value)
+        
+        db.commit()
+        db.refresh(usuario)
+        return usuario
+    except Exception as e:
+        print(f"Error actualizar_usuario: {e}")
+        db.rollback()
+        return None
+
+def contar_admins_activos(db: Session) -> int:
+    """Contar admins activos en el sistema"""
+    try:
+        return db.query(Usuario).filter(
+            Usuario.rol == 'Admin',
+            Usuario.activo == True
+        ).count()
+    except Exception as e:
+        print(f"Error contar_admins_activos: {e}")
+        return 0
+
+def eliminar_usuario(db: Session, usuario_id: int) -> bool:
+    """Eliminar usuario (soft delete)"""
+    try:
+        usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+        
+        if not usuario:
+            return False
+        
+        # Simplemente lo marcamos como inactivo
+        usuario.activo = False
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"Error eliminar_usuario (soft delete): {e}")
+        db.rollback()
+        return False
 
 # ==================== ESTADÍSTICAS Y REPORTES ====================
 
