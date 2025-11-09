@@ -596,6 +596,56 @@ async def crear_movimiento(datos: Dict[str, Any], db: Session = Depends(get_db))
     })
     return {"success": True}
 
+# ==================== REPORTES ====================
+
+@app.get("/reportes/ventas")
+def get_reporte_ventas(fecha_ini: datetime, fecha_fin: datetime, db: Session = Depends(get_db)):
+    try:
+        # Llama a la función existente en crud.py
+        notas = crud.get_reporte_ventas_por_periodo(db, fecha_ini, fecha_fin)
+        # Serializa los resultados usando la función _nota_to_dict que ya existe
+        return [_nota_to_dict(n) for n in notas]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/reportes/servicios")
+def get_reporte_servicios(fecha_ini: datetime, fecha_fin: datetime, db: Session = Depends(get_db)):
+    try:
+        # Llama a la función existente en crud.py
+        resultados = crud.get_reporte_servicios_mas_solicitados(db, fecha_ini, fecha_fin)
+        # Serializa la respuesta (lista de tuplas)
+        return [{"descripcion": r[0], "total_vendido": r[1]} for r in resultados]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/reportes/clientes")
+def get_reporte_clientes(fecha_ini: datetime, fecha_fin: datetime, db: Session = Depends(get_db)):
+    try:
+        # Llama a la función existente en crud.py
+        resultados = crud.get_reporte_clientes_frecuentes(db, fecha_ini, fecha_fin)
+        # Serializa la respuesta (lista de tuplas)
+        return [{"cliente": r[0], "total_notas": r[1], "monto_total": r[2]} for r in resultados]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/reportes/inventario_bajo")
+def get_reporte_inventario_bajo(db: Session = Depends(get_db)):
+    try:
+        # Llama a la función existente en crud.py (get_productos_bajo_stock)
+        productos = crud.get_productos_bajo_stock(db)
+        return [_producto_to_dict(p) for p in productos]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/reportes/cxc")
+def get_reporte_cxc(db: Session = Depends(get_db)):
+    try:
+        # Llama a la función existente en crud.py
+        notas = crud.get_reporte_cuentas_por_cobrar(db)
+        return [_nota_to_dict(n) for n in notas]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ==================== CONVERSORES ====================
 def _cliente_to_dict(c):
     if not c:

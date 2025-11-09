@@ -1,6 +1,7 @@
 import requests
 from typing import List, Dict, Optional, Any
 import json
+from datetime import datetime
 
 class TallerAPIClient:
     def __init__(self, base_url: str = "http://localhost:8000"):
@@ -313,6 +314,40 @@ class TallerAPIClient:
         if limit:
             params['limit'] = limit
         return self._get("/inventario/movimientos", params=params) or []
+    
+    # ==================== REPORTES ====================
+    
+    def get_reporte_ventas(self, fecha_ini: datetime, fecha_fin: datetime) -> List[Dict]:
+        """Obtiene el reporte de ventas por período."""
+        params = {
+            "fecha_ini": fecha_ini.isoformat(),
+            "fecha_fin": fecha_fin.isoformat()
+        }
+        return self._get("/reportes/ventas", params=params) or []
+
+    def get_reporte_servicios(self, fecha_ini: datetime, fecha_fin: datetime) -> List[Dict]:
+        """Obtiene el reporte de servicios más solicitados."""
+        params = {
+            "fecha_ini": fecha_ini.isoformat(),
+            "fecha_fin": fecha_fin.isoformat()
+        }
+        return self._get("/reportes/servicios", params=params) or []
+    
+    def get_reporte_clientes(self, fecha_ini: datetime, fecha_fin: datetime) -> List[Dict]:
+        """Obtiene el reporte de clientes frecuentes."""
+        params = {
+            "fecha_ini": fecha_ini.isoformat(),
+            "fecha_fin": fecha_fin.isoformat()
+        }
+        return self._get("/reportes/clientes", params=params) or []
+    
+    def get_reporte_inventario_bajo_stock(self) -> List[Dict]:
+        """Obtiene el reporte de inventario bajo stock (no usa fechas)."""
+        return self._get("/reportes/inventario_bajo") or []
+
+    def get_reporte_cuentas_por_cobrar(self) -> List[Dict]:
+        """Obtiene el reporte de cuentas por cobrar (no usa fechas)."""
+        return self._get("/reportes/cxc") or []
     
     # ==================== MÉTODOS DE COMPATIBILIDAD ====================
     
