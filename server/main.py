@@ -19,7 +19,32 @@ from server.models import (
     NotaProveedor, NotaProveedorItem, NotaProveedorPago
 )
 
+from pydantic import BaseModel
+from server.crud import verificar_credenciales
+
 app = FastAPI(title="Taller API Distribuida")
+
+# Modelo Pydantic para el login
+class LoginData(BaseModel):
+    username: str
+    password: str
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# ==================== LOGIN ====================
+@app.post("/login")
+def login(data: LoginData, db: Session = Depends(get_db)):
+    # verificar_credenciales ya existe en crud.py
+    usuario = verificar_credenciales(db, data.username, data.password)
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    # _usuario_to_dict ya está definido al final de main.py
+    return _usuario_to_dict(usuario)
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,12 +84,6 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # ==================== CLIENTES ====================
 @app.get("/clientes")
@@ -840,6 +859,20 @@ def _movimiento_to_dict(m):
         'motivo': m.motivo or '',
         'usuario': m.usuario or '',
         'fecha': m.created_at.isoformat() if m.created_at else ''
+    }
+
+def _usuario_to_dict(usuario):
+    if not usuario: 
+        return None
+    return {
+        'id': usuario.id,
+        'username': usuario.username,
+        'password_hash': usuario.password_hash,
+        'nombre_completo': usuario.nombre_completo,
+        'email': usuario.email or '',
+        'rol': usuario.rol,
+        'activo': usuario.activo,
+        'ultimo_acceso': usuario.ultimo_acceso.isoformat() if usuario.ultimo_acceso else ''
     }
 
 # ==================== NOTAS DE PROVEEDOR ====================

@@ -367,9 +367,11 @@ class TallerAPIClient:
         """Lista de usuarios"""
         return []
     
-    def verificar_credenciales(self, username: str, password: str) -> Optional[Dict]:
-        """Verificar login"""
-        return None
+    def validar_login(self, username: str, password: str) -> Optional[Dict]:
+        """Verificar login contra el servidor API."""
+        data = {"username": username, "password": password}
+        # _post maneja los errores HTTP (como 401) y devuelve None si falla
+        return self._post("/login", data)
 
 # Crear instancia global
 api_client = TallerAPIClient()

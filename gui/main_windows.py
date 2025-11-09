@@ -228,6 +228,7 @@ class MainWindow(QDialog):
         """Cierra la ventana principal y emite un código de reinicio."""
         # Código de resultado personalizado para "Cerrar Sesión"
         RESTART_CODE = 1001
+        print(f"DEBUG (MainWindow): Enviando código de salida: {RESTART_CODE}") # <-- AÑADE ESTA LÍNEA
         self.done(RESTART_CODE)
 
     def create_button(self, config, identifier):
