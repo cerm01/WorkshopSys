@@ -1,18 +1,33 @@
 """
-MAIN.PY - Punto de entrada con sistema distribuido
+MAIN.PY - Punto de entrada con sistema distribuido y Auto-Retrain ML
 """
 import sys
 from PyQt5.QtWidgets import QApplication
 from gui.login_windows import LoginWindow
 from gui.main_windows import MainWindow
 from gui.websocket_client import init_websocket
+from ml.auto_retrain import debe_reentrenar, reentrenar_silencioso
 
 # ==================== CONFIGURACIÓN ====================
-SERVER_URL = "localhost:8000"  # Cambiar por IP del servidor si está en otra PC
+SERVER_URL = "localhost:8000"
 
 # ==================== INICIAR APLICACIÓN ====================
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    print("🔍 Verificando modelo ML...")
+    debe, razon = debe_reentrenar()
+    
+    if debe:
+        print(f"🔄 Reentrenando modelo: {razon}")
+        exito = reentrenar_silencioso()
+        
+        if exito:
+            print("✅ Modelo actualizado")
+        else:
+            print("⚠️  Error en reentrenamiento")
+    else:
+        print(f"✅ Modelo OK: {razon}")
     
     # Inicializar WebSocket para notificaciones en tiempo real
     print("🔌 Conectando a servidor...")
