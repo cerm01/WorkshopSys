@@ -6,3 +6,4 @@ dialogs/__pycache__/
 taller.db
 generar_final.py
 ml/__pycache__/
+modelo_ml_onehot.pkl
