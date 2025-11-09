@@ -158,7 +158,7 @@ class MainWindow(QDialog):
         print("Pre-calentando ventanas en segundo plano...")
         try:
             if self.window_instances["administracion"] is None:
-                self.window_instances["administracion"] = AdministracionWindow(self)
+                self.window_instances["administracion"] = AdministracionWindow(self, self.usuario_actual)
                 # Pre-calentar las sub-ventanas de admin
                 self.window_instances["administracion"].precalentar_sub_ventanas()
 
