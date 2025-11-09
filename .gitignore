@@ -8,3 +8,4 @@ generar_final.py
 ml/__pycache__/
 modelo_ml_onehot.pkl
 modelo_metadata.pkl
+__pycache__/
