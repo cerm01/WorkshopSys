@@ -87,11 +87,16 @@ class MainWindow(QDialog):
     def __init__(self, usuario=None):
         super().__init__()
         self.usuario_actual = usuario
+        # Corregir rol de "Usuario" a "Capturista" si viene de la BD antigua
+        if self.usuario_actual and self.usuario_actual.get('rol') == 'Usuario':
+            self.usuario_actual['rol'] = 'Capturista'
+            
         # Actualizar título con usuario
         titulo = self.WINDOW_SETTINGS["title"]
         if usuario:
             nombre = usuario.get('nombre_completo', 'Usuario')
-            rol = usuario.get('rol', '')
+            # Usar el rol corregido si aplica
+            rol = self.usuario_actual.get('rol', '')
             titulo = f"{titulo} - {nombre} ({rol})"
         self.setWindowTitle(titulo)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
@@ -235,6 +240,20 @@ class MainWindow(QDialog):
         """
         Método para crear botones con estilo consistente
         """
+        # Obtener rol
+        rol = self.usuario_actual.get('rol', 'Capturista') if self.usuario_actual else None
+
+        # Definir permisos
+        permisos = {
+            "administracion": (["Admin", "Vendedor", "Mecanico"], "Acceso a módulos administrativos"),
+            "clientes": (["Admin", "Vendedor"], "Gestión de clientes"),
+            "proveedores": (["Admin", "Vendedor"], "Gestión de proveedores"),
+            "inventario": (["Admin", "Vendedor", "Capturista"], "Gestión de inventario"),
+            "reportes": (["Admin", "Vendedor", "Capturista"], "Visualización de reportes"),
+            "configuracion": (["Admin"], "Configuración del sistema"),
+            "cerrar": (["Admin", "Vendedor", "Mecanico", "Capturista"], "Cerrar sesión")
+        }
+
         button = QToolButton()
         button.setText(config["display_name"])
         button.setProperty("identifier", identifier)
@@ -247,14 +266,38 @@ class MainWindow(QDialog):
         if config["display_name"]:
             button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
 
-        if config["class"] is None:
-            if identifier == "cerrar":
-                button.clicked.connect(self.logout) # Conectar a self.logout
-            # else:
-                # button.clicked.connect(self.close) # Acción por defecto si no es 'cerrar'
+        tiene_permiso = False
+        razon = "Rol no reconocido"
+
+        if identifier in permisos:
+            roles_permitidos, razon_permiso = permisos[identifier]
+            # Asumir que si no hay usuario (None), no tiene permiso para nada excepto 'cerrar' (que no se mostrará)
+            if rol in roles_permitidos:
+                tiene_permiso = True
+            else:
+                razon = f"Acceso restringido.\nSolo para roles: {', '.join(roles_permitidos)}."
+        
+        # Caso especial para 'cerrar' que siempre debe estar permitido si hay un rol
+        if identifier == "cerrar" and rol:
+            tiene_permiso = True
+
+        if tiene_permiso:
+            if config["class"] is None:
+                if identifier == "cerrar":
+                    button.clicked.connect(self.logout) # Conectar a self.logout
+            else:
+                # Acción normal: abrir ventana
+                button.clicked.connect(lambda checked=False, id=identifier: self.open_window(id))
         else:
-            # Acción normal: abrir ventana
-            button.clicked.connect(lambda checked=False, id=identifier: self.open_window(id))
+            button.setEnabled(False)
+            button.setToolTip(razon)
+            # Aplicar estilo deshabilitado
+            button.setStyleSheet(BUTTON_STYLE_2 + """
+                QToolButton {
+                    background: #999999;
+                    color: #CCCCCC;
+                }
+            """)
         
         return button
     
@@ -269,9 +312,10 @@ class MainWindow(QDialog):
                 return
 
             if self.window_instances[window_id] is None:
-                self.window_instances[window_id] = window_class(self)
-            
-            # Mostrar la ventana
+                if window_id == "administracion":
+                     self.window_instances[window_id] = window_class(self, self.usuario_actual)
+                else:
+                     self.window_instances[window_id] = window_class(self)
             self.window_instances[window_id].exec_()
         else:
             print(f"Error: No se encontró una ventana con el identificador '{window_id}'")

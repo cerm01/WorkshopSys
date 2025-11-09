@@ -418,7 +418,7 @@ class Usuario(Base):
     email = Column(String(150), unique=True, nullable=True)
     
     # Rol
-    rol = Column(String(50), default="Usuario")  # Admin, Mecánico, Vendedor, Usuario
+    rol = Column(String(50), default="Capturista")  # Admin, Mecanico, Vendedor, Capturista 
     
     # Estado
     activo = Column(Boolean, default=True)

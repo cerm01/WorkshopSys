@@ -45,8 +45,13 @@ class AdministracionWindow(QDialog):
         }
     }
         
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, usuario=None):
         super().__init__(parent)
+        self.usuario_actual = usuario
+        # Corregir rol de "Usuario" a "Capturista" si viene de la BD antigua
+        if self.usuario_actual and self.usuario_actual.get('rol') == 'Usuario':
+            self.usuario_actual['rol'] = 'Capturista'
+            
         self.setWindowTitle("Administración")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
 
@@ -121,6 +126,17 @@ class AdministracionWindow(QDialog):
             config (dict): Configuración del botón
             identifier (str): Identificador del botón
         """
+        # Obtener rol
+        rol = self.usuario_actual.get('rol', 'Capturista') if self.usuario_actual else None
+
+        # Definir permisos internos
+        permisos = {
+            "notas": (["Admin", "Vendedor"], "Gestión de notas de venta"),
+            "cotizaciones": (["Admin", "Vendedor"], "Gestión de cotizaciones"),
+            "ordenes": (["Admin", "Vendedor", "Mecanico"], "Gestión de órdenes de trabajo"),
+            "notas_proveedores": (["Admin", "Vendedor"], "Gestión de notas de proveedor")
+        }
+
         button = QToolButton()
         button.setText(config["display_name"])
         button.setProperty("identifier", identifier)
@@ -130,7 +146,30 @@ class AdministracionWindow(QDialog):
         button.setIcon(recolor_icon(config["icon"], "#FFFFFF"))
         button.setIconSize(QSize(*config["icon_size"]))
         button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        button.clicked.connect(lambda checked=False, id=identifier: self.open_window(id))
+        
+        tiene_permiso = False
+        razon = "Rol no reconocido"
+
+        if identifier in permisos:
+            roles_permitidos, razon_permiso = permisos[identifier]
+            if rol in roles_permitidos:
+                tiene_permiso = True
+            else:
+                razon = f"Acceso restringido.\nSolo para roles: {', '.join(roles_permitidos)}."
+        
+        if tiene_permiso:
+            button.clicked.connect(lambda checked=False, id=identifier: self.open_window(id))
+        else:
+            button.setEnabled(False)
+            button.setToolTip(razon)
+            # Aplicar estilo deshabilitado
+            button.setStyleSheet(BUTTON_STYLE_2 + """
+                QToolButton {
+                    background: #999999;
+                    color: #CCCCCC;
+                }
+            """)
+        
         return button
     
     def open_window(self, window_id):
