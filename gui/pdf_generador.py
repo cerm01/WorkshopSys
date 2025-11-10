@@ -352,3 +352,47 @@ def generar_pdf_orden_trabajo(orden_data, empresa_data, save_path):
         import traceback
         traceback.print_exc()
         return False
+    
+def _dibujar_datos_proveedor(c, nota_data):
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, 9.0 * inch, "PROVEEDOR:")
+    c.setFont("Helvetica", 11)
+    c.drawString(1 * inch, 8.8 * inch, nota_data.get('proveedor_nombre', ''))
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawRightString(7.5 * inch, 9.0 * inch, f"NOTA PROVEEDOR: {nota_data.get('folio', '')}")
+    
+    fecha_str = nota_data.get('fecha', '')
+    fecha_formateada = fecha_str
+    if fecha_str:
+        try:
+            fecha_dt = datetime.fromisoformat(fecha_str) 
+            fecha_formateada = fecha_dt.strftime("%d/%m/%Y") 
+        except ValueError:
+            fecha_formateada = fecha_str.split('T')[0]
+
+    c.setFont("Helvetica", 11)
+    c.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha: {fecha_formateada}")
+    c.drawRightString(7.5 * inch, 8.6 * inch, f"Estado: {nota_data.get('estado', '')}")
+
+def generar_pdf_nota_proveedor(nota_data, empresa_data, save_path):
+    try:
+        c = canvas.Canvas(save_path, pagesize=letter)
+        
+        _dibujar_encabezado(c, empresa_data)
+        
+        _dibujar_datos_proveedor(c, nota_data)
+
+        y_tabla = 8.0 * inch
+        y_final_tabla = _dibujar_tabla_items(c, nota_data.get('items', []), y_tabla)
+        
+        _dibujar_totales(c, nota_data, y_final_tabla)
+        
+        c.showPage()
+        c.save()
+        return True
+    except Exception as e:
+        print(f"Error al generar PDF de Nota Proveedor: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

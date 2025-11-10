@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSizePolicy, QApplication,
     QLabel, QLineEdit, QGridLayout, QGroupBox, QDoubleSpinBox, QMessageBox,
     QTableView, QHeaderView, QMenu, QAction, QFrame, QWidget, QDateEdit, 
-    QCompleter, QInputDialog
+    QCompleter, QInputDialog, QFileDialog
 )
 from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QColor, QFont
@@ -30,6 +30,12 @@ try:
 except ImportError:
     print("Advertencia: No se pudo importar PagosNotaProveedorDialog.")
     PagosNotaProveedorDialog = None
+
+try:
+    from gui.pdf_generador import generar_pdf_nota_proveedor
+except ImportError as e:
+    print(f"Advertencia: No se pudo cargar pdf_generator (nota prov): {e}")
+    generar_pdf_nota_proveedor = None
 
 class NotasProveedoresWindow(QDialog):
     def __init__(self, parent=None):
@@ -438,6 +444,7 @@ class NotasProveedoresWindow(QDialog):
         self.botones[3].clicked.connect(self.buscar_nota)
         self.botones[4].clicked.connect(self.editar_nota)
         self.botones[5].clicked.connect(self.nueva_nota)
+        self.botones[6].clicked.connect(self.imprimir_nota_proveedor)
     
     def cargar_proveedores_bd(self):
         try:
@@ -1241,6 +1248,56 @@ class NotasProveedoresWindow(QDialog):
                 background-color: #00788E;
             }
         """
+    
+    def imprimir_nota_proveedor(self):
+        if not self.nota_actual_id:
+            self.mostrar_advertencia("Primero debe buscar y cargar una nota para imprimir.")
+            return
+
+        if not generar_pdf_nota_proveedor:
+            self.mostrar_error("Error: El módulo de generación de PDF no está disponible.")
+            return
+
+        try:
+            nota_data = db_helper.get_nota_proveedor(self.nota_actual_id)
+            empresa_data = db_helper.get_config_empresa()
+
+            if not nota_data or not empresa_data:
+                self.mostrar_error("No se pudieron obtener los datos completos para la impresión.")
+                return
+
+            folio = nota_data.get('folio', 'NotaProveedor')
+            proveedor = nota_data.get('proveedor_nombre', 'Proveedor').replace(" ", "_")
+            default_filename = f"{folio}_{proveedor}.pdf"
+
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar PDF de Nota Proveedor",
+                default_filename,
+                "Archivos PDF (*.pdf)"
+            )
+
+            if save_path:
+                exito = generar_pdf_nota_proveedor(nota_data, empresa_data, save_path)
+
+                if exito:
+                    self.mostrar_exito(f"PDF generado exitosamente en:\n{save_path}")
+                    try:
+                        if sys.platform == "win32":
+                            os.startfile(save_path)
+                        elif sys.platform == "darwin":
+                            subprocess.call(["open", save_path])
+                        else:
+                            subprocess.call(["xdg-open", save_path])
+                    except Exception as e:
+                        print(f"No se pudo abrir el PDF automáticamente: {e}")
+                else:
+                    self.mostrar_error("Ocurrió un error al generar el archivo PDF.")
+
+        except Exception as e:
+            self.mostrar_error(f"Error al preparar la impresión: {e}")
+            import traceback
+            traceback.print_exc()
 
     def closeEvent(self, event):
         event.accept()
