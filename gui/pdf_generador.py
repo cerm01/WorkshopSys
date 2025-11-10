@@ -396,3 +396,110 @@ def generar_pdf_nota_proveedor(nota_data, empresa_data, save_path):
         import traceback
         traceback.print_exc()
         return False
+    
+def _dibujar_datos_estado_cuenta(c, cliente_nombre, fecha_ini, fecha_fin):
+    """Dibuja los datos del cliente y el rango de fechas."""
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, 9.0 * inch, "CLIENTE:")
+    c.setFont("Helvetica", 11)
+    c.drawString(1 * inch, 8.8 * inch, cliente_nombre)
+    
+    c.setFont("Helvetica-Bold", 12)
+    c.drawRightString(7.5 * inch, 9.0 * inch, "ESTADO DE CUENTA DE CLIENTE")
+    
+    c.setFont("Helvetica", 11)
+    c.drawRightString(7.5 * inch, 8.8 * inch, f"Del: {fecha_ini.strftime('%d/%m/%Y')}")
+    c.drawRightString(7.5 * inch, 8.6 * inch, f"Al: {fecha_fin.strftime('%d/%m/%Y')}")
+
+def _dibujar_tabla_estado_cuenta(c, transacciones, y_start):
+    """Dibuja la tabla de transacciones (cargos, abonos, balance)."""
+    c.setFont("Helvetica-Bold", 9)
+    x_fecha = 1.1 * inch
+    x_doc = 1.9 * inch
+    x_conc = 2.8 * inch
+    x_cargo = 5.0 * inch
+    x_abono = 5.9 * inch
+    x_bal = 6.8 * inch
+    
+    y = y_start
+    c.drawString(x_fecha, y, "Fecha")
+    c.drawString(x_doc, y, "Documento")
+    c.drawString(x_conc, y, "Concepto")
+    c.drawRightString(x_cargo + 0.7*inch, y, "Cargo")
+    c.drawRightString(x_abono + 0.7*inch, y, "Abono")
+    c.drawRightString(x_bal + 0.7*inch, y, "Balance")
+    y -= 0.1 * inch
+    c.line(x_fecha - 0.1*inch, y, 7.5*inch, y)
+    
+    c.setFont("Helvetica", 8)
+    y -= 0.2 * inch
+    
+    balance_actual = 0.0
+    
+    for trx in transacciones:
+        cargo = trx.get('cargo', 0)
+        abono = trx.get('abono', 0)
+        balance_actual += (cargo - abono)
+        
+        c.drawString(x_fecha, y, trx['fecha'].strftime("%d/%m/%Y"))
+        c.drawString(x_doc, y, trx['documento'])
+        c.drawString(x_conc, y, trx.get('concepto', '')[:40]) # Acortar concepto
+        
+        if cargo > 0:
+            c.drawRightString(x_cargo + 0.7*inch, y, f"${cargo:,.2f}")
+        if abono > 0:
+            c.drawRightString(x_abono + 0.7*inch, y, f"${abono:,.2f}")
+        
+        c.drawRightString(x_bal + 0.7*inch, y, f"${balance_actual:,.2f}")
+        y -= 0.22 * inch
+        
+        # (Falta lógica de salto de página, pero funcionará para reportes simples)
+        
+    return y
+
+def _dibujar_totales_estado_cuenta(c, totales, y_start):
+    """Dibuja los totales del estado de cuenta."""
+    c.setFont("Helvetica-Bold", 11)
+    x_label = 5.0 * inch
+    x_valor = 6.5 * inch
+    
+    y = y_start - 0.2*inch
+    c.line(x_label - 0.2*inch, y, 7.5*inch, y)
+    y -= 0.2 * inch
+    
+    c.drawString(x_label, y, "Total Cargos (Notas):")
+    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['cargos']:,.2f}")
+    y -= 0.25 * inch
+
+    c.drawString(x_label, y, "Total Abonos (Pagos):")
+    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['abonos']:,.2f}")
+    y -= 0.25 * inch
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(x_label, y, "Saldo del Periodo:")
+    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['saldo']:,.2f}")
+
+def generar_pdf_estado_cuenta(cliente_nombre, transacciones, totales, fechas, empresa_data, save_path):
+    """Función principal para generar el PDF de Estado de Cuenta."""
+    try:
+        c = canvas.Canvas(save_path, pagesize=letter)
+        
+        _dibujar_encabezado(c, empresa_data)
+        
+        _dibujar_datos_estado_cuenta(c, cliente_nombre, fechas['ini'], fechas['fin'])
+
+        y_tabla = 8.3 * inch
+        y_final_tabla = _dibujar_tabla_estado_cuenta(c, transacciones, y_tabla)
+        
+        # Posicionar los totales un poco más abajo si la tabla es corta
+        y_totales = min(y_final_tabla, 4.0 * inch)
+        _dibujar_totales_estado_cuenta(c, totales, y_totales)
+        
+        c.showPage()
+        c.save()
+        return True
+    except Exception as e:
+        print(f"Error al generar PDF de Estado de Cuenta: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

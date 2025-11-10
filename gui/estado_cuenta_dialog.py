@@ -1,10 +1,11 @@
 import sys
 import os
+import subprocess
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
     QGroupBox, QMessageBox, QTableView, QHeaderView, QFrame, 
-    QWidget, QDateEdit, QApplication, QGridLayout
+    QWidget, QDateEdit, QApplication, QGridLayout, QFileDialog
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor, QFont
@@ -12,6 +13,13 @@ from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor, QFont
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
+
+try:
+    from gui.api_client import api_client as db_helper 
+    from gui.pdf_generador import generar_pdf_estado_cuenta
+except ImportError as e:
+    print(f"Error de importación en EstadoCuentaClienteDialog: {e}")
+    generar_pdf_estado_cuenta = None
 
 try:
     from gui.api_client import api_client as db_helper 
@@ -41,6 +49,8 @@ class EstadoCuentaClienteDialog(QDialog):
         super().__init__(parent)
         self.cliente_id = cliente_id
         self.cliente_nombre = cliente_nombre
+        self.transacciones_reporte = []
+        self.totales_reporte = {'cargos': 0, 'abonos': 0, 'saldo': 0}
         
         self.setWindowTitle(f"Estado de Cuenta - {self.cliente_nombre}")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
@@ -66,9 +76,13 @@ class EstadoCuentaClienteDialog(QDialog):
         # Botón de Cerrar
         btn_cerrar = QPushButton("Cerrar")
         btn_cerrar.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
+
+        self.btn_imprimir_footer = QPushButton("Imprimir")
+        self.btn_imprimir_footer.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         
         bottom_layout = QHBoxLayout()
         bottom_layout.addStretch()
+        bottom_layout.addWidget(self.btn_imprimir_footer)
         bottom_layout.addWidget(btn_cerrar)
         
         main_layout.addLayout(bottom_layout)
@@ -102,7 +116,9 @@ class EstadoCuentaClienteDialog(QDialog):
         self.btn_filtrar = QPushButton("Generar Reporte")
         self.btn_filtrar.setStyleSheet(FORM_BUTTON_STYLE)
         self.btn_filtrar.setFixedHeight(50)
-
+        self.btn_exportar_pdf = QPushButton("Exportar PDF")
+        self.btn_exportar_pdf.setStyleSheet(FORM_BUTTON_STYLE)
+        self.btn_exportar_pdf.setFixedHeight(50)
         layout.addWidget(lbl_ini, 0)
         layout.addWidget(self.date_inicial, 1)
         layout.addWidget(lbl_fin, 0)
@@ -200,12 +216,16 @@ class EstadoCuentaClienteDialog(QDialog):
     def conectar_senales(self):
         self.btn_filtrar.clicked.connect(self.cargar_datos)
         self.btn_cerrar.clicked.connect(self.accept)
+        self.btn_exportar_pdf.clicked.connect(self.imprimir_estado_cuenta)
+        self.btn_imprimir_footer.clicked.connect(self.imprimir_estado_cuenta)
 
     def on_notificacion_remota(self, data):
         self.cargar_datos()
 
     def cargar_datos(self):
         self.tabla_model.setRowCount(0)
+        self.transacciones_reporte = [] 
+        self.totales_reporte = {'cargos': 0, 'abonos': 0, 'saldo': 0}
         
         fecha_ini = self.date_inicial.date().toPyDate()
         fecha_fin = self.date_final.date().toPyDate()
@@ -253,6 +273,7 @@ class EstadoCuentaClienteDialog(QDialog):
 
             # 4. Ordenar todas las transacciones por fecha
             transacciones.sort(key=lambda x: x['fecha'])
+            self.transacciones_reporte = transacciones
 
             # 5. Poblar la tabla y calcular balance corriente
             balance_actual = 0.0
@@ -289,6 +310,12 @@ class EstadoCuentaClienteDialog(QDialog):
                     item_fecha, item_doc, item_concepto, item_cargo, item_abono, item_balance
                 ])
             
+            self.totales_reporte = {
+            'cargos': total_cargos,
+            'abonos': total_abonos,
+            'saldo': balance_actual
+            }
+            
             # 6. Actualizar panel de resumen
             self.lbl_total_cargos.setText(f"$ {total_cargos:,.2f}")
             self.lbl_total_abonos.setText(f"$ {total_abonos:,.2f}")
@@ -311,6 +338,61 @@ class EstadoCuentaClienteDialog(QDialog):
         msg_box = QMessageBox(tipo, titulo, mensaje, QMessageBox.Ok, self)
         msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         msg_box.exec_()
+
+    def imprimir_estado_cuenta(self):
+        if not self.transacciones_reporte and self.tabla_model.rowCount() == 0:
+            self.mostrar_mensaje("Sin datos", "Genere un reporte primero antes de exportar.", QMessageBox.Warning)
+            return
+
+        if not generar_pdf_estado_cuenta:
+            self.mostrar_mensaje("Error", "El módulo de generación de PDF no está disponible.", QMessageBox.Critical)
+            return
+
+        try:
+            empresa_data = db_helper.get_config_empresa()
+            if not empresa_data:
+                self.mostrar_mensaje("Error", "No se pudieron obtener los datos de la empresa.", QMessageBox.Critical)
+                return
+
+            cliente_nombre = self.cliente_nombre
+            transacciones = self.transacciones_reporte
+            totales = self.totales_reporte
+            fechas = {
+                'ini': self.date_inicial.date().toPyDate(),
+                'fin': self.date_final.date().toPyDate()
+            }
+
+            default_filename = f"EdoCuenta_{cliente_nombre.replace(' ', '_')}_{fechas['fin'].strftime('%Y%m%d')}.pdf"
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar Estado de Cuenta",
+                default_filename,
+                "Archivos PDF (*.pdf)"
+            )
+
+            if save_path:
+                exito = generar_pdf_estado_cuenta(
+                    cliente_nombre, transacciones, totales, fechas, empresa_data, save_path
+                )
+
+                if exito:
+                    self.mostrar_mensaje("Éxito", f"PDF generado exitosamente en:\n{save_path}", QMessageBox.Information)
+                    try:
+                        if sys.platform == "win32":
+                            os.startfile(save_path)
+                        elif sys.platform == "darwin":
+                            subprocess.call(["open", save_path])
+                        else:
+                            subprocess.call(["xdg-open", save_path])
+                    except Exception as e:
+                        print(f"No se pudo abrir el PDF automáticamente: {e}")
+                else:
+                    self.mostrar_mensaje("Error", "Ocurrió un error al generar el archivo PDF.", QMessageBox.Critical)
+
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"Error al preparar la impresión: {e}", QMessageBox.Critical)
+            import traceback
+            traceback.print_exc()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
