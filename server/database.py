@@ -36,12 +36,16 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 def get_db():
-    """Dependency para obtener sesión de BD"""
+    """Dependency para obtener sesión de BD (async)"""
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+def get_db_sync():
+    """Obtener sesión de BD (sync) para uso directo"""
+    return SessionLocal()
 
 def crear_tablas():
     """Crear todas las tablas"""
