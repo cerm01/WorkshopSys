@@ -11,7 +11,7 @@ from reportlab.lib.units import inch
 from reportlab.pdfbase.pdfmetrics import stringWidth 
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 
@@ -79,7 +79,7 @@ def _dibujar_encabezado(c, empresa_data):
         c.drawString(text_x_start, y_addr, linea)
         y_addr -= 0.2 * inch
 
-    ciudad = empresa_data.get('ciudad', '') # 'ciudad' en la BD es el municipio
+    ciudad = empresa_data.get('ciudad', '')
     estado = empresa_data.get('estado', '')
     if ciudad or estado:
         linea = f"{ciudad}{', ' if ciudad and estado else ''}{estado}"
@@ -100,135 +100,358 @@ def _dibujar_encabezado(c, empresa_data):
     if web := empresa_data.get('sitio_web'):
         c.drawString(text_x_start, y_addr, web)
 
-def _dibujar_tabla_items(c, items, y_start):
-    """Dibuja la tabla de conceptos."""
-    c.setFont("Helvetica-Bold", 10)
-    x_cant = 1.1 * inch
-    x_desc = 1.8 * inch
-    x_precio = 5.5 * inch
-    x_importe = 6.5 * inch
+# --- FUNCIÓN DE HEADER/FOOTER PARA NOTAS, COTIZACIONES, NOTA PROV ---
+def _header_footer_platypus(canvas, doc, empresa_data, titulo_doc, datos_doc):
+    """
+    Dibuja el encabezado y pie de página en CADA página para documentos
+    generados con SimpleDocTemplate (Platypus).
+    """
+    canvas.saveState()
+    width, height = letter
     
-    c.drawString(x_cant, y_start, "Cant.")
-    c.drawString(x_desc, y_start, "Descripción")
-    c.drawRightString(x_precio + 0.7*inch, y_start, "P. Unitario")
-    c.drawRightString(x_importe + 0.7*inch, y_start, "Importe")
-    c.line(x_cant - 0.1*inch, y_start - 0.1*inch, 7.5*inch, y_start - 0.1*inch)
+    # --- 1. Encabezado de la Empresa ---
+    _dibujar_encabezado(canvas, empresa_data)
     
-    c.setFont("Helvetica", 9)
-    y = y_start - 0.3 * inch
+    # --- 2. Título del Documento y Datos del Cliente/Proveedor ---
+    y_top_doc = 9.0 * inch
     
-    for item in items:
-        if item.get('tipo', 'normal') != 'normal': 
-            continue
-            
-        c.drawString(x_cant, y, str(item['cantidad']))
-        c.drawString(x_desc, y, item['descripcion'][:60]) # Limitar descripción
-        c.drawRightString(x_precio + 0.7*inch, y, f"${item['precio_unitario']:,.2f}")
-        c.drawRightString(x_importe + 0.7*inch, y, f"${item['importe']:,.2f}")
-        y -= 0.25 * inch
+    # Cliente o Proveedor
+    canvas.setFont("Helvetica-Bold", 12)
+    canvas.drawString(1 * inch, y_top_doc, datos_doc.get('titulo_entidad', 'CLIENTE:'))
+    canvas.setFont("Helvetica", 11)
+    canvas.drawString(1 * inch, y_top_doc - 0.2*inch, datos_doc.get('nombre_entidad', ''))
     
-    return y 
+    # Datos extra (ej. Proyecto en Cotización)
+    if extra := datos_doc.get('linea_extra'):
+         canvas.drawString(1 * inch, y_top_doc - 0.4*inch, extra)
 
-def _dibujar_totales(c, nota_data, y_start):
-    """Dibuja el subtotal, impuestos y total."""
-    c.setFont("Helvetica-Bold", 11)
-    x_label = 5.5 * inch
-    x_valor = 6.5 * inch
+    # Folio y Fechas
+    canvas.setFont("Helvetica-Bold", 12)
+    canvas.drawRightString(7.5 * inch, y_top_doc, f"{titulo_doc}: {datos_doc.get('folio', '')}")
     
-    y = y_start - 0.2*inch
-    c.line(x_label - 0.2*inch, y, 7.5*inch, y)
-    y -= 0.2 * inch
+    canvas.setFont("Helvetica", 11)
+    canvas.drawRightString(7.5 * inch, y_top_doc - 0.2*inch, f"Fecha: {datos_doc.get('fecha', '')}")
     
-    c.drawString(x_label, y, "Subtotal:")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${nota_data.get('subtotal', 0):,.2f}")
-    y -= 0.25 * inch
+    # Línea extra 1 (ej. Estado o Vigencia)
+    if extra1 := datos_doc.get('extra_derecha_1'):
+        canvas.drawRightString(7.5 * inch, y_top_doc - 0.4*inch, extra1)
 
-    c.drawString(x_label, y, "Impuestos:")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${nota_data.get('impuestos', 0):,.2f}")
-    y -= 0.25 * inch
+    # Línea extra 2 (ej. Estado)
+    if extra2 := datos_doc.get('extra_derecha_2'):
+        canvas.drawRightString(7.5 * inch, y_top_doc - 0.6*inch, extra2)
 
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(x_label, y, "TOTAL:")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${nota_data.get('total', 0):,.2f}")
+    # --- 3. Pie de Página ---
+    fecha_gen = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    canvas.setFont("Helvetica", 9)
+    canvas.drawString(1 * inch, 0.75 * inch, f"Generado: {fecha_gen}")
+    canvas.drawRightString(width - 1 * inch, 0.75 * inch, f"Página {canvas.getPageNumber()}")
+    
+    canvas.restoreState()
 
-
+# --- FUNCIÓN GENERAR_PDF_NOTA_VENTA ---
 def generar_pdf_nota_venta(nota_data, empresa_data, save_path):
     """
     Función principal para generar el PDF de una Nota de Venta.
     """
     try:
-        c = canvas.Canvas(save_path, pagesize=letter)
-        width, height = letter 
+        doc = SimpleDocTemplate(save_path, pagesize=letter,
+                                leftMargin=1*inch, rightMargin=1*inch,
+                                topMargin=3.0*inch, bottomMargin=1*inch)
         
-        # 1. Encabezado (Logo y Datos Empresa)
-        _dibujar_encabezado(c, empresa_data)
+        story = []
+        styles = getSampleStyleSheet()
         
-        # 2. Datos del Cliente y Folio
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(1 * inch, 9.0 * inch, "CLIENTE:")
-        c.setFont("Helvetica", 11)
-        c.drawString(1 * inch, 8.8 * inch, nota_data.get('cliente_nombre', ''))
+        # --- Estilos ---
+        style_body = styles['BodyText']
+        style_body.fontSize = 9
+        style_body.alignment = TA_LEFT 
         
-        c.setFont("Helvetica-Bold", 12)
-        c.drawRightString(7.5 * inch, 9.0 * inch, f"NOTA: {nota_data.get('folio', '')}")
+        style_body_right = ParagraphStyle(name='BodyRight', parent=style_body, alignment=TA_RIGHT)
         
+        style_header_base = ParagraphStyle(name='HeaderBase', parent=styles['Normal'],
+                                      fontName='Helvetica-Bold', fontSize=10,
+                                      textColor=colors.black) 
+        style_header_left = ParagraphStyle(name='HeaderLeft', parent=style_header_base, alignment=TA_LEFT)
+        style_header_right = ParagraphStyle(name='HeaderRight', parent=style_header_base, alignment=TA_RIGHT)
+                                      
+        style_total_label = ParagraphStyle(name='TotalLabel', parent=style_body,
+                                           alignment=TA_RIGHT, fontName='Helvetica-Bold', fontSize=11)
+        style_total_value = ParagraphStyle(name='TotalValue', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=11)
+        style_grand_total = ParagraphStyle(name='GrandTotal', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=12,
+                                           textColor=colors.HexColor("#00788E"))
+
+        # --- 1. Tabla de Items ---
+        table_data = []
+        wrapped_headers = [
+            Paragraph("Cant.", style_header_left),
+            Paragraph("Descripción", style_header_left),
+            Paragraph("P. Unitario", style_header_right),
+            Paragraph("IVA %", style_header_right),
+            Paragraph("Importe", style_header_right)
+        ]
+        table_data.append(wrapped_headers)
+
+        items = nota_data.get('items', [])
+        for item in items:
+            
+            cant = str(item['cantidad'])
+            desc = Paragraph(item['descripcion'], style_body) 
+            precio = f"${item['precio_unitario']:,.2f}"
+            iva = f"{item['impuesto']:.1f} %"
+            importe = f"${item['importe']:,.2f}" 
+            
+            wrapped_row = [
+                Paragraph(cant, style_body), 
+                desc, 
+                Paragraph(precio, style_body_right), 
+                Paragraph(iva, style_body_right), 
+                Paragraph(importe, style_body_right)
+            ]
+            table_data.append(wrapped_row)
+        
+        col_widths = [0.6*inch, 3.1*inch, 1*inch, 0.7*inch, 1.1*inch]
+        items_table = Table(table_data, colWidths=col_widths, repeatRows=1) 
+
+        ts_items = TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            
+            # Estilo de la imagen
+            ('LINEABOVE', (0,0), (-1,0), 1.5, colors.black), 
+            ('LINEBELOW', (0,0), (-1,0), 1.5, colors.black), 
+            
+            ('TOPPADDING', (0,0), (-1,0), 6),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+            ('TOPPADDING', (0,1), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,1), (-1,-1), 4),
+            
+            # Alineación de datos
+            ('ALIGN', (0,1), (0,-1), 'LEFT'), 
+            ('ALIGN', (1,1), (1,-1), 'LEFT'), 
+            ('ALIGN', (2,1), (2,-1), 'RIGHT'), 
+            ('ALIGN', (3,1), (3,-1), 'RIGHT'), 
+            ('ALIGN', (4,1), (4,-1), 'RIGHT'), 
+        ])
+        
+        items_table.setStyle(ts_items)
+        story.append(items_table)
+        
+        # --- 2. Tabla de Totales ---
+        story.append(Spacer(1, 0.2*inch))
+        
+        subtotal = nota_data.get('subtotal', 0)
+        impuestos = nota_data.get('impuestos', 0)
+        total = nota_data.get('total', 0)
+        total_pagado = nota_data.get('total_pagado', 0)
+        saldo = nota_data.get('saldo', 0)
+
+        totals_data = [
+            ['', Paragraph('Subtotal:', style_total_label), Paragraph(f'${subtotal:,.2f}', style_total_value)],
+            ['', Paragraph('Impuestos:', style_total_label), Paragraph(f'${impuestos:,.2f}', style_total_value)],
+            ['', Paragraph('TOTAL:', style_total_label), Paragraph(f'${total:,.2f}', style_grand_total)],
+            ['', Paragraph('Total Pagado:', style_total_label), Paragraph(f'${total_pagado:,.2f}', style_total_value)],
+            ['', Paragraph('Saldo Pendiente:', style_total_label), Paragraph(f'${saldo:,.2f}', style_grand_total)],
+        ]
+        
+        totals_table = Table(totals_data, colWidths=[4.4*inch, 1.0*inch, 1.1*inch])
+        totals_table.setStyle(TableStyle([
+            ('LINEABOVE', (1,2), (2,2), 1, colors.HexColor("#00788E")),
+            ('TOPPADDING', (0,2), (-1,-1), 4), 
+        ]))
+        story.append(totals_table)
+
+        # --- 3. Preparar datos para el Header/Footer ---
         fecha_str = nota_data.get('fecha', '')
-        fecha_formateada = fecha_str # Valor por defecto
-        
+        fecha_formateada = fecha_str
         if fecha_str:
             try:
                 fecha_dt = datetime.fromisoformat(fecha_str) 
-                # Formatear a dd/MM/yyyy
                 fecha_formateada = fecha_dt.strftime("%d/%m/%Y") 
             except ValueError:
-                # Fallback por si acaso
                 fecha_formateada = fecha_str.split('T')[0]
-
-        c.setFont("Helvetica", 11)
-        c.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha: {fecha_formateada}")
-        c.drawRightString(7.5 * inch, 8.6 * inch, f"Estado: {nota_data.get('estado', '')}")
-
-        # 3. Tabla de Items
-        y_tabla = 8.0 * inch
-        y_final_tabla = _dibujar_tabla_items(c, nota_data.get('items', []), y_tabla)
         
-        # 4. Totales
-        _dibujar_totales(c, nota_data, y_final_tabla)
+        datos_doc = {
+            'titulo_entidad': 'CLIENTE:',
+            'nombre_entidad': nota_data.get('cliente_nombre', ''),
+            'folio': nota_data.get('folio', ''),
+            'fecha': fecha_formateada,
+            'extra_derecha_1': f"Estado: {nota_data.get('estado', '')}", 
+            'linea_extra': nota_data.get('observaciones', '') 
+        }
+
+        header_footer_func = partial(
+            _header_footer_platypus, 
+            empresa_data=empresa_data, 
+            titulo_doc="NOTA DE VENTA",
+            datos_doc=datos_doc
+        )
         
-        # 5. Guardar el PDF
-        c.showPage()
-        c.save()
+        # --- 4. Construir PDF ---
+        doc.build(story, onFirstPage=header_footer_func, onLaterPages=header_footer_func)
         return True
     except Exception as e:
-        print(f"Error al generar PDF: {e}")
+        print(f"Error al generar PDF (Platypus): {e}")
         import traceback
         traceback.print_exc()
         return False
 
+# --- FUNCIÓN GENERAR_PDF_COTIZACION ---
 def generar_pdf_cotizacion(cotizacion_data, empresa_data, save_path):
     """
     Función principal para generar el PDF de una Cotización.
+    (Versión actualizada con Platypus para soportar saltos de página)
     """
     try:
-        c = canvas.Canvas(save_path, pagesize=letter)
-        width, height = letter 
+        doc = SimpleDocTemplate(save_path, pagesize=letter,
+                                leftMargin=1*inch, rightMargin=1*inch,
+                                topMargin=3.0*inch, bottomMargin=1*inch)
         
-        # 1. Encabezado 
-        _dibujar_encabezado(c, empresa_data)
+        story = []
+        styles = getSampleStyleSheet()
         
-        # 2. Datos del Cliente y Folio
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(1 * inch, 9.0 * inch, "CLIENTE:")
-        c.setFont("Helvetica", 11)
-        c.drawString(1 * inch, 8.8 * inch, cotizacion_data.get('cliente_nombre', ''))
+        # --- Estilos ---
+        style_body = styles['BodyText']
+        style_body.fontSize = 9
+        style_body.alignment = TA_LEFT 
         
-        if proyecto := cotizacion_data.get('observaciones'):
-             c.drawString(1 * inch, 8.6 * inch, f"Proyecto: {proyecto}")
+        style_body_right = ParagraphStyle(name='BodyRight', parent=style_body, alignment=TA_RIGHT)
+        
+        style_header_base = ParagraphStyle(name='HeaderBase', parent=styles['Normal'],
+                                      fontName='Helvetica-Bold', fontSize=10,
+                                      textColor=colors.black) 
+        style_header_left = ParagraphStyle(name='HeaderLeft', parent=style_header_base, alignment=TA_LEFT)
+        style_header_right = ParagraphStyle(name='HeaderRight', parent=style_header_base, alignment=TA_RIGHT)
+                                      
+        style_total_label = ParagraphStyle(name='TotalLabel', parent=style_body,
+                                           alignment=TA_RIGHT, fontName='Helvetica-Bold', fontSize=11)
+        style_total_value = ParagraphStyle(name='TotalValue', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=11)
+        style_grand_total = ParagraphStyle(name='GrandTotal', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=12,
+                                           textColor=colors.HexColor("#00788E"))
+        
+        style_seccion = ParagraphStyle(name='Seccion', parent=styles['Normal'],
+                                       fontName='Helvetica-Bold', fontSize=10,
+                                       textColor=colors.HexColor("#00788E"),
+                                       alignment=TA_LEFT, spaceBefore=6, spaceAfter=2)
+        
+        style_nota = ParagraphStyle(name='Nota', parent=styles['Italic'],
+                                    fontSize=9, textColor=colors.HexColor("#333333"),
+                                    alignment=TA_LEFT)
+        
+        style_condiciones = ParagraphStyle(name='Condiciones', parent=styles['Normal'],
+                                           fontSize=8, textColor=colors.HexColor("#333333"),
+                                           alignment=TA_LEFT, spaceBefore=6)
 
-        c.setFont("Helvetica-Bold", 12)
-        c.drawRightString(7.5 * inch, 9.0 * inch, f"COTIZACIÓN: {cotizacion_data.get('folio', '')}")
+        # --- 1. Tabla de Items ---
+        table_data = []
+        wrapped_headers = [
+            Paragraph("Cant.", style_header_left),
+            Paragraph("Descripción", style_header_left),
+            Paragraph("P. Unitario", style_header_right),
+            Paragraph("IVA %", style_header_right),
+            Paragraph("Importe", style_header_right)
+        ]
+        table_data.append(wrapped_headers)
+
+        items = cotizacion_data.get('items', [])
         
-        # Formatear fecha de creación (ISO)
+        for item in items:
+            tipo = item.get('tipo', 'normal')
+            
+            if tipo == 'normal':
+                cant = str(item['cantidad'])
+                desc = Paragraph(item['descripcion'], style_body)
+                precio = f"${item['precio_unitario']:,.2f}"
+                iva = f"{item['impuesto']:.1f} %"
+                importe = f"${item['importe']:,.2f}"
+                
+                wrapped_row = [
+                    Paragraph(cant, style_body), 
+                    desc, 
+                    Paragraph(precio, style_body_right), 
+                    Paragraph(iva, style_body_right), 
+                    Paragraph(importe, style_body_right)
+                ]
+                table_data.append(wrapped_row)
+            
+            else:
+                descripcion = item['descripcion']
+                if tipo == 'seccion':
+                    p = Paragraph(descripcion, style_seccion)
+                elif tipo == 'nota':
+                    p = Paragraph(descripcion, style_nota)
+                elif tipo == 'condiciones':
+                    p = Paragraph(descripcion.replace('\n', '<br/>'), style_condiciones)
+                else:
+                    p = Paragraph(descripcion, style_body)
+
+                table_data.append([p, '', '', '', ''])
+                
+        
+        col_widths = [0.6*inch, 3.1*inch, 1*inch, 0.7*inch, 1.1*inch]
+        items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+        ts_items = TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            
+            # Estilo de la imagen
+            ('LINEABOVE', (0,0), (-1,0), 1.5, colors.black), 
+            ('LINEBELOW', (0,0), (-1,0), 1.5, colors.black), 
+
+            ('TOPPADDING', (0,0), (-1,0), 6),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+
+            # Alineación de datos
+            ('ALIGN', (2,1), (2,-1), 'RIGHT'), 
+            ('ALIGN', (3,1), (3,-1), 'RIGHT'), 
+            ('ALIGN', (4,1), (4,-1), 'RIGHT'), 
+        ])
+
+        # Aplicar estilos de fila
+        for i, item in enumerate(items, 1): 
+            tipo = item.get('tipo', 'normal')
+            if tipo == 'normal':
+                ts_items.add('TOPPADDING', (0,i), (-1,i), 4)
+                ts_items.add('BOTTOMPADDING', (0,i), (-1,i), 4)
+                ts_items.add('VALIGN', (0,i), (-1,i), 'MIDDLE')
+            else:
+                ts_items.add('SPAN', (0,i), (4,i))
+                ts_items.add('TOPPADDING', (0,i), (0,i), 6)
+                ts_items.add('BOTTOMPADDING', (0,i), (0,i), 6)
+                
+                if tipo == 'seccion':
+                    ts_items.add('BACKGROUND', (0,i), (0,i), colors.HexColor("#E0F7FA"))
+                elif tipo == 'nota':
+                    ts_items.add('BACKGROUND', (0,i), (0,i), colors.HexColor("#F5F5F5"))
+                elif tipo == 'condiciones':
+                    ts_items.add('BACKGROUND', (0,i), (0,i), colors.HexColor("#FFFBEA"))
+
+        items_table.setStyle(ts_items)
+        story.append(items_table)
+        
+        # --- 2. Tabla de Totales ---
+        story.append(Spacer(1, 0.2*inch))
+        
+        subtotal = cotizacion_data.get('subtotal', 0)
+        impuestos = cotizacion_data.get('impuestos', 0)
+        total = cotizacion_data.get('total', 0)
+
+        totals_data = [
+            ['', Paragraph('Subtotal:', style_total_label), Paragraph(f'${subtotal:,.2f}', style_total_value)],
+            ['', Paragraph('Impuestos:', style_total_label), Paragraph(f'${impuestos:,.2f}', style_total_value)],
+            ['', Paragraph('TOTAL:', style_total_label), Paragraph(f'${total:,.2f}', style_grand_total)],
+        ]
+        
+        totals_table = Table(totals_data, colWidths=[4.4*inch, 1.0*inch, 1.1*inch])
+        totals_table.setStyle(TableStyle([
+            ('LINEABOVE', (1,2), (2,2), 1, colors.HexColor("#00788E")),
+            ('TOPPADDING', (0,2), (-1,2), 4),
+        ]))
+        story.append(totals_table)
+
+        # --- 3. Preparar datos para el Header/Footer ---
         fecha_str = cotizacion_data.get('fecha', '')
         fecha_formateada = fecha_str
         if fecha_str:
@@ -237,420 +460,720 @@ def generar_pdf_cotizacion(cotizacion_data, empresa_data, save_path):
                 fecha_formateada = fecha_dt.strftime("%d/%m/%Y") 
             except ValueError:
                 fecha_formateada = fecha_str.split('T')[0]
+        
+        datos_doc = {
+            'titulo_entidad': 'CLIENTE:',
+            'nombre_entidad': cotizacion_data.get('cliente_nombre', ''),
+            'folio': cotizacion_data.get('folio', ''),
+            'fecha': fecha_formateada,
+            'extra_derecha_1': f"Vigencia: {cotizacion_data.get('vigencia', '')}",
+            'extra_derecha_2': f"Estado: {cotizacion_data.get('estado', '')}",
+            'linea_extra': f"Proyecto: {cotizacion_data.get('observaciones', '')}"
+        }
 
-        c.setFont("Helvetica", 11)
-        c.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha: {fecha_formateada}")
+        header_footer_func = partial(
+            _header_footer_platypus, 
+            empresa_data=empresa_data, 
+            titulo_doc="COTIZACIÓN",
+            datos_doc=datos_doc
+        )
         
-        vigencia_str = cotizacion_data.get('vigencia', '') 
-        c.drawRightString(7.5 * inch, 8.6 * inch, f"Vigencia: {vigencia_str}")
-        
-        c.drawRightString(7.5 * inch, 8.4 * inch, f"Estado: {cotizacion_data.get('estado', '')}")
-
-        # 3. Tabla de Items
-        y_tabla = 8.0 * inch
-        y_final_tabla = _dibujar_tabla_items(c, cotizacion_data.get('items', []), y_tabla)
-        
-        # 4. Totales
-        _dibujar_totales(c, cotizacion_data, y_final_tabla)
-        
-        # 5. Guardar el PDF
-        c.showPage()
-        c.save()
+        # --- 4. Construir PDF ---
+        doc.build(story, onFirstPage=header_footer_func, onLaterPages=header_footer_func)
         return True
     except Exception as e:
-        print(f"Error al generar PDF de Cotización: {e}")
+        print(f"Error al generar PDF de Cotización (Platypus): {e}")
         import traceback
         traceback.print_exc()
         return False
 
-def _dibujar_datos_orden(c, orden_data):
-    """Dibuja los datos del cliente, vehículo y folio para la Orden de Trabajo."""
+# --- FUNCIÓN! HEADER/FOOTER PARA ÓRDENES ---
+def _header_footer_orden_trabajo(canvas, doc, empresa_data, orden_data):
+    """
+    Dibuja el encabezado y pie de página específico para Órdenes de Trabajo,
+    incluyendo los datos del vehículo.
+    """
+    canvas.saveState()
+    width, height = letter
+    
+    # --- 1. Encabezado de la Empresa ---
+    _dibujar_encabezado(canvas, empresa_data)
+    
+    # --- 2. Datos de la Orden (Cliente, Folio, Vehículo) ---
+    
     # --- Cliente ---
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(1 * inch, 9.0 * inch, "CLIENTE:")
-    c.setFont("Helvetica", 11)
-    c.drawString(1 * inch, 8.8 * inch, orden_data.get('cliente_nombre', ''))
+    canvas.setFont("Helvetica-Bold", 12)
+    canvas.drawString(1 * inch, 9.0 * inch, "CLIENTE:")
+    canvas.setFont("Helvetica", 11)
+    canvas.drawString(1 * inch, 8.8 * inch, orden_data.get('cliente_nombre', ''))
 
     # --- Folio y Fechas ---
-    c.setFont("Helvetica-Bold", 12)
-    c.drawRightString(7.5 * inch, 9.0 * inch, f"ORDEN DE TRABAJO: {orden_data.get('folio', '')}")
+    canvas.setFont("Helvetica-Bold", 12)
+    canvas.drawRightString(7.5 * inch, 9.0 * inch, f"ORDEN DE TRABAJO: {orden_data.get('folio', '')}")
     
-    # Formatear fecha de recepción (ISO con hora)
     fecha_str = orden_data.get('fecha_recepcion', '')
     fecha_formateada = fecha_str
     if fecha_str:
         try:
             fecha_dt = datetime.fromisoformat(fecha_str) 
-            fecha_formateada = fecha_dt.strftime("%d/%m/%Y %H:%M") # Incluimos la hora
+            fecha_formateada = fecha_dt.strftime("%d/%m/%Y %H:%M") 
         except ValueError:
             fecha_formateada = fecha_str.split('T')[0]
 
-    c.setFont("Helvetica", 11)
-    c.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha Recepción: {fecha_formateada}")
-    c.drawRightString(7.5 * inch, 8.6 * inch, f"Estado: {orden_data.get('estado', '')}")
+    canvas.setFont("Helvetica", 11)
+    canvas.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha Recepción: {fecha_formateada}")
+    canvas.drawRightString(7.5 * inch, 8.6 * inch, f"Estado: {orden_data.get('estado', '')}")
     
     # --- Datos del Vehículo ---
-    c.setFont("Helvetica-Bold", 12)
-    # Posicionamos esta sección más abajo
-    c.drawString(1 * inch, 8.3 * inch, "VEHÍCULO:") 
-    c.setFont("Helvetica", 10)
+    canvas.setFont("Helvetica-Bold", 12)
+    canvas.drawString(1 * inch, 8.3 * inch, "VEHÍCULO:") 
+    canvas.setFont("Helvetica", 10)
     
-    y_vehiculo = 8.1 * inch # Posición Y para los datos del auto
+    y_vehiculo = 8.1 * inch 
     
-    # Datos en 2 columnas para ahorrar espacio
-    c.drawString(1.1 * inch, y_vehiculo, f"Marca: {orden_data.get('vehiculo_marca', '')}")
-    c.drawString(3.5 * inch, y_vehiculo, f"Modelo: {orden_data.get('vehiculo_modelo', '')}")
-    c.drawString(1.1 * inch, y_vehiculo - 0.2*inch, f"Año: {orden_data.get('vehiculo_ano', '')}")
-    c.drawString(3.5 * inch, y_vehiculo - 0.2*inch, f"Placas: {orden_data.get('vehiculo_placas', '')}")
+    canvas.drawString(1.1 * inch, y_vehiculo, f"Marca: {orden_data.get('vehiculo_marca', '')}")
+    canvas.drawString(3.5 * inch, y_vehiculo, f"Modelo: {orden_data.get('vehiculo_modelo', '')}")
+    canvas.drawString(1.1 * inch, y_vehiculo - 0.2*inch, f"Año: {orden_data.get('vehiculo_ano', '')}")
+    canvas.drawString(3.5 * inch, y_vehiculo - 0.2*inch, f"Placas: {orden_data.get('vehiculo_placas', '')}")
 
-def _dibujar_tabla_items_orden(c, items, y_start):
-    """Dibuja la tabla de conceptos para la Orden (solo Cantidad y Descripción)."""
-    c.setFont("Helvetica-Bold", 10)
-    x_cant = 1.1 * inch
-    x_desc = 1.8 * inch
+    # --- 3. Pie de Página ---
+    fecha_gen = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    canvas.setFont("Helvetica", 9)
+    canvas.drawString(1 * inch, 0.75 * inch, f"Generado: {fecha_gen}")
+    canvas.drawRightString(width - 1 * inch, 0.75 * inch, f"Página {canvas.getPageNumber()}")
     
-    c.drawString(x_cant, y_start, "Cant.")
-    c.drawString(x_desc, y_start, "Descripción del Servicio / Observaciones")
-    c.line(x_cant - 0.1*inch, y_start - 0.1*inch, 7.5*inch, y_start - 0.1*inch)
-    
-    c.setFont("Helvetica", 9)
-    y = y_start - 0.3 * inch
-    
-    for item in items:
-        # Ignorar items que no son 'normales'
-        if item.get('tipo', 'normal') != 'normal': 
-            continue
-            
-        c.drawString(x_cant, y, str(item['cantidad']))
-        # Damos más espacio a la descripción (90 caracteres)
-        c.drawString(x_desc, y, item['descripcion'][:90]) 
-        y -= 0.25 * inch # Siguiente línea
-    
-    return y # Devuelve la última posición Y
+    canvas.restoreState()
 
+
+# --- FUNCIÓN GENERAR_PDF_ORDEN_TRABAJO ---
 def generar_pdf_orden_trabajo(orden_data, empresa_data, save_path):
     """
     Función principal para generar el PDF de una Orden de Trabajo.
+    (Versión actualizada con Platypus para soportar saltos de página)
     """
     try:
-        c = canvas.Canvas(save_path, pagesize=letter)
+        doc = SimpleDocTemplate(save_path, pagesize=letter,
+                                leftMargin=1*inch, rightMargin=1*inch,
+                                topMargin=3.4*inch, bottomMargin=1*inch) # Margen superior más grande
         
-        # 1. Encabezado 
-        _dibujar_encabezado(c, empresa_data)
+        story = []
+        styles = getSampleStyleSheet()
+
+        # --- Estilos ---
+        style_body = styles['BodyText']
+        style_body.fontSize = 9
+        style_body.alignment = TA_LEFT
         
-        # 2. Datos del Cliente, Vehículo y Folio
-        _dibujar_datos_orden(c, orden_data)
+        style_header_base = ParagraphStyle(name='HeaderBase', parent=styles['Normal'],
+                                      fontName='Helvetica-Bold', fontSize=10,
+                                      textColor=colors.black) 
+        style_header_left = ParagraphStyle(name='HeaderLeft', parent=style_header_base, alignment=TA_LEFT)
+
+        # --- 1. Tabla de Items (Solo Cantidad y Descripción) ---
+        table_data = []
+        wrapped_headers = [
+            Paragraph("Cant.", style_header_left),
+            Paragraph("Descripción del Servicio / Observaciones", style_header_left),
+        ]
+        table_data.append(wrapped_headers)
+
+        items = orden_data.get('items', [])
+        for item in items:
+            if item.get('tipo', 'normal') != 'normal': 
+                continue
+                
+            cant = str(item['cantidad'])
+            desc = Paragraph(item['descripcion'], style_body) # Permite wrapping
+            
+            wrapped_row = [
+                Paragraph(cant, style_body), 
+                desc
+            ]
+            table_data.append(wrapped_row)
         
-        # 3. Tabla de Items
-        y_tabla = 7.7 * inch
-        y_final_tabla = _dibujar_tabla_items_orden(c, orden_data.get('items', []), y_tabla)
+        # Ancho de columnas (total 6.5 pulgadas)
+        col_widths = [0.6*inch, 5.9*inch]
+        items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+        # Estilo de tabla (como la imagen)
+        ts_items = TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            
+            # Estilo de la imagen
+            ('LINEABOVE', (0,0), (-1,0), 1.5, colors.black), 
+            ('LINEBELOW', (0,0), (-1,0), 1.5, colors.black), 
+            
+            ('TOPPADDING', (0,0), (-1,0), 6),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+            ('TOPPADDING', (0,1), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,1), (-1,-1), 4),
+            
+            ('ALIGN', (0,1), (0,-1), 'LEFT'), 
+            ('ALIGN', (1,1), (1,-1), 'LEFT'), 
+        ])
         
-        # 4. Guardar el PDF
-        c.showPage()
-        c.save()
+        items_table.setStyle(ts_items)
+        story.append(items_table)
+        
+        # --- 2. Preparar datos para el Header/Footer ---
+        header_footer_func = partial(
+            _header_footer_orden_trabajo, 
+            empresa_data=empresa_data, 
+            orden_data=orden_data
+        )
+        
+        # --- 3. Construir PDF ---
+        doc.build(story, onFirstPage=header_footer_func, onLaterPages=header_footer_func)
         return True
     except Exception as e:
-        print(f"Error al generar PDF de Orden: {e}")
+        print(f"Error al generar PDF de Orden (Platypus): {e}")
         import traceback
         traceback.print_exc()
         return False
     
-def _dibujar_datos_proveedor(c, nota_data):
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(1 * inch, 9.0 * inch, "PROVEEDOR:")
-    c.setFont("Helvetica", 11)
-    c.drawString(1 * inch, 8.8 * inch, nota_data.get('proveedor_nombre', ''))
-
-    c.setFont("Helvetica-Bold", 12)
-    c.drawRightString(7.5 * inch, 9.0 * inch, f"NOTA PROVEEDOR: {nota_data.get('folio', '')}")
-    
-    fecha_str = nota_data.get('fecha', '')
-    fecha_formateada = fecha_str
-    if fecha_str:
-        try:
-            fecha_dt = datetime.fromisoformat(fecha_str) 
-            fecha_formateada = fecha_dt.strftime("%d/%m/%Y") 
-        except ValueError:
-            fecha_formateada = fecha_str.split('T')[0]
-
-    c.setFont("Helvetica", 11)
-    c.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha: {fecha_formateada}")
-    c.drawRightString(7.5 * inch, 8.6 * inch, f"Estado: {nota_data.get('estado', '')}")
-
+# --- Nota Proveedor ---
 def generar_pdf_nota_proveedor(nota_data, empresa_data, save_path):
+    """
+    Función principal para generar el PDF de una Nota de Proveedor.
+    (Versión actualizada con Platypus para soportar saltos de página)
+    """
     try:
-        c = canvas.Canvas(save_path, pagesize=letter)
+        doc = SimpleDocTemplate(save_path, pagesize=letter,
+                                leftMargin=1*inch, rightMargin=1*inch,
+                                topMargin=3.0*inch, bottomMargin=1*inch)
         
-        _dibujar_encabezado(c, empresa_data)
+        story = []
+        styles = getSampleStyleSheet()
         
-        _dibujar_datos_proveedor(c, nota_data)
+        # --- Estilos ---
+        style_body = styles['BodyText']
+        style_body.fontSize = 9
+        style_body.alignment = TA_LEFT 
+        
+        style_body_right = ParagraphStyle(name='BodyRight', parent=style_body, alignment=TA_RIGHT)
 
-        y_tabla = 8.0 * inch
-        y_final_tabla = _dibujar_tabla_items(c, nota_data.get('items', []), y_tabla)
+        style_header_base = ParagraphStyle(name='HeaderBase', parent=styles['Normal'],
+                                      fontName='Helvetica-Bold', fontSize=10,
+                                      textColor=colors.black) 
+        style_header_left = ParagraphStyle(name='HeaderLeft', parent=style_header_base, alignment=TA_LEFT)
+        style_header_right = ParagraphStyle(name='HeaderRight', parent=style_header_base, alignment=TA_RIGHT)
+                                      
+        style_total_label = ParagraphStyle(name='TotalLabel', parent=style_body,
+                                           alignment=TA_RIGHT, fontName='Helvetica-Bold', fontSize=11)
+        style_total_value = ParagraphStyle(name='TotalValue', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=11)
+        style_grand_total = ParagraphStyle(name='GrandTotal', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=12,
+                                           textColor=colors.HexColor("#00788E"))
+
+        # --- 1. Tabla de Items ---
+        table_data = []
+        wrapped_headers = [
+            Paragraph("Cant.", style_header_left),
+            Paragraph("Descripción", style_header_left),
+            Paragraph("P. Unitario", style_header_right),
+            Paragraph("IVA %", style_header_right),
+            Paragraph("Importe", style_header_right)
+        ]
+        table_data.append(wrapped_headers)
+
+        items = nota_data.get('items', [])
+        for item in items:
+            cant = str(item['cantidad'])
+            desc = Paragraph(item['descripcion'], style_body) 
+            precio = f"${item['precio_unitario']:,.2f}"
+            iva = f"{item['impuesto']:.1f} %"
+            importe = f"${item['importe']:,.2f}"
+            
+            wrapped_row = [
+                Paragraph(cant, style_body), 
+                desc, 
+                Paragraph(precio, style_body_right), 
+                Paragraph(iva, style_body_right), 
+                Paragraph(importe, style_body_right)
+            ]
+            table_data.append(wrapped_row)
         
-        _dibujar_totales(c, nota_data, y_final_tabla)
+        col_widths = [0.6*inch, 3.1*inch, 1*inch, 0.7*inch, 1.1*inch]
+        items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
         
-        c.showPage()
-        c.save()
+        ts_items = TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            
+            # Estilo de la imagen
+            ('LINEABOVE', (0,0), (-1,0), 1.5, colors.black), 
+            ('LINEBELOW', (0,0), (-1,0), 1.5, colors.black), 
+
+            ('TOPPADDING', (0,0), (-1,0), 6),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+            ('TOPPADDING', (0,1), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,1), (-1,-1), 4),
+            
+            # Alineación de datos
+            ('ALIGN', (0,1), (0,-1), 'LEFT'), 
+            ('ALIGN', (1,1), (1,-1), 'LEFT'), 
+            ('ALIGN', (2,1), (2,-1), 'RIGHT'), 
+            ('ALIGN', (3,1), (3,-1), 'RIGHT'), 
+            ('ALIGN', (4,1), (4,-1), 'RIGHT'), 
+        ])
+        
+        items_table.setStyle(ts_items)
+        story.append(items_table)
+        
+        # --- 2. Tabla de Totales ---
+        story.append(Spacer(1, 0.2*inch))
+        
+        subtotal = nota_data.get('subtotal', 0)
+        impuestos = nota_data.get('impuestos', 0)
+        total = nota_data.get('total', 0)
+        total_pagado = nota_data.get('total_pagado', 0)
+        saldo = nota_data.get('saldo', 0)
+
+        totals_data = [
+            ['', Paragraph('Subtotal:', style_total_label), Paragraph(f'${subtotal:,.2f}', style_total_value)],
+            ['', Paragraph('Impuestos:', style_total_label), Paragraph(f'${impuestos:,.2f}', style_total_value)],
+            ['', Paragraph('TOTAL:', style_total_label), Paragraph(f'${total:,.2f}', style_grand_total)],
+            ['', Paragraph('Total Pagado:', style_total_label), Paragraph(f'${total_pagado:,.2f}', style_total_value)],
+            ['', Paragraph('Saldo Pendiente:', style_total_label), Paragraph(f'${saldo:,.2f}', style_grand_total)],
+        ]
+        
+        totals_table = Table(totals_data, colWidths=[4.4*inch, 1.0*inch, 1.1*inch])
+        totals_table.setStyle(TableStyle([
+            ('LINEABOVE', (1,2), (2,2), 1, colors.HexColor("#00788E")),
+            ('TOPPADDING', (0,2), (-1,-1), 4),
+        ]))
+        story.append(totals_table)
+
+        # --- 3. Preparar datos para el Header/Footer ---
+        fecha_str = nota_data.get('fecha', '')
+        fecha_formateada = fecha_str
+        if fecha_str:
+            try:
+                fecha_dt = datetime.fromisoformat(fecha_str) 
+                fecha_formateada = fecha_dt.strftime("%d/%m/%Y") 
+            except ValueError:
+                fecha_formateada = fecha_str.split('T')[0]
+        
+        datos_doc = {
+            'titulo_entidad': 'PROVEEDOR:',
+            'nombre_entidad': nota_data.get('proveedor_nombre', ''),
+            'folio': nota_data.get('folio', ''),
+            'fecha': fecha_formateada,
+            'extra_derecha_1': f"Estado: {nota_data.get('estado', '')}",
+            'linea_extra': f"Referencia: {nota_data.get('observaciones', '')}"
+        }
+
+        header_footer_func = partial(
+            _header_footer_platypus, 
+            empresa_data=empresa_data, 
+            titulo_doc="NOTA PROVEEDOR",
+            datos_doc=datos_doc
+        )
+        
+        # --- 4. Construir PDF ---
+        doc.build(story, onFirstPage=header_footer_func, onLaterPages=header_footer_func)
         return True
     except Exception as e:
-        print(f"Error al generar PDF de Nota Proveedor: {e}")
+        print(f"Error al generar PDF de Nota Proveedor (Platypus): {e}")
         import traceback
         traceback.print_exc()
         return False
     
-def _dibujar_datos_estado_cuenta(c, cliente_nombre, fecha_ini, fecha_fin):
-    """Dibuja los datos del cliente y el rango de fechas."""
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(1 * inch, 9.0 * inch, "CLIENTE:")
-    c.setFont("Helvetica", 11)
-    c.drawString(1 * inch, 8.8 * inch, cliente_nombre)
-    
-    c.setFont("Helvetica-Bold", 12)
-    c.drawRightString(7.5 * inch, 9.0 * inch, "ESTADO DE CUENTA DE CLIENTE")
-    
-    c.setFont("Helvetica", 11)
-    c.drawRightString(7.5 * inch, 8.8 * inch, f"Del: {fecha_ini.strftime('%d/%m/%Y')}")
-    c.drawRightString(7.5 * inch, 8.6 * inch, f"Al: {fecha_fin.strftime('%d/%m/%Y')}")
-
-def _dibujar_tabla_estado_cuenta(c, transacciones, y_start):
-    """Dibuja la tabla de transacciones (cargos, abonos, balance)."""
-    c.setFont("Helvetica-Bold", 9)
-    x_fecha = 1.1 * inch
-    x_doc = 1.9 * inch
-    x_conc = 2.8 * inch
-    x_cargo = 5.0 * inch
-    x_abono = 5.9 * inch
-    x_bal = 6.8 * inch
-    
-    y = y_start
-    c.drawString(x_fecha, y, "Fecha")
-    c.drawString(x_doc, y, "Documento")
-    c.drawString(x_conc, y, "Concepto")
-    c.drawRightString(x_cargo + 0.7*inch, y, "Cargo")
-    c.drawRightString(x_abono + 0.7*inch, y, "Abono")
-    c.drawRightString(x_bal + 0.7*inch, y, "Balance")
-    y -= 0.1 * inch
-    c.line(x_fecha - 0.1*inch, y, 7.5*inch, y)
-    
-    c.setFont("Helvetica", 8)
-    y -= 0.2 * inch
-    
-    balance_actual = 0.0
-    
-    for trx in transacciones:
-        cargo = trx.get('cargo', 0)
-        abono = trx.get('abono', 0)
-        balance_actual += (cargo - abono)
-        
-        c.drawString(x_fecha, y, trx['fecha'].strftime("%d/%m/%Y"))
-        c.drawString(x_doc, y, trx['documento'])
-        c.drawString(x_conc, y, trx.get('concepto', '')[:40]) # Acortar concepto
-        
-        if cargo > 0:
-            c.drawRightString(x_cargo + 0.7*inch, y, f"${cargo:,.2f}")
-        if abono > 0:
-            c.drawRightString(x_abono + 0.7*inch, y, f"${abono:,.2f}")
-        
-        c.drawRightString(x_bal + 0.7*inch, y, f"${balance_actual:,.2f}")
-        y -= 0.22 * inch
-        
-    return y
-
-def _dibujar_totales_estado_cuenta(c, totales, y_start):
-    """Dibuja los totales del estado de cuenta."""
-    c.setFont("Helvetica-Bold", 11)
-    x_label = 5.0 * inch
-    x_valor = 6.5 * inch
-    
-    y = y_start - 0.2*inch
-    c.line(x_label - 0.2*inch, y, 7.5*inch, y)
-    y -= 0.2 * inch
-    
-    c.drawString(x_label, y, "Total Cargos (Notas):")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['cargos']:,.2f}")
-    y -= 0.25 * inch
-
-    c.drawString(x_label, y, "Total Abonos (Pagos):")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['abonos']:,.2f}")
-    y -= 0.25 * inch
-
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(x_label, y, "Saldo del Periodo:")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['saldo']:,.2f}")
+# --- Estado de Cuenta Cliente (REESCRITA CON PLATYPUS) ---
 
 def generar_pdf_estado_cuenta(cliente_nombre, transacciones, totales, fechas, empresa_data, save_path):
-    """Función principal para generar el PDF de Estado de Cuenta."""
+    """
+    Función principal para generar el PDF de Estado de Cuenta de Cliente.
+    (Versión actualizada con Platypus para soportar saltos de página)
+    """
     try:
-        c = canvas.Canvas(save_path, pagesize=letter)
+        doc = SimpleDocTemplate(save_path, pagesize=letter,
+                                leftMargin=1*inch, rightMargin=1*inch,
+                                topMargin=3.0*inch, bottomMargin=1*inch)
         
-        _dibujar_encabezado(c, empresa_data)
+        story = []
+        styles = getSampleStyleSheet()
         
-        _dibujar_datos_estado_cuenta(c, cliente_nombre, fechas['ini'], fechas['fin'])
+        # --- Estilos ---
+        style_body = styles['BodyText']
+        style_body.fontSize = 8 # Letra más pequeña para E.C.
+        style_body.alignment = TA_LEFT 
+        
+        style_body_right = ParagraphStyle(name='BodyRight', parent=style_body, alignment=TA_RIGHT)
+        
+        style_header_base = ParagraphStyle(name='HeaderBase', parent=styles['Normal'],
+                                      fontName='Helvetica-Bold', fontSize=9,
+                                      textColor=colors.black) 
+        style_header_left = ParagraphStyle(name='HeaderLeft', parent=style_header_base, alignment=TA_LEFT)
+        style_header_right = ParagraphStyle(name='HeaderRight', parent=style_header_base, alignment=TA_RIGHT)
+                                      
+        style_total_label = ParagraphStyle(name='TotalLabel', parent=style_body,
+                                           alignment=TA_RIGHT, fontName='Helvetica-Bold', fontSize=11)
+        style_total_value = ParagraphStyle(name='TotalValue', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=11)
+        style_grand_total = ParagraphStyle(name='GrandTotal', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=12,
+                                           textColor=colors.HexColor("#D32F2F")) # Saldo deudor en rojo
 
-        y_tabla = 8.3 * inch
-        y_final_tabla = _dibujar_tabla_estado_cuenta(c, transacciones, y_tabla)
+        # --- 1. Tabla de Transacciones ---
+        table_data = []
+        wrapped_headers = [
+            Paragraph("Fecha", style_header_left),
+            Paragraph("Documento", style_header_left),
+            Paragraph("Concepto", style_header_left),
+            Paragraph("Cargo", style_header_right),
+            Paragraph("Abono", style_header_right),
+            Paragraph("Balance", style_header_right)
+        ]
+        table_data.append(wrapped_headers)
+
+        balance_actual = 0.0
+        for trx in transacciones:
+            cargo = trx.get('cargo', 0)
+            abono = trx.get('abono', 0)
+            balance_actual += (cargo - abono)
+            
+            fecha_str = trx['fecha'].strftime("%d/%m/%Y")
+            doc_str = trx['documento']
+            conc_str = Paragraph(trx.get('concepto', '')[:40], style_body) # Acortar y wrappear
+            cargo_str = f"${cargo:,.2f}" if cargo > 0 else ""
+            abono_str = f"${abono:,.2f}" if abono > 0 else ""
+            bal_str = f"${balance_actual:,.2f}"
+            
+            wrapped_row = [
+                Paragraph(fecha_str, style_body), 
+                Paragraph(doc_str, style_body), 
+                conc_str, 
+                Paragraph(cargo_str, style_body_right), 
+                Paragraph(abono_str, style_body_right),
+                Paragraph(bal_str, style_body_right)
+            ]
+            table_data.append(wrapped_row)
         
-        # Posicionar los totales un poco más abajo si la tabla es corta
-        y_totales = min(y_final_tabla, 4.0 * inch)
-        _dibujar_totales_estado_cuenta(c, totales, y_totales)
+        col_widths = [0.8*inch, 1.0*inch, 2.0*inch, 0.9*inch, 0.9*inch, 0.9*inch]
+        items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+        ts_items = TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('LINEABOVE', (0,0), (-1,0), 1.5, colors.black), 
+            ('LINEBELOW', (0,0), (-1,0), 1.5, colors.black), 
+            ('TOPPADDING', (0,0), (-1,0), 6),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+            ('TOPPADDING', (0,1), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,1), (-1,-1), 4),
+            ('ALIGN', (0,1), (1,-1), 'LEFT'), 
+            ('ALIGN', (3,1), (-1,-1), 'RIGHT'), 
+        ])
         
-        c.showPage()
-        c.save()
+        items_table.setStyle(ts_items)
+        story.append(items_table)
+        
+        # --- 2. Tabla de Totales ---
+        story.append(Spacer(1, 0.2*inch))
+
+        # Si el saldo es <= 0 (a favor), ponerlo en verde
+        if totales['saldo'] <= 0.01:
+            style_grand_total.textColor = colors.HexColor("#006400")
+
+        totals_data = [
+            ['', Paragraph('Total Cargos (Notas):', style_total_label), Paragraph(f"${totales['cargos']:,.2f}", style_total_value)],
+            ['', Paragraph('Total Abonos (Pagos):', style_total_label), Paragraph(f"${totales['abonos']:,.2f}", style_total_value)],
+            ['', Paragraph('Saldo del Periodo:', style_total_label), Paragraph(f"${totales['saldo']:,.2f}", style_grand_total)],
+        ]
+        
+        totals_table = Table(totals_data, colWidths=[3.2*inch, 1.6*inch, 1.7*inch])
+        totals_table.setStyle(TableStyle([
+            ('LINEABOVE', (1,2), (2,2), 1, colors.HexColor("#00788E")),
+            ('TOPPADDING', (0,0), (-1,-1), 4), 
+        ]))
+        story.append(totals_table)
+
+        # --- 3. Preparar datos para el Header/Footer ---
+        datos_doc = {
+            'titulo_entidad': 'CLIENTE:',
+            'nombre_entidad': cliente_nombre,
+            'folio': '', # No aplica folio
+            'fecha': '', # No aplica fecha
+            'extra_derecha_1': f"Del: {fechas['ini'].strftime('%d/%m/%Y')}",
+            'extra_derecha_2': f"Al: {fechas['fin'].strftime('%d/%m/%Y')}",
+        }
+
+        header_footer_func = partial(
+            _header_footer_platypus, 
+            empresa_data=empresa_data, 
+            titulo_doc="ESTADO DE CUENTA",
+            datos_doc=datos_doc
+        )
+        
+        # --- 4. Construir PDF ---
+        doc.build(story, onFirstPage=header_footer_func, onLaterPages=header_footer_func)
         return True
     except Exception as e:
-        print(f"Error al generar PDF de Estado de Cuenta: {e}")
+        print(f"Error al generar PDF de Estado de Cuenta (Platypus): {e}")
         import traceback
         traceback.print_exc()
         return False
 
-def _dibujar_datos_estado_cuenta_proveedor(c, proveedor_nombre, fecha_ini, fecha_fin):
-    """Dibuja los datos del proveedor y el rango de fechas."""
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(1 * inch, 9.0 * inch, "PROVEEDOR:")
-    c.setFont("Helvetica", 11)
-    c.drawString(1 * inch, 8.8 * inch, proveedor_nombre)
-    
-    c.setFont("Helvetica-Bold", 12)
-    c.drawRightString(7.5 * inch, 9.0 * inch, "ESTADO DE CUENTA DE PROVEEDOR")
-    
-    c.setFont("Helvetica", 11)
-    c.drawRightString(7.5 * inch, 8.8 * inch, f"Del: {fecha_ini.strftime('%d/%m/%Y')}")
-    c.drawRightString(7.5 * inch, 8.6 * inch, f"Al: {fecha_fin.strftime('%d/%m/%Y')}")
-
-def _dibujar_totales_estado_cuenta_proveedor(c, totales, y_start):
-    """Dibuja los totales del estado de cuenta del proveedor."""
-    c.setFont("Helvetica-Bold", 11)
-    x_label = 4.8 * inch
-    x_valor = 7.4 * inch
-    
-    y = y_start - 0.2*inch
-    c.line(x_label - 0.2*inch, y, 7.5*inch, y)
-    y -= 0.2 * inch
-    
-    c.drawString(x_label, y, "Total Cargos (Notas Prov):")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['cargos']:,.2f}")
-    y -= 0.25 * inch
-
-    c.drawString(x_label, y, "Total Abonos (Pagos Realizados):")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['abonos']:,.2f}")
-    y -= 0.25 * inch
-
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(x_label, y, "Saldo por Pagar del Periodo:")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['saldo']:,.2f}")
+# --- Estado de Cuenta Proveedor (REESCRITA CON PLATYPUS) ---
 
 def generar_pdf_estado_cuenta_proveedor(proveedor_nombre, transacciones, totales, fechas, empresa_data, save_path):
-    """Función principal para generar el PDF de Estado de Cuenta de Proveedor."""
+    """
+    Función principal para generar el PDF de Estado de Cuenta de Proveedor.
+    (Versión actualizada con Platypus para soportar saltos de página)
+    """
     try:
-        c = canvas.Canvas(save_path, pagesize=letter)
+        doc = SimpleDocTemplate(save_path, pagesize=letter,
+                                leftMargin=1*inch, rightMargin=1*inch,
+                                topMargin=3.0*inch, bottomMargin=1*inch)
         
-        _dibujar_encabezado(c, empresa_data)
+        story = []
+        styles = getSampleStyleSheet()
         
-        _dibujar_datos_estado_cuenta_proveedor(c, proveedor_nombre, fechas['ini'], fechas['fin'])
+        # --- Estilos ---
+        style_body = styles['BodyText']
+        style_body.fontSize = 8
+        style_body.alignment = TA_LEFT 
+        
+        style_body_right = ParagraphStyle(name='BodyRight', parent=style_body, alignment=TA_RIGHT)
+        
+        style_header_base = ParagraphStyle(name='HeaderBase', parent=styles['Normal'],
+                                      fontName='Helvetica-Bold', fontSize=9,
+                                      textColor=colors.black) 
+        style_header_left = ParagraphStyle(name='HeaderLeft', parent=style_header_base, alignment=TA_LEFT)
+        style_header_right = ParagraphStyle(name='HeaderRight', parent=style_header_base, alignment=TA_RIGHT)
+                                      
+        style_total_label = ParagraphStyle(name='TotalLabel', parent=style_body,
+                                           alignment=TA_RIGHT, fontName='Helvetica-Bold', fontSize=10) # Un poco más pequeño
+        style_total_value = ParagraphStyle(name='TotalValue', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=10)
+        style_grand_total = ParagraphStyle(name='GrandTotal', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=11,
+                                           textColor=colors.HexColor("#D32F2F")) # Saldo deudor en rojo
 
-        # Reutilizamos la función de la tabla de clientes, ya que es idéntica
-        y_tabla = 8.3 * inch
-        y_final_tabla = _dibujar_tabla_estado_cuenta(c, transacciones, y_tabla)
+        # --- 1. Tabla de Transacciones ---
+        table_data = []
+        wrapped_headers = [
+            Paragraph("Fecha", style_header_left),
+            Paragraph("Documento", style_header_left),
+            Paragraph("Concepto", style_header_left),
+            Paragraph("Cargo", style_header_right),
+            Paragraph("Abono", style_header_right),
+            Paragraph("Balance", style_header_right)
+        ]
+        table_data.append(wrapped_headers)
+
+        balance_actual = 0.0
+        for trx in transacciones:
+            cargo = trx.get('cargo', 0)
+            abono = trx.get('abono', 0)
+            balance_actual += (cargo - abono)
+            
+            fecha_str = trx['fecha'].strftime("%d/%m/%Y")
+            doc_str = trx['documento']
+            conc_str = Paragraph(trx.get('concepto', '')[:40], style_body) # Acortar y wrappear
+            cargo_str = f"${cargo:,.2f}" if cargo > 0 else ""
+            abono_str = f"${abono:,.2f}" if abono > 0 else ""
+            bal_str = f"${balance_actual:,.2f}"
+            
+            wrapped_row = [
+                Paragraph(fecha_str, style_body), 
+                Paragraph(doc_str, style_body), 
+                conc_str, 
+                Paragraph(cargo_str, style_body_right), 
+                Paragraph(abono_str, style_body_right),
+                Paragraph(bal_str, style_body_right)
+            ]
+            table_data.append(wrapped_row)
         
-        y_totales = min(y_final_tabla, 4.0 * inch)
-        _dibujar_totales_estado_cuenta_proveedor(c, totales, y_totales)
+        col_widths = [0.8*inch, 1.0*inch, 2.0*inch, 0.9*inch, 0.9*inch, 0.9*inch]
+        items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+        ts_items = TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('LINEABOVE', (0,0), (-1,0), 1.5, colors.black), 
+            ('LINEBELOW', (0,0), (-1,0), 1.5, colors.black), 
+            ('TOPPADDING', (0,0), (-1,0), 6),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+            ('TOPPADDING', (0,1), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,1), (-1,-1), 4),
+            ('ALIGN', (0,1), (1,-1), 'LEFT'), 
+            ('ALIGN', (3,1), (-1,-1), 'RIGHT'), 
+        ])
         
-        c.showPage()
-        c.save()
+        items_table.setStyle(ts_items)
+        story.append(items_table)
+        
+        # --- 2. Tabla de Totales ---
+        story.append(Spacer(1, 0.2*inch))
+
+        if totales['saldo'] <= 0.01: # Si hemos pagado de más (saldo a favor)
+            style_grand_total.textColor = colors.HexColor("#006400") # Verde
+
+        totals_data = [
+            ['', Paragraph('Total Cargos (Notas Prov):', style_total_label), Paragraph(f"${totales['cargos']:,.2f}", style_total_value)],
+            ['', Paragraph('Total Abonos (Pagos):', style_total_label), Paragraph(f"${totales['abonos']:,.2f}", style_total_value)],
+            ['', Paragraph('Saldo por Pagar:', style_total_label), Paragraph(f"${totales['saldo']:,.2f}", style_grand_total)],
+        ]
+        
+        totals_table = Table(totals_data, colWidths=[3.2*inch, 1.6*inch, 1.7*inch])
+        totals_table.setStyle(TableStyle([
+            ('LINEABOVE', (1,2), (2,2), 1, colors.HexColor("#00788E")),
+            ('TOPPADDING', (0,0), (-1,-1), 4), 
+        ]))
+        story.append(totals_table)
+
+        # --- 3. Preparar datos para el Header/Footer ---
+        datos_doc = {
+            'titulo_entidad': 'PROVEEDOR:',
+            'nombre_entidad': proveedor_nombre,
+            'folio': '', 
+            'fecha': '', 
+            'extra_derecha_1': f"Del: {fechas['ini'].strftime('%d/%m/%Y')}",
+            'extra_derecha_2': f"Al: {fechas['fin'].strftime('%d/%m/%Y')}",
+        }
+
+        header_footer_func = partial(
+            _header_footer_platypus, 
+            empresa_data=empresa_data, 
+            titulo_doc="ESTADO DE CUENTA PROVEEDOR",
+            datos_doc=datos_doc
+        )
+        
+        # --- 4. Construir PDF ---
+        doc.build(story, onFirstPage=header_footer_func, onLaterPages=header_footer_func)
         return True
     except Exception as e:
-        print(f"Error al generar PDF de Estado de Cuenta Proveedor: {e}")
+        print(f"Error al generar PDF de Estado de Cuenta Proveedor (Platypus): {e}")
         import traceback
         traceback.print_exc()
         return False
 
-def _dibujar_datos_orden_compra(c, proveedor_nombre):
-    """Dibuja los datos del proveedor para la Orden de Compra."""
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(1 * inch, 9.0 * inch, "PROVEEDOR:")
-    c.setFont("Helvetica", 11)
-    c.drawString(1 * inch, 8.8 * inch, proveedor_nombre)
-    
-    c.setFont("Helvetica-Bold", 12)
-    c.drawRightString(7.5 * inch, 9.0 * inch, "ORDEN DE COMPRA")
-    
-    c.setFont("Helvetica", 11)
-    c.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha: {datetime.now().strftime('%d/%m/%Y')}")
-
-def _dibujar_tabla_items_orden_compra(c, items, y_start):
-    """Dibuja la tabla de conceptos para la Orden de Compra."""
-    c.setFont("Helvetica-Bold", 10)
-    x_cant = 1.1 * inch
-    x_cod = 1.8 * inch
-    x_desc = 3.0 * inch
-    x_precio = 5.5 * inch
-    x_importe = 6.5 * inch
-    
-    c.drawString(x_cant, y_start, "Cant.")
-    c.drawString(x_cod, y_start, "Código")
-    c.drawString(x_desc, y_start, "Descripción")
-    c.drawRightString(x_precio + 0.7*inch, y_start, "P. Compra")
-    c.drawRightString(x_importe + 0.7*inch, y_start, "Importe")
-    c.line(x_cant - 0.1*inch, y_start - 0.1*inch, 7.5*inch, y_start - 0.1*inch)
-    
-    c.setFont("Helvetica", 9)
-    y = y_start - 0.3 * inch
-    
-    for item in items:
-        c.drawString(x_cant, y, str(item['cantidad_a_pedir']))
-        c.drawString(x_cod, y, item['codigo'])
-        c.drawString(x_desc, y, item['nombre'][:40]) # Limitar descripción
-        c.drawRightString(x_precio + 0.7*inch, y, f"${item['precio_compra']:,.2f}")
-        c.drawRightString(x_importe + 0.7*inch, y, f"${item['importe']:,.2f}")
-        y -= 0.25 * inch
-    
-    return y 
-
-def _dibujar_totales_orden_compra(c, totales, y_start):
-    """Dibuja el subtotal, impuestos y total de la Orden de Compra."""
-    c.setFont("Helvetica-Bold", 11)
-    x_label = 5.5 * inch
-    x_valor = 6.5 * inch
-    
-    y = y_start - 0.2*inch
-    c.line(x_label - 0.2*inch, y, 7.5*inch, y)
-    y -= 0.2 * inch
-    
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(x_label, y, "TOTAL:")
-    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['total']:,.2f}")
+# --- Orden de Compra (REESCRITA CON PLATYPUS) ---
 
 def generar_pdf_orden_compra(proveedor_nombre, items_pedido, totales, empresa_data, save_path):
-    """Función principal para generar el PDF de Orden de Compra."""
+    """
+    Función principal para generar el PDF de Orden de Compra.
+    (Versión actualizada con Platypus para soportar saltos de página)
+    """
     try:
-        c = canvas.Canvas(save_path, pagesize=letter)
+        doc = SimpleDocTemplate(save_path, pagesize=letter,
+                                leftMargin=1*inch, rightMargin=1*inch,
+                                topMargin=3.0*inch, bottomMargin=1*inch)
         
-        _dibujar_encabezado(c, empresa_data)
+        story = []
+        styles = getSampleStyleSheet()
         
-        _dibujar_datos_orden_compra(c, proveedor_nombre)
+        # --- Estilos ---
+        style_body = styles['BodyText']
+        style_body.fontSize = 9
+        style_body.alignment = TA_LEFT
+        
+        style_body_right = ParagraphStyle(name='BodyRight', parent=style_body, alignment=TA_RIGHT)
 
-        y_tabla = 8.0 * inch
-        y_final_tabla = _dibujar_tabla_items_orden_compra(c, items_pedido, y_tabla)
+        style_header_base = ParagraphStyle(name='HeaderBase', parent=styles['Normal'],
+                                      fontName='Helvetica-Bold', fontSize=10,
+                                      textColor=colors.black) 
+        style_header_left = ParagraphStyle(name='HeaderLeft', parent=style_header_base, alignment=TA_LEFT)
+        style_header_right = ParagraphStyle(name='HeaderRight', parent=style_header_base, alignment=TA_RIGHT)
+                                      
+        style_total_label = ParagraphStyle(name='TotalLabel', parent=style_body,
+                                           alignment=TA_RIGHT, fontName='Helvetica-Bold', fontSize=11)
+        style_grand_total = ParagraphStyle(name='GrandTotal', parent=style_body_right,
+                                           fontName='Helvetica-Bold', fontSize=12,
+                                           textColor=colors.HexColor("#00788E"))
+
+        # --- 1. Tabla de Items ---
+        table_data = []
+        wrapped_headers = [
+            Paragraph("Cant.", style_header_left),
+            Paragraph("Código", style_header_left),
+            Paragraph("Descripción", style_header_left),
+            Paragraph("P. Compra", style_header_right),
+            Paragraph("Importe", style_header_right)
+        ]
+        table_data.append(wrapped_headers)
+
+        for item in items_pedido:
+            cant = str(item['cantidad_a_pedir'])
+            cod = Paragraph(item['codigo'], style_body)
+            desc = Paragraph(item['nombre'], style_body) # Usamos 'nombre'
+            precio = f"${item['precio_compra']:,.2f}"
+            importe = f"${item['importe']:,.2f}"
+            
+            wrapped_row = [
+                Paragraph(cant, style_body), 
+                cod,
+                desc, 
+                Paragraph(precio, style_body_right), 
+                Paragraph(importe, style_body_right)
+            ]
+            table_data.append(wrapped_row)
         
-        _dibujar_totales_orden_compra(c, totales, y_final_tabla)
+        col_widths = [0.6*inch, 1.0*inch, 2.7*inch, 1.1*inch, 1.1*inch]
+        items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
         
-        c.showPage()
-        c.save()
+        ts_items = TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('LINEABOVE', (0,0), (-1,0), 1.5, colors.black), 
+            ('LINEBELOW', (0,0), (-1,0), 1.5, colors.black), 
+            ('TOPPADDING', (0,0), (-1,0), 6),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+            ('TOPPADDING', (0,1), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,1), (-1,-1), 4),
+            ('ALIGN', (0,1), (2,-1), 'LEFT'), 
+            ('ALIGN', (3,1), (-1,-1), 'RIGHT'), 
+        ])
+        
+        items_table.setStyle(ts_items)
+        story.append(items_table)
+        
+        # --- 2. Tabla de Totales ---
+        story.append(Spacer(1, 0.2*inch))
+        
+        total = totales.get('total', 0)
+
+        totals_data = [
+            ['', Paragraph('TOTAL:', style_total_label), Paragraph(f'${total:,.2f}', style_grand_total)],
+        ]
+        
+        totals_table = Table(totals_data, colWidths=[4.4*inch, 1.0*inch, 1.1*inch])
+        totals_table.setStyle(TableStyle([
+            ('LINEABOVE', (1,0), (2,0), 1, colors.HexColor("#00788E")),
+            ('TOPPADDING', (0,0), (-1,-1), 4),
+        ]))
+        story.append(totals_table)
+
+        # --- 3. Preparar datos para el Header/Footer ---
+        datos_doc = {
+            'titulo_entidad': 'PROVEEDOR:',
+            'nombre_entidad': proveedor_nombre,
+            'folio': '', # No usa folio
+            'fecha': datetime.now().strftime('%d/%m/%Y'),
+        }
+
+        header_footer_func = partial(
+            _header_footer_platypus, 
+            empresa_data=empresa_data, 
+            titulo_doc="ORDEN DE COMPRA",
+            datos_doc=datos_doc
+        )
+        
+        # --- 4. Construir PDF ---
+        doc.build(story, onFirstPage=header_footer_func, onLaterPages=header_footer_func)
         return True
     except Exception as e:
-        print(f"Error al generar PDF de Orden de Compra: {e}")
+        print(f"Error al generar PDF de Orden de Compra (Platypus): {e}")
         import traceback
         traceback.print_exc()
         return False
 
+# --- Reportes (Ya usa Platypus) ---
 def _header_footer_reporte(canvas, doc, empresa_data, titulo_reporte, fechas_str):
     """Dibuja el encabezado y pie de página en CADA página del reporte."""
     canvas.saveState()
     width, height = letter
     
     # --- Encabezado ---
-    # Reutilizamos la función de encabezado estándar
     _dibujar_encabezado(canvas, empresa_data)
     
     # --- Título del Reporte ---
@@ -677,19 +1200,17 @@ def generar_pdf_reporte(titulo_reporte, fecha_ini_str, fecha_fin_str, headers, d
         # 1. Crear el documento con márgenes
         doc = SimpleDocTemplate(save_path, pagesize=letter,
                                 leftMargin=0.75*inch, rightMargin=0.75*inch,
-                                topMargin=2.8*inch, bottomMargin=1*inch) # Margen superior amplio para header
+                                topMargin=2.8*inch, bottomMargin=1*inch) 
         
         story = []
         
         # 2. Definir Estilos de Párrafo
         styles = getSampleStyleSheet()
         
-        # Estilo para el cuerpo de la tabla (con wrapping)
         style_body = styles['BodyText']
         style_body.fontSize = 9
-        style_body.alignment = TA_LEFT # Default a la izquierda
+        style_body.alignment = TA_LEFT 
         
-        # Estilo para los encabezados de la tabla
         style_header = styles['Normal']
         style_header.fontName = 'Helvetica-Bold'
         style_header.fontSize = 10
@@ -708,53 +1229,46 @@ def generar_pdf_reporte(titulo_reporte, fecha_ini_str, fecha_fin_str, headers, d
             wrapped_data.append(wrapped_row)
             
         table_data = [wrapped_headers] + wrapped_data
-        # --- FIN DE CORRECCIÓN (Problema 3) ---
         
-        # 4. Calcular anchos de columna (distribución equitativa)
+        # 4. Calcular anchos de columna
         num_cols = len(headers)
-        ancho_disponible = doc.width # Ancho usable (total - márgenes)
+        ancho_disponible = doc.width 
         col_widths = [ancho_disponible / num_cols] * num_cols
         
         # 5. Definir Estilo de Tabla
         ts = TableStyle([
-            # Encabezado
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#00788E")),
             ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
             ('ALIGN', (0,0), (-1,0), 'CENTER'),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
             ('FONTSIZE', (0,0), (-1,0), 10),
             ('BOTTOMPADDING', (0,0), (-1,0), 12),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), # Alinear verticalmente
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), 
             
-            # Cuerpo
             ('BACKGROUND', (0,1), (-1,-1), colors.whitesmoke),
             ('TEXTCOLOR', (0,1), (-1,-1), colors.black),
             ('FONTNAME', (0,1), (-1,-1), 'Helvetica'),
             ('FONTSIZE', (0,1), (-1,-1), 9),
-            ('ALIGN', (0,1), (-1,-1), 'LEFT'), # Default: Alinear párrafos a la izquierda
+            ('ALIGN', (0,1), (-1,-1), 'LEFT'), 
             
-            # Rejilla
             ('GRID', (0,0), (-1,-1), 1, colors.HexColor("#00788E")),
             ('BOX', (0,0), (-1,-1), 1, colors.black),
         ])
         
         # 6. Ajustar alineación para columnas que parezcan números o moneda
-        # Esto sobrescribe el 'ALIGN' default para columnas específicas
         for col_idx, header in enumerate(headers):
             header_lower = header.lower()
-            # Si el header contiene estas palabras, alinea la columna a la derecha
             if any(s in header_lower for s in ['total', 'monto', 'saldo', 'precio', 'cant', 'stock', 'id', 'vendido', 'notas', 'folio', 'fecha']):
                 ts.add('ALIGN', (col_idx, 1), (col_idx, -1), 'RIGHT')
 
         # 7. Crear objeto Tabla y aplicar estilo
-        t = Table(table_data, colWidths=col_widths)
+        t = Table(table_data, colWidths=col_widths, repeatRows=1) # repeatRows=1
         t.setStyle(ts)
         
         story.append(t)
         
         # 8. Construir PDF
         
-        # Definir el string de fechas que se pasará al encabezado
         if fechas_habilitadas:
             fechas_str = f"Periodo del {fecha_ini_str} al {fecha_fin_str}"
         else:
