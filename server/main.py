@@ -258,6 +258,13 @@ def buscar_ordenes_api(folio: str, db: Session = Depends(get_db)):
     ordenes = crud.search_ordenes_by_folio(db, folio)
     return [_orden_to_dict(o) for o in ordenes]
 
+@app.get("/ordenes/{orden_id}")
+def get_orden_por_id(orden_id: int, db: Session = Depends(get_db)):
+    orden = crud.get_orden(db, orden_id)
+    if orden:
+        return _orden_to_dict(orden)
+    raise HTTPException(status_code=404, detail="Orden no encontrada")
+
 @app.put("/ordenes/{orden_id}")
 async def actualizar_orden_api(orden_id: int, datos: Dict[str, Any], db: Session = Depends(get_db)):
     try:

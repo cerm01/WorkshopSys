@@ -260,3 +260,95 @@ def generar_pdf_cotizacion(cotizacion_data, empresa_data, save_path):
         import traceback
         traceback.print_exc()
         return False
+
+def _dibujar_datos_orden(c, orden_data):
+    """Dibuja los datos del cliente, vehículo y folio para la Orden de Trabajo."""
+    # --- Cliente ---
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, 9.0 * inch, "CLIENTE:")
+    c.setFont("Helvetica", 11)
+    c.drawString(1 * inch, 8.8 * inch, orden_data.get('cliente_nombre', ''))
+
+    # --- Folio y Fechas ---
+    c.setFont("Helvetica-Bold", 12)
+    c.drawRightString(7.5 * inch, 9.0 * inch, f"ORDEN DE TRABAJO: {orden_data.get('folio', '')}")
+    
+    # Formatear fecha de recepción (ISO con hora)
+    fecha_str = orden_data.get('fecha_recepcion', '')
+    fecha_formateada = fecha_str
+    if fecha_str:
+        try:
+            fecha_dt = datetime.fromisoformat(fecha_str) 
+            fecha_formateada = fecha_dt.strftime("%d/%m/%Y %H:%M") # Incluimos la hora
+        except ValueError:
+            fecha_formateada = fecha_str.split('T')[0]
+
+    c.setFont("Helvetica", 11)
+    c.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha Recepción: {fecha_formateada}")
+    c.drawRightString(7.5 * inch, 8.6 * inch, f"Estado: {orden_data.get('estado', '')}")
+    
+    # --- Datos del Vehículo ---
+    c.setFont("Helvetica-Bold", 12)
+    # Posicionamos esta sección más abajo
+    c.drawString(1 * inch, 8.3 * inch, "VEHÍCULO:") 
+    c.setFont("Helvetica", 10)
+    
+    y_vehiculo = 8.1 * inch # Posición Y para los datos del auto
+    
+    # Datos en 2 columnas para ahorrar espacio
+    c.drawString(1.1 * inch, y_vehiculo, f"Marca: {orden_data.get('vehiculo_marca', '')}")
+    c.drawString(3.5 * inch, y_vehiculo, f"Modelo: {orden_data.get('vehiculo_modelo', '')}")
+    c.drawString(1.1 * inch, y_vehiculo - 0.2*inch, f"Año: {orden_data.get('vehiculo_ano', '')}")
+    c.drawString(3.5 * inch, y_vehiculo - 0.2*inch, f"Placas: {orden_data.get('vehiculo_placas', '')}")
+
+def _dibujar_tabla_items_orden(c, items, y_start):
+    """Dibuja la tabla de conceptos para la Orden (solo Cantidad y Descripción)."""
+    c.setFont("Helvetica-Bold", 10)
+    x_cant = 1.1 * inch
+    x_desc = 1.8 * inch
+    
+    c.drawString(x_cant, y_start, "Cant.")
+    c.drawString(x_desc, y_start, "Descripción del Servicio / Observaciones")
+    c.line(x_cant - 0.1*inch, y_start - 0.1*inch, 7.5*inch, y_start - 0.1*inch)
+    
+    c.setFont("Helvetica", 9)
+    y = y_start - 0.3 * inch
+    
+    for item in items:
+        # Ignorar items que no son 'normales' (si existieran)
+        if item.get('tipo', 'normal') != 'normal': 
+            continue
+            
+        c.drawString(x_cant, y, str(item['cantidad']))
+        # Damos más espacio a la descripción (90 caracteres)
+        c.drawString(x_desc, y, item['descripcion'][:90]) 
+        y -= 0.25 * inch # Siguiente línea
+    
+    return y # Devuelve la última posición Y
+
+def generar_pdf_orden_trabajo(orden_data, empresa_data, save_path):
+    """
+    Función principal para generar el PDF de una Orden de Trabajo.
+    """
+    try:
+        c = canvas.Canvas(save_path, pagesize=letter)
+        
+        # 1. Encabezado 
+        _dibujar_encabezado(c, empresa_data)
+        
+        # 2. Datos del Cliente, Vehículo y Folio
+        _dibujar_datos_orden(c, orden_data)
+        
+        # 3. Tabla de Items
+        y_tabla = 7.7 * inch
+        y_final_tabla = _dibujar_tabla_items_orden(c, orden_data.get('items', []), y_tabla)
+        
+        # 4. Guardar el PDF
+        c.showPage()
+        c.save()
+        return True
+    except Exception as e:
+        print(f"Error al generar PDF de Orden: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QMenu, QAction, QFrame, QWidget, QDateEdit,
     QComboBox,
     QInputDialog,
-    QCompleter
+    QCompleter, QFileDialog
 )
 from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor, QFont
@@ -35,6 +35,13 @@ try:
 except ImportError as e:
     print(f"Error al importar BuscarOrdenesDialog: {e}")
     BuscarOrdenesDialog = None
+
+try:
+    # Importamos la NUEVA función que acabamos de crear
+    from gui.pdf_generador import generar_pdf_orden_trabajo
+except ImportError as e:
+    print(f"Advertencia: No se pudo cargar pdf_generator (orden): {e}")
+    generar_pdf_orden_trabajo = None
 
 class OrdenesWindow(QDialog):
     def __init__(self, parent=None):
@@ -314,7 +321,7 @@ class OrdenesWindow(QDialog):
         self.btn_buscar.clicked.connect(self.buscar_orden)
         self.btn_editar.clicked.connect(self.habilitar_edicion)
         self.btn_limpiar.clicked.connect(self.nueva_orden) 
-        
+        self.btn_imprimir.clicked.connect(self.imprimir_orden)
         self.btn_mostrar_ordenes.clicked.connect(self.abrir_ventana_ordenes)
         self.btn_generar_nota.clicked.connect(self.generar_nota_desde_orden)
 
@@ -1054,6 +1061,59 @@ class OrdenesWindow(QDialog):
     def closeEvent(self, event):
         event.accept()
 
+    def imprimir_orden(self):
+        if not self.orden_actual_id:
+            self.mostrar_advertencia("Primero debe buscar y cargar una orden para imprimir.")
+            return
+
+        if not generar_pdf_orden_trabajo:
+            self.mostrar_error("Error: El módulo de generación de PDF no está disponible.")
+            return
+            
+        try:
+            # 1. Obtener los datos completos
+            orden_data = db_helper.get_orden(self.orden_actual_id)
+            empresa_data = db_helper.get_config_empresa()
+            
+            if not orden_data or not empresa_data:
+                self.mostrar_error("No se pudieron obtener los datos completos para la impresión.")
+                return
+
+            # 2. Preguntar al usuario dónde guardar
+            folio = orden_data.get('folio', 'Orden')
+            cliente = orden_data.get('cliente_nombre', 'Cliente').replace(" ", "_")
+            default_filename = f"{folio}_{cliente}.pdf"
+
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar PDF de Orden de Trabajo",
+                default_filename,
+                "Archivos PDF (*.pdf)"
+            )
+
+            # 3. Generar y abrir el PDF
+            if save_path:
+                exito = generar_pdf_orden_trabajo(orden_data, empresa_data, save_path)
+                
+                if exito:
+                    self.mostrar_exito(f"PDF generado exitosamente en:\n{save_path}")
+                    # Intentar abrir el archivo
+                    try:
+                        if sys.platform == "win32":
+                            os.startfile(save_path)
+                        elif sys.platform == "darwin":
+                            subprocess.call(["open", save_path])
+                        else:
+                            subprocess.call(["xdg-open", save_path])
+                    except Exception as e:
+                        print(f"No se pudo abrir el PDF automáticamente: {e}")
+                else:
+                    self.mostrar_error("Ocurrió un error al generar el archivo PDF.")
+
+        except Exception as e:
+            self.mostrar_error(f"Error al preparar la impresión: {e}")
+            import traceback
+            traceback.print_exc()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
