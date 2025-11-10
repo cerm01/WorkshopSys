@@ -1641,13 +1641,6 @@ class CotizacionesWindow(QDialog):
             importe = precio_sugerido * cantidad
             self.txt_importe.setValue(importe)
             
-            # Mensaje discreto
-            self.mostrar_info(
-                f"✅ Precio sugerido: ${precio_sugerido:,.0f}\n"
-                f"Rango: ${prediccion['minimo']:,.0f} - ${prediccion['maximo']:,.0f}\n"
-                f"Confianza: {prediccion['confianza']}%"
-            )
-            
             # Enfocar el botón Agregar
             self.btn_agregar.setFocus()
             
