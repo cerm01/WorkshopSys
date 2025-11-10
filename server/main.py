@@ -960,6 +960,7 @@ def _producto_to_dict(p):
         'categoria': p.categoria or '',
         'ubicacion': p.ubicacion or '',
         'proveedor_id': p.proveedor_id,
+        'proveedor_nombre': p.proveedor.nombre if p.proveedor else 'N/A',
         'precio_compra': float(p.precio_compra or 0),
         'precio_venta': float(p.precio_venta or 0),
         'stock_actual': p.stock_actual or 0,

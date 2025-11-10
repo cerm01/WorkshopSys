@@ -1,11 +1,13 @@
 from datetime import datetime
 import sys
+import os
+import subprocess
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
     QLineEdit, QGridLayout, QGroupBox, QMessageBox, QTableView, 
     QHeaderView, QFrame, QWidget, QComboBox, QSpinBox, 
     QDoubleSpinBox, QTabWidget, QTextEdit, QScrollArea, QInputDialog,
-    QCompleter
+    QCompleter, QFileDialog
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor
@@ -22,6 +24,12 @@ except ImportError:
     print("Error: No se pudo importar 'api_client' o 'ws_client'.")
     db_helper = None
     ws_client = None
+
+try:
+    from gui.pdf_generador import generar_pdf_orden_compra
+except ImportError as e:
+    print(f"Advertencia: No se pudo cargar pdf_generator (orden compra): {e}")
+    generar_pdf_orden_compra = None
 
 
 class InventarioWindow(QDialog):
@@ -489,7 +497,8 @@ class InventarioWindow(QDialog):
         
         self.tabla_alertas_model = QStandardItemModel()
         self.tabla_alertas_model.setHorizontalHeaderLabels([
-            "ID", "Código", "Nombre", "Stock Actual", "Stock Mínimo", "Diferencia"
+            "ID", "Código", "Nombre", "Stock Actual", "Stock Mínimo", "Diferencia",
+            "Proveedor", "Precio Compra"
         ])
         
         self.tabla_alertas = QTableView()
@@ -508,6 +517,7 @@ class InventarioWindow(QDialog):
         btn_pedido.setStyleSheet(BUTTON_STYLE_2.replace("QToolButton", "QPushButton"))
         btn_pedido.setCursor(Qt.PointingHandCursor)
         btn_pedido.setFixedHeight(50)
+        btn_pedido.clicked.connect(self.generar_orden_de_compra)
         layout.addWidget(btn_pedido)
         
         widget.setLayout(layout)
@@ -906,14 +916,19 @@ class InventarioWindow(QDialog):
     
     def actualizar_alertas(self):
         try:
+            # Esta función (get_productos_bajo_stock) ya trae la info del proveedor
+            # gracias a los cambios que hicimos en crud.py y main.py
             productos_bajo_stock = db_helper.get_productos_bajo_stock()
         except Exception as e:
             self.mostrar_error(f"No se pudo leer alertas: {e}")
             return
         
         self.tabla_alertas_model.clear()
+        
+        # CORRECCIÓN 1: Definir las 8 cabeceras
         self.tabla_alertas_model.setHorizontalHeaderLabels([
-            "ID", "Código", "Nombre", "Stock Actual", "Stock Mínimo", "Diferencia"
+            "ID", "Código", "Nombre", "Stock Actual", "Stock Mínimo", "Diferencia",
+            "Proveedor", "Precio Compra"
         ])
         
         self.lbl_titulo_alertas.setText(
@@ -925,13 +940,22 @@ class InventarioWindow(QDialog):
             stock_min = producto.get('stock_min', 0)
             diferencia = stock_min - stock_actual
             
+            # CORRECCIÓN 2: Crear los items para las nuevas columnas
+            # (El 'proveedor_nombre' y 'precio_compra' vienen del API gracias a los
+            # cambios que hicimos en server/main.py en _producto_to_dict)
+            item_proveedor = self._crear_item(producto.get('proveedor_nombre', 'N/A'), Qt.AlignLeft | Qt.AlignVCenter)
+            item_precio = self._crear_item(f"${producto.get('precio_compra', 0):,.2f}", Qt.AlignRight | Qt.AlignVCenter)
+
+            # CORRECCIÓN 3: Añadir los 8 items a la fila
             fila = [
                 self._crear_item(producto.get('id', 'N/A'), Qt.AlignCenter),
                 self._crear_item(producto.get('codigo', 'N/A'), Qt.AlignCenter),
                 self._crear_item(producto.get('nombre', 'N/A'), Qt.AlignLeft | Qt.AlignVCenter),
                 self._crear_item(stock_actual, Qt.AlignCenter),
                 self._crear_item(stock_min, Qt.AlignCenter),
-                self._crear_item(diferencia, Qt.AlignCenter)
+                self._crear_item(diferencia, Qt.AlignCenter),
+                item_proveedor,  # Columna 6 (Proveedor)
+                item_precio      # Columna 7 (Precio)
             ]
             
             if stock_actual == 0:
@@ -1123,6 +1147,109 @@ class InventarioWindow(QDialog):
         
     def mostrar_info(self, mensaje):
         self._mostrar_mensaje(QMessageBox.Information, "Información", mensaje)
+
+    def generar_orden_de_compra(self):
+        if self.tabla_alertas_model.rowCount() == 0:
+            self.mostrar_advertencia("No hay productos en la lista de alertas.")
+            return
+
+        if not generar_pdf_orden_compra:
+            self.mostrar_error("El módulo de generación de PDF no está disponible.")
+            return
+
+        # 1. Agrupar productos por proveedor
+        productos_por_proveedor = {}
+        for fila in range(self.tabla_alertas_model.rowCount()):
+            try:
+                proveedor_nombre = self.tabla_alertas_model.item(fila, 6).text()
+                if proveedor_nombre == 'N/A' or not proveedor_nombre:
+                    continue # Omitir productos sin proveedor
+
+                if proveedor_nombre not in productos_por_proveedor:
+                    productos_por_proveedor[proveedor_nombre] = []
+                
+                # Calcular cantidad sugerida (Stock Mínimo - Stock Actual)
+                stock_actual = int(self.tabla_alertas_model.item(fila, 3).text())
+                stock_min = int(self.tabla_alertas_model.item(fila, 4).text())
+                cantidad_a_pedir = max(1, stock_min - stock_actual) # Pedir al menos 1
+                
+                precio_compra_str = self.tabla_alertas_model.item(fila, 7).text().replace("$", "").replace(",", "")
+                precio_compra = float(precio_compra_str)
+
+                producto_data = {
+                    "codigo": self.tabla_alertas_model.item(fila, 1).text(),
+                    "nombre": self.tabla_alertas_model.item(fila, 2).text(),
+                    "cantidad_a_pedir": cantidad_a_pedir,
+                    "precio_compra": precio_compra,
+                    "importe": cantidad_a_pedir * precio_compra
+                }
+                productos_por_proveedor[proveedor_nombre].append(producto_data)
+                
+            except Exception as e:
+                print(f"Error procesando fila {fila} para OC: {e}")
+
+        if not productos_por_proveedor:
+            self.mostrar_advertencia("Ninguno de los productos con bajo stock tiene un proveedor asignado.")
+            return
+
+        # 2. Preguntar al usuario qué proveedor elegir
+        proveedores = list(productos_por_proveedor.keys())
+        proveedor_elegido, ok = QInputDialog.getItem(
+            self,
+            "Seleccionar Proveedor",
+            "Seleccione el proveedor para generar la Orden de Compra:",
+            proveedores,
+            0,
+            False
+        )
+
+        if not ok or not proveedor_elegido:
+            return
+
+        # 3. Obtener datos para el PDF
+        items_pedido = productos_por_proveedor[proveedor_elegido]
+        total_oc = sum(item['importe'] for item in items_pedido)
+        totales = {'total': total_oc} # Simplificado
+        
+        try:
+            empresa_data = db_helper.get_config_empresa()
+            if not empresa_data:
+                self.mostrar_error("No se pudieron obtener los datos de la empresa.")
+                return
+
+            # 4. Preguntar dónde guardar
+            default_filename = f"OC_{proveedor_elegido.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf"
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar Orden de Compra",
+                default_filename,
+                "Archivos PDF (*.pdf)"
+            )
+
+            if save_path:
+                # 5. Generar PDF
+                exito = generar_pdf_orden_compra(
+                    proveedor_elegido, items_pedido, totales, empresa_data, save_path
+                )
+
+                if exito:
+                    self.mostrar_exito(f"Orden de Compra generada exitosamente en:\n{save_path}")
+                    try:
+                        if sys.platform == "win32":
+                            os.startfile(save_path)
+                        elif sys.platform == "darwin":
+                            subprocess.call(["open", save_path])
+                        else:
+                            subprocess.call(["xdg-open", save_path])
+                    except Exception as e:
+                        print(f"No se pudo abrir el PDF automáticamente: {e}")
+                else:
+                    self.mostrar_error("Ocurrió un error al generar el archivo PDF.")
+
+        except Exception as e:
+            self.mostrar_error(f"Error al preparar la OC: {e}")
+            import traceback
+            traceback.print_exc()
     
     def showEvent(self, event):
         super().showEvent(event)

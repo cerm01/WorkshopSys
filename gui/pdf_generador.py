@@ -564,3 +564,82 @@ def generar_pdf_estado_cuenta_proveedor(proveedor_nombre, transacciones, totales
         import traceback
         traceback.print_exc()
         return False
+
+def _dibujar_datos_orden_compra(c, proveedor_nombre):
+    """Dibuja los datos del proveedor para la Orden de Compra."""
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, 9.0 * inch, "PROVEEDOR:")
+    c.setFont("Helvetica", 11)
+    c.drawString(1 * inch, 8.8 * inch, proveedor_nombre)
+    
+    c.setFont("Helvetica-Bold", 12)
+    c.drawRightString(7.5 * inch, 9.0 * inch, "ORDEN DE COMPRA")
+    
+    c.setFont("Helvetica", 11)
+    c.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha: {datetime.now().strftime('%d/%m/%Y')}")
+
+def _dibujar_tabla_items_orden_compra(c, items, y_start):
+    """Dibuja la tabla de conceptos para la Orden de Compra."""
+    c.setFont("Helvetica-Bold", 10)
+    x_cant = 1.1 * inch
+    x_cod = 1.8 * inch
+    x_desc = 3.0 * inch
+    x_precio = 5.5 * inch
+    x_importe = 6.5 * inch
+    
+    c.drawString(x_cant, y_start, "Cant.")
+    c.drawString(x_cod, y_start, "Código")
+    c.drawString(x_desc, y_start, "Descripción")
+    c.drawRightString(x_precio + 0.7*inch, y_start, "P. Compra")
+    c.drawRightString(x_importe + 0.7*inch, y_start, "Importe")
+    c.line(x_cant - 0.1*inch, y_start - 0.1*inch, 7.5*inch, y_start - 0.1*inch)
+    
+    c.setFont("Helvetica", 9)
+    y = y_start - 0.3 * inch
+    
+    for item in items:
+        c.drawString(x_cant, y, str(item['cantidad_a_pedir']))
+        c.drawString(x_cod, y, item['codigo'])
+        c.drawString(x_desc, y, item['nombre'][:40]) # Limitar descripción
+        c.drawRightString(x_precio + 0.7*inch, y, f"${item['precio_compra']:,.2f}")
+        c.drawRightString(x_importe + 0.7*inch, y, f"${item['importe']:,.2f}")
+        y -= 0.25 * inch
+    
+    return y 
+
+def _dibujar_totales_orden_compra(c, totales, y_start):
+    """Dibuja el subtotal, impuestos y total de la Orden de Compra."""
+    c.setFont("Helvetica-Bold", 11)
+    x_label = 5.5 * inch
+    x_valor = 6.5 * inch
+    
+    y = y_start - 0.2*inch
+    c.line(x_label - 0.2*inch, y, 7.5*inch, y)
+    y -= 0.2 * inch
+    
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(x_label, y, "TOTAL:")
+    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['total']:,.2f}")
+
+def generar_pdf_orden_compra(proveedor_nombre, items_pedido, totales, empresa_data, save_path):
+    """Función principal para generar el PDF de Orden de Compra."""
+    try:
+        c = canvas.Canvas(save_path, pagesize=letter)
+        
+        _dibujar_encabezado(c, empresa_data)
+        
+        _dibujar_datos_orden_compra(c, proveedor_nombre)
+
+        y_tabla = 8.0 * inch
+        y_final_tabla = _dibujar_tabla_items_orden_compra(c, items_pedido, y_tabla)
+        
+        _dibujar_totales_orden_compra(c, totales, y_final_tabla)
+        
+        c.showPage()
+        c.save()
+        return True
+    except Exception as e:
+        print(f"Error al generar PDF de Orden de Compra: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

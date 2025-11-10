@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+from sqlalchemy.orm import joinedload
 
 from server.models import (
     Cliente, Proveedor, Producto, MovimientoInventario,
@@ -226,8 +227,11 @@ def delete_producto(db: Session, producto_id: int, soft_delete: bool = True) -> 
 
 def get_productos_bajo_stock(db: Session) -> List[Producto]:
     """Obtener productos con stock bajo (stock_actual <= stock_min)"""
-    return db.query(Producto).filter(
-        Producto.stock_actual <= Producto.stock_min
+    return db.query(Producto).options(
+        joinedload(Producto.proveedor)
+    ).filter(
+        Producto.stock_actual <= Producto.stock_min,
+        Producto.activo == True
     ).all()
 
 
