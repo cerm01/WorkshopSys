@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSizePolicy, QApplication,
     QLabel, QLineEdit, QGridLayout, QGroupBox, QDoubleSpinBox, QMessageBox,
     QTableView, QHeaderView, QMenu, QAction, QFrame, QWidget, QDateEdit, 
-    QCompleter, QInputDialog
+    QCompleter, QInputDialog, QFileDialog
 )
 from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtGui import QDoubleValidator, QStandardItemModel, QStandardItem, QColor
@@ -28,6 +28,12 @@ try:
     from gui.pagos_nota_dialog import PagosNotaDialog
 except ImportError:
     PagosNotaDialog = None
+
+try:
+    from gui.pdf_generador import generar_pdf_nota_venta
+except ImportError as e:
+    print(f"Advertencia: No se pudo cargar pdf_generator: {e}")
+    generar_pdf_nota_venta = None
 
 class NotasWindow(QDialog):
     def __init__(self, parent=None):
@@ -355,7 +361,7 @@ class NotasWindow(QDialog):
         self.btn_pagos_abonos.clicked.connect(self.abrir_ventana_pagos)
 
         ### AÑADIDO DE V2 ###
-        self.botones[6].clicked.connect(self.imprimir)
+        self.botones[6].clicked.connect(self.imprimir_nota)
         self.txt_cliente.textChanged.connect(self.on_cliente_cambiado)
         ### FIN AÑADIDO ###
     
@@ -956,6 +962,62 @@ class NotasWindow(QDialog):
         msg.setText(mensaje)
         msg.setStyleSheet(MESSAGE_BOX_STYLE)
         msg.exec_()
+
+    # En gui/notas_windows.py, como un nuevo método de la clase
+
+    def imprimir_nota(self):
+        if not self.nota_actual_id:
+            self.mostrar_advertencia("Primero debe buscar y cargar una nota para imprimir.")
+            return
+
+        if not generar_pdf_nota_venta:
+            self.mostrar_error("Error: El módulo de generación de PDF no está disponible.")
+            return
+
+        try:
+            # 1. Obtener los datos completos
+            nota_data = db_helper.get_nota(self.nota_actual_id)
+            empresa_data = db_helper.get_config_empresa()
+
+            if not nota_data or not empresa_data:
+                self.mostrar_error("No se pudieron obtener los datos completos para la impresión.")
+                return
+
+            # 2. Preguntar al usuario dónde guardar
+            folio = nota_data.get('folio', 'Nota')
+            cliente = nota_data.get('cliente_nombre', 'Cliente').replace(" ", "_")
+            default_filename = f"{folio}_{cliente}.pdf"
+
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar PDF",
+                default_filename,
+                "Archivos PDF (*.pdf)"
+            )
+
+            # 3. Generar y abrir el PDF
+            if save_path:
+                exito = generar_pdf_nota_venta(nota_data, empresa_data, save_path)
+
+                if exito:
+                    self.mostrar_exito(f"PDF generado exitosamente en:\n{save_path}")
+                    # Intentar abrir el archivo
+                    try:
+                        if sys.platform == "win32":
+                            os.startfile(save_path)
+                        elif sys.platform == "darwin":
+                            subprocess.call(["open", save_path])
+                        else:
+                            subprocess.call(["xdg-open", save_path])
+                    except Exception as e:
+                        print(f"No se pudo abrir el PDF automáticamente: {e}")
+                else:
+                    self.mostrar_error("Ocurrió un error al generar el archivo PDF.")
+
+        except Exception as e:
+            self.mostrar_error(f"Error al preparar la impresión: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _obtener_estilo_calendario(self):
         return """
