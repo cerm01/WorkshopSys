@@ -28,7 +28,12 @@ from gui.styles import (
 from datetime import datetime, timedelta
 from gui.api_client import api_client as db_helper 
 from gui.websocket_client import ws_client
+
+# ══════════════════════════════════════════════════════════════════
+# CAMBIO 1: Import agregado
+# ══════════════════════════════════════════════════════════════════
 from ml.predictor_ml_final import predictor_ml
+
 
 class CotizacionesWindow(QDialog):
     def __init__(self, parent=None):
@@ -406,25 +411,8 @@ class CotizacionesWindow(QDialog):
         # ══════════════════════════════════════════════════════════════════
 
         # Botón Predecir IA
-        self.btn_predecir = QPushButton("🤖 Predecir")
-        self.btn_predecir.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                            stop:0 #667eea, stop:1 #764ba2);
-                color: white;
-                font-weight: bold;
-                padding: 8px 15px;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                            stop:0 #764ba2, stop:1 #667eea);
-            }
-            QPushButton:disabled {
-                background: #cccccc;
-                color: #666666;
-            }
-        """)
+        self.btn_predecir = QPushButton("Obtener") # <-- CAMBIO DE TEXTO
+        self.btn_predecir.setStyleSheet(FORM_BUTTON_STYLE) # <-- CAMBIO DE ESTILO
         self.btn_predecir.setCursor(Qt.PointingHandCursor)
         self.btn_predecir.clicked.connect(self.predecir_precio_item)
         grid_layout.addWidget(self.btn_predecir, 1, 5)
@@ -1358,9 +1346,7 @@ class CotizacionesWindow(QDialog):
         totales_grid.addWidget(linea, 2, 0, 1, 2)
         totales_grid.addWidget(lbl_total_text, 3, 0)
         totales_grid.addWidget(self.lbl_total_valor, 3, 1)
-        
-        # El botón de predicción ML que estaba aquí ha sido MOVIDO al formulario de items.
-        
+                
         totales_grid.setColumnMinimumWidth(0, 80)
         totales_grid.setColumnMinimumWidth(1, 180)
         
@@ -1386,7 +1372,7 @@ class CotizacionesWindow(QDialog):
         cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
         precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
-        precio = float(precio_texto)
+        precio = float(precio_texto) if precio_texto else 0.0 # Permitir 0
         precio_formateado = f"${precio:.2f}"
         cantidad_calculo = float(cantidad) if cantidad else 1
         importe = cantidad_calculo * precio
@@ -1452,7 +1438,7 @@ class CotizacionesWindow(QDialog):
         cantidad = self.txt_cantidad.text()
         descripcion = self.txt_descripcion.text()
         precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
-        precio = float(precio_texto)
+        precio = float(precio_texto) if precio_texto else 0.0
         precio_formateado = f"${precio:.2f}"
         cantidad_calculo = float(cantidad) if cantidad else 1
         importe = cantidad_calculo * precio
