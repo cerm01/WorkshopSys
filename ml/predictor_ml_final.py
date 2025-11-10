@@ -1,10 +1,12 @@
 """
-Predictor de Precios con Machine Learning
+Predictor de Precios con Machine Learning - 5 VARIABLES
 Algoritmo: Regresión Lineal con One-Hot Encoding
+Variables: servicio, tipo_cliente, mes, historial, dias_inactivo
 """
 import pandas as pd
 import pickle
 import os
+from datetime import datetime
 
 class PredictorML:
     def __init__(self):
@@ -29,14 +31,16 @@ class PredictorML:
                 print(f"⚠️  Error cargando modelo: {e}")
                 self.entrenado = False
     
-    def predecir(self, servicio, tipo_cliente, mes=None):
+    def predecir(self, servicio, tipo_cliente, mes=None, historial=0, dias_inactivo=0):
         """
-        Predecir precio de un servicio
+        Predecir precio de un servicio con 5 variables
         
         Args:
             servicio (str): Nombre del servicio (ej: "afinacion", "frenos delanteros")
             tipo_cliente (str): Tipo de cliente ("Particular" o "Empresa")
-            mes (int, opcional): Mes del año (1-12). No se usa actualmente pero se mantiene por compatibilidad.
+            mes (int, opcional): Mes del año (1-12). Si None, usa mes actual
+            historial (int): Número de servicios previos del cliente (0-50)
+            dias_inactivo (int): Días desde última visita (0-730)
         
         Returns:
             dict: {
@@ -52,16 +56,25 @@ class PredictorML:
                 "Ejecuta: python entrenar_onehot.py"
             )
         
+        # Si no se especifica mes, usar el actual
+        if mes is None:
+            mes = datetime.now().month
+        
         # Normalizar inputs
         servicio = servicio.lower().strip()
         tipo_cliente = tipo_cliente.lower().strip()
         
-        # Crear DataFrame con las mismas columnas del entrenamiento
-        input_data = pd.DataFrame([[servicio, tipo_cliente]], 
-                                  columns=['servicio', 'tipo_cliente'])
+        # Crear DataFrame con las 5 variables
+        input_data = pd.DataFrame([[servicio, tipo_cliente, mes, historial, dias_inactivo]], 
+                                  columns=['servicio', 'tipo_cliente', 'mes', 'historial', 'dias_inactivo'])
         
-        # One-Hot Encoding
-        input_encoded = pd.get_dummies(input_data, drop_first=False)
+        # One-Hot Encoding solo para categóricas
+        input_encoded = pd.get_dummies(input_data[['servicio', 'tipo_cliente']], drop_first=False)
+        
+        # Agregar variables numéricas
+        input_encoded['mes'] = mes
+        input_encoded['historial'] = historial
+        input_encoded['dias_inactivo'] = dias_inactivo
         
         # Asegurar que tenga TODAS las columnas del entrenamiento
         for col in self.columnas:
