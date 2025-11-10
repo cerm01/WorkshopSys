@@ -202,3 +202,61 @@ def generar_pdf_nota_venta(nota_data, empresa_data, save_path):
         import traceback
         traceback.print_exc()
         return False
+
+def generar_pdf_cotizacion(cotizacion_data, empresa_data, save_path):
+    """
+    Función principal para generar el PDF de una Cotización.
+    """
+    try:
+        c = canvas.Canvas(save_path, pagesize=letter)
+        width, height = letter 
+        
+        # 1. Encabezado 
+        _dibujar_encabezado(c, empresa_data)
+        
+        # 2. Datos del Cliente y Folio
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(1 * inch, 9.0 * inch, "CLIENTE:")
+        c.setFont("Helvetica", 11)
+        c.drawString(1 * inch, 8.8 * inch, cotizacion_data.get('cliente_nombre', ''))
+        
+        if proyecto := cotizacion_data.get('observaciones'):
+             c.drawString(1 * inch, 8.6 * inch, f"Proyecto: {proyecto}")
+
+        c.setFont("Helvetica-Bold", 12)
+        c.drawRightString(7.5 * inch, 9.0 * inch, f"COTIZACIÓN: {cotizacion_data.get('folio', '')}")
+        
+        # Formatear fecha de creación (ISO)
+        fecha_str = cotizacion_data.get('fecha', '')
+        fecha_formateada = fecha_str
+        if fecha_str:
+            try:
+                fecha_dt = datetime.fromisoformat(fecha_str) 
+                fecha_formateada = fecha_dt.strftime("%d/%m/%Y") 
+            except ValueError:
+                fecha_formateada = fecha_str.split('T')[0]
+
+        c.setFont("Helvetica", 11)
+        c.drawRightString(7.5 * inch, 8.8 * inch, f"Fecha: {fecha_formateada}")
+        
+        vigencia_str = cotizacion_data.get('vigencia', '') 
+        c.drawRightString(7.5 * inch, 8.6 * inch, f"Vigencia: {vigencia_str}")
+        
+        c.drawRightString(7.5 * inch, 8.4 * inch, f"Estado: {cotizacion_data.get('estado', '')}")
+
+        # 3. Tabla de Items
+        y_tabla = 8.0 * inch
+        y_final_tabla = _dibujar_tabla_items(c, cotizacion_data.get('items', []), y_tabla)
+        
+        # 4. Totales
+        _dibujar_totales(c, cotizacion_data, y_final_tabla)
+        
+        # 5. Guardar el PDF
+        c.showPage()
+        c.save()
+        return True
+    except Exception as e:
+        print(f"Error al generar PDF de Cotización: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

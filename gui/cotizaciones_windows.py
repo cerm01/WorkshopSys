@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QMessageBox, QTableView, QHeaderView,
     QMenu, QAction, QFrame, QWidget, QDateEdit, QComboBox,
     QInputDialog, QCompleter,
-    QTextEdit, QDialogButtonBox
+    QTextEdit, QDialogButtonBox, QFileDialog
 )
 # QTimer es necesario para la carga asíncrona
 from PyQt5.QtCore import Qt, QDate, QTimer
@@ -28,12 +28,12 @@ from gui.styles import (
 from datetime import datetime, timedelta
 from gui.api_client import api_client as db_helper 
 from gui.websocket_client import ws_client
-
-# ══════════════════════════════════════════════════════════════════
-# CAMBIO 1: Import agregado
-# ══════════════════════════════════════════════════════════════════
 from ml.predictor_ml_final import predictor_ml
-
+try:
+    from gui.pdf_generador import generar_pdf_cotizacion
+except ImportError as e:
+    print(f"Advertencia: No se pudo cargar pdf_generator: {e}")
+    generar_pdf_cotizacion = None
 
 class CotizacionesWindow(QDialog):
     def __init__(self, parent=None):
@@ -317,7 +317,7 @@ class CotizacionesWindow(QDialog):
         self.botones[4].clicked.connect(self.editar_cotizacion)
         # Botón "Limpiar"
         self.botones[5].clicked.connect(self.nueva_cotizacion)
-        # self.botones[6] (Imprimir)
+        self.botones[6].clicked.connect(self.imprimir_cotizacion)
         self.botones[7].clicked.connect(self.generar_nota_desde_cotizacion) # Generar Nota
 
     def validar_fechas(self):
@@ -1595,14 +1595,11 @@ class CotizacionesWindow(QDialog):
             self.txt_descripcion.setFocus()
             return
         
-        # --- INICIO DE LA CORRECCIÓN (para el error de la imagen) ---
-        # Extraer el nombre real antes de buscar.
         partes = nombre_cliente_completo.split(' - ')
         if len(partes) > 1:
             nombre_cliente_real = ' - '.join(partes[:-1]) 
         else:
             nombre_cliente_real = nombre_cliente_completo
-        # --- FIN DE LA CORRECCIÓN ---
 
         # Buscar cliente
         clientes = db_helper.buscar_clientes(nombre_cliente_real) # Buscar por el nombre real
@@ -1662,6 +1659,60 @@ class CotizacionesWindow(QDialog):
                 "Ingresa el precio manualmente."
             )
             self.txt_precio.setFocus()
+
+    def imprimir_cotizacion(self):
+        if not self.cotizacion_actual_id:
+            self.mostrar_advertencia("Primero debe buscar y cargar una cotización para imprimir.")
+            return
+
+        if not generar_pdf_cotizacion:
+            self.mostrar_error("Error: El módulo de generación de PDF no está disponible.")
+            return
+
+        try:
+            # 1. Obtener los datos completos
+            cotizacion_data = db_helper.get_cotizacion(self.cotizacion_actual_id)
+            empresa_data = db_helper.get_config_empresa()
+
+            if not cotizacion_data or not empresa_data:
+                self.mostrar_error("No se pudieron obtener los datos completos para la impresión.")
+                return
+
+            # 2. Preguntar al usuario dónde guardar
+            folio = cotizacion_data.get('folio', 'Cotizacion')
+            cliente = cotizacion_data.get('cliente_nombre', 'Cliente').replace(" ", "_")
+            default_filename = f"{folio}_{cliente}.pdf"
+
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar PDF de Cotización",
+                default_filename,
+                "Archivos PDF (*.pdf)"
+            )
+
+            # 3. Generar y abrir el PDF
+            if save_path:
+                exito = generar_pdf_cotizacion(cotizacion_data, empresa_data, save_path)
+
+                if exito:
+                    self.mostrar_exito(f"PDF generado exitosamente en:\n{save_path}")
+                    # Intentar abrir el archivo
+                    try:
+                        if sys.platform == "win32":
+                            os.startfile(save_path)
+                        elif sys.platform == "darwin":
+                            subprocess.call(["open", save_path])
+                        else:
+                            subprocess.call(["xdg-open", save_path])
+                    except Exception as e:
+                        print(f"No se pudo abrir el PDF automáticamente: {e}")
+                else:
+                    self.mostrar_error("Ocurrió un error al generar el archivo PDF.")
+
+        except Exception as e:
+            self.mostrar_error(f"Error al preparar la impresión: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 if __name__ == "__main__":
