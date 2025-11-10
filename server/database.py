@@ -1,143 +1,49 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
-from typing import Generator
+"""Configuración de base de datos con soporte PostgreSQL"""
+
 import os
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 
-# ==================== CONFIGURACIÓN ====================
+load_dotenv()
 
-# Para desarrollo: SQLite (simple, sin instalación)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./taller.db")
-
-# Para producción: PostgreSQL
-# DATABASE_URL = "postgresql://usuario:password@localhost/taller_db"
-
-# ==================== ENGINE ====================
-
-if DATABASE_URL.startswith("sqlite"):
-    # SQLite: configuración especial para multi-threading
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=True  # Ver queries SQL en consola (desactivar en producción)
-    )
-else:
-    # PostgreSQL/MySQL: configuración estándar
-    engine = create_engine(
-        DATABASE_URL,
-        pool_size=10,  # Conexiones simultáneas
-        max_overflow=20,
-        pool_pre_ping=True,  # Verificar conexión antes de usar
-        echo=True
-    )
-
-# ==================== SESSION ====================
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
+# URL de base de datos (PostgreSQL en producción, SQLite en desarrollo)
+DATABASE_URL = os.getenv(
+    'DATABASE_URL',
+    'sqlite:///./taller.db'
 )
 
-# ==================== DEPENDENCIAS ====================
+# Ajuste para Railway (usa postgres:// en lugar de postgresql://)
+if DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-def get_db() -> Generator[Session, None, None]:
-    """
-    Dependencia para obtener sesión de base de datos.
-    Uso en FastAPI:
-        @app.get("/clientes")
-        def get_clientes(db: Session = Depends(get_db)):
-            return db.query(Cliente).all()
-    """
+# Configuración del engine
+if DATABASE_URL.startswith('sqlite'):
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
+else:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True
+    )
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_db():
+    """Dependency para obtener sesión de BD"""
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-
-def get_db_sync() -> Session:
-    """
-    Obtener sesión de forma síncrona (para uso en PyQt5)
-    """
-    return SessionLocal()
-
-
-# ==================== INICIALIZACIÓN ====================
-
 def crear_tablas():
-    """
-    Crear todas las tablas en la base de datos.
-    Llamar una sola vez al inicio.
-    """
-    from models import Base
+    """Crear todas las tablas"""
+    from server import models
     Base.metadata.create_all(bind=engine)
-    print("✅ Tablas creadas exitosamente")
-
-
-def eliminar_tablas():
-    """
-    PELIGRO: Elimina todas las tablas.
-    Solo usar en desarrollo.
-    """
-    from models import Base
-    Base.metadata.drop_all(bind=engine)
-    print("⚠️  Tablas eliminadas")
-
-
-# ==================== VERIFICACIÓN ====================
-
-def verificar_conexion() -> bool:
-    """
-    Verificar que la conexión a la base de datos funciona.
-    """
-    try:
-        db = SessionLocal()
-        db.execute("SELECT 1")
-        db.close()
-        print("✅ Conexión a base de datos exitosa")
-        return True
-    except Exception as e:
-        print(f"❌ Error de conexión: {e}")
-        return False
-
-
-# ==================== EJEMPLO DE USO ====================
-
-if __name__ == "__main__":
-    print("Probando conexión a base de datos...")
-    print(f"URL: {DATABASE_URL}")
-    
-    # Verificar conexión
-    if verificar_conexion():
-        # Crear tablas
-        crear_tablas()
-        
-        # Probar crear un cliente
-        from models import Cliente
-        
-        db = get_db_sync()
-        try:
-            nuevo_cliente = Cliente(
-                nombre="Cliente de Prueba",
-                tipo="Particular",
-                email="test@example.com",
-                telefono="3312345678",
-                ciudad="Guadalajara",
-                estado="Jalisco"
-            )
-            db.add(nuevo_cliente)
-            db.commit()
-            db.refresh(nuevo_cliente)
-            print(f"✅ Cliente creado: {nuevo_cliente}")
-            
-            # Verificar que se guardó
-            clientes = db.query(Cliente).all()
-            print(f"Total de clientes en BD: {len(clientes)}")
-            
-        except Exception as e:
-            print(f"❌ Error: {e}")
-            db.rollback()
-        finally:
-            db.close()
