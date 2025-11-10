@@ -28,6 +28,7 @@ from gui.styles import (
 from datetime import datetime, timedelta
 from gui.api_client import api_client as db_helper 
 from gui.websocket_client import ws_client
+from ml.predictor_ml_final import predictor_ml
 
 class CotizacionesWindow(QDialog):
     def __init__(self, parent=None):
@@ -341,7 +342,8 @@ class CotizacionesWindow(QDialog):
         grid_layout.setColumnStretch(2, 2)    # Precio
         grid_layout.setColumnStretch(3, 2)    # Importe
         grid_layout.setColumnStretch(4, 1)    # IVA
-        grid_layout.setColumnStretch(5, 1)    # Botón
+        grid_layout.setColumnStretch(5, 1)    # Botón Predecir
+        grid_layout.setColumnStretch(6, 1)    # Botón Agregar
         
         # Labels
         lbl_cantidad = QLabel("Cantidad")
@@ -399,10 +401,43 @@ class CotizacionesWindow(QDialog):
         self.txt_impuestos.setStyleSheet(INPUT_STYLE)
         grid_layout.addWidget(self.txt_impuestos, 1, 4)
         
+        # ══════════════════════════════════════════════════════════════════
+        # CAMBIO 2: Reemplazar el botón "Agregar" y añadir "Predecir"
+        # ══════════════════════════════════════════════════════════════════
+
+        # Botón Predecir IA
+        self.btn_predecir = QPushButton("🤖 Predecir")
+        self.btn_predecir.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                            stop:0 #667eea, stop:1 #764ba2);
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                            stop:0 #764ba2, stop:1 #667eea);
+            }
+            QPushButton:disabled {
+                background: #cccccc;
+                color: #666666;
+            }
+        """)
+        self.btn_predecir.setCursor(Qt.PointingHandCursor)
+        self.btn_predecir.clicked.connect(self.predecir_precio_item)
+        grid_layout.addWidget(self.btn_predecir, 1, 5)
+        
+        # Botón Agregar
         self.btn_agregar = QPushButton("Agregar")
         self.btn_agregar.setStyleSheet(FORM_BUTTON_STYLE)
         self.btn_agregar.setCursor(Qt.PointingHandCursor)
-        grid_layout.addWidget(self.btn_agregar, 1, 5)
+        grid_layout.addWidget(self.btn_agregar, 1, 6)  # ← Cambió de columna 5 a 6
+        
+        # ══════════════════════════════════════════════════════════════════
+        # FIN DEL CAMBIO 2
+        # ══════════════════════════════════════════════════════════════════
         
         # Establecer el layout del grupo
         grupo.setLayout(grid_layout)
@@ -737,6 +772,9 @@ class CotizacionesWindow(QDialog):
         self.txt_precio.setEnabled(habilitar)
         self.txt_impuestos.setEnabled(habilitar)
         self.btn_agregar.setEnabled(habilitar)
+        
+        # Habilitar/deshabilitar botón de predicción
+        self.btn_predecir.setEnabled(habilitar)
 
         if habilitar:
             self.tabla_items.setEditTriggers(QTableView.DoubleClicked)
@@ -1321,6 +1359,8 @@ class CotizacionesWindow(QDialog):
         totales_grid.addWidget(lbl_total_text, 3, 0)
         totales_grid.addWidget(self.lbl_total_valor, 3, 1)
         
+        # El botón de predicción ML que estaba aquí ha sido MOVIDO al formulario de items.
+        
         totales_grid.setColumnMinimumWidth(0, 80)
         totales_grid.setColumnMinimumWidth(1, 180)
         
@@ -1405,7 +1445,7 @@ class CotizacionesWindow(QDialog):
     
     def actualizar_item(self):
         """Actualiza el item en edición  """
-        if not self.validar_datos():
+        if self.fila_en_edicion == -1 or not self.validar_datos():
             return
         
         fila = self.fila_en_edicion
@@ -1446,6 +1486,10 @@ class CotizacionesWindow(QDialog):
         """Muestra un mensaje de error  """
         self._mostrar_mensaje(QMessageBox.Critical, "Error", mensaje)
     
+    def mostrar_info(self, mensaje):
+        """Muestra un mensaje de información"""
+        self._mostrar_mensaje(QMessageBox.Information, "Información", mensaje)
+
     def _mostrar_mensaje(self, icono, titulo, mensaje):
         """Helper centralizado para mostrar QMessageBox"""
         msg = QMessageBox(self)
@@ -1458,9 +1502,14 @@ class CotizacionesWindow(QDialog):
     def validar_datos(self):
         """Valida los datos del formulario de items  """
         try:
-            cantidad = float(self.txt_cantidad.text().strip())
+            cantidad_texto = self.txt_cantidad.text().strip()
+            if not cantidad_texto:
+                self.mostrar_advertencia("Ingrese una cantidad.")
+                return False
+                
+            cantidad = float(cantidad_texto)
             if cantidad <= 0:
-                self.mostrar_advertencia("Ingrese una cantidad válida.")
+                self.mostrar_advertencia("Ingrese una cantidad válida (mayor a 0).")
                 return False
         except ValueError:
             self.mostrar_advertencia("Cantidad debe ser numérica.")
@@ -1472,8 +1521,11 @@ class CotizacionesWindow(QDialog):
         
         try:
             precio_texto = self.txt_precio.text().replace("$", "").replace(",", "").strip()
-            if not precio_texto or float(precio_texto) <= 0:
-                self.mostrar_advertencia("Ingrese un precio unitario válido.")
+            if not precio_texto: # Permitir precio 0
+                self.mostrar_advertencia("Ingrese un precio unitario (puede ser 0).")
+                return False
+            if float(precio_texto) < 0:
+                self.mostrar_advertencia("El precio no puede ser negativo.")
                 return False
         except ValueError:
             self.mostrar_advertencia("Precio inválido.")
@@ -1517,6 +1569,113 @@ class CotizacionesWindow(QDialog):
     def closeEvent(self, event):
         """Evento que se dispara al cerrar la ventana  """
         event.accept()
+
+    # ══════════════════════════════════════════════════════════════════
+    # CAMBIO 3: Nuevo método predecir_precio_item()
+    # ══════════════════════════════════════════════════════════════════
+
+    def predecir_precio_item(self):
+        """
+        Predecir precio del item actual y llenar el campo precio
+        """
+        # Verificar modelo
+        if not predictor_ml.entrenado:
+            QMessageBox.information(
+                self,
+                "Modelo No Disponible",
+                "⚠️ El modelo de IA no está entrenado.\n\n"
+                "Los precios deben ingresarse manualmente."
+            )
+            return
+        
+        # Validar cliente
+        nombre_cliente_completo = self.txt_cliente.text().strip()
+        if not nombre_cliente_completo:
+            QMessageBox.warning(
+                self,
+                "Cliente Requerido",
+                "Selecciona un cliente antes de usar la predicción."
+            )
+            return
+        
+        # Validar descripción
+        descripcion = self.txt_descripcion.text().strip()
+        if not descripcion:
+            QMessageBox.warning(
+                self,
+                "Descripción Requerida",
+                "Ingresa la descripción del servicio."
+            )
+            self.txt_descripcion.setFocus()
+            return
+        
+        # --- INICIO DE LA CORRECCIÓN (para el error de la imagen) ---
+        # Extraer el nombre real antes de buscar.
+        partes = nombre_cliente_completo.split(' - ')
+        if len(partes) > 1:
+            nombre_cliente_real = ' - '.join(partes[:-1]) 
+        else:
+            nombre_cliente_real = nombre_cliente_completo
+        # --- FIN DE LA CORRECCIÓN ---
+
+        # Buscar cliente
+        clientes = db_helper.buscar_clientes(nombre_cliente_real) # Buscar por el nombre real
+        if not clientes:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"No se encontró el cliente: {nombre_cliente_real}" # Mostrar el nombre real
+            )
+            return
+        
+        # Priorizar coincidencia exacta
+        cliente_exacto = next((c for c in clientes if c['nombre'].strip() == nombre_cliente_real), None)
+        cliente = cliente_exacto if cliente_exacto else clientes[0]
+        
+        try:
+            # Predecir precio
+            prediccion = predictor_ml.predecir(
+                servicio=descripcion,
+                tipo_cliente=cliente['tipo']
+            )
+            
+            precio_sugerido = prediccion['precio']
+            
+            # Llenar el campo de precio
+            self.txt_precio.setText(f"{precio_sugerido:.2f}")
+            
+            # Calcular importe automáticamente
+            cantidad_text = self.txt_cantidad.text().strip()
+            try:
+                cantidad = float(cantidad_text)
+                if cantidad <= 0:
+                    cantidad = 1
+                    self.txt_cantidad.setText("1")
+            except ValueError:
+                cantidad = 1
+                self.txt_cantidad.setText("1")
+
+            importe = precio_sugerido * cantidad
+            self.txt_importe.setValue(importe)
+            
+            # Mensaje discreto
+            self.mostrar_info(
+                f"✅ Precio sugerido: ${precio_sugerido:,.0f}\n"
+                f"Rango: ${prediccion['minimo']:,.0f} - ${prediccion['maximo']:,.0f}\n"
+                f"Confianza: {prediccion['confianza']}%"
+            )
+            
+            # Enfocar el botón Agregar
+            self.btn_agregar.setFocus()
+            
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"No se pudo predecir el precio:\n{str(e)}\n\n"
+                "Ingresa el precio manualmente."
+            )
+            self.txt_precio.setFocus()
 
 
 if __name__ == "__main__":
