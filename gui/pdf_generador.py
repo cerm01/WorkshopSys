@@ -3,12 +3,17 @@ import sys
 import subprocess
 import os
 from datetime import datetime
+from functools import partial
 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.pdfbase.pdfmetrics import stringWidth 
-from reportlab.lib.utils import ImageReader 
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 
 try:
     from PIL import Image
@@ -17,9 +22,6 @@ except ImportError:
     Image = None
 
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
-# QDate ya no es necesario aquí si usamos datetime
-# from PyQt5.QtCore import QDate 
-
 
 def _dibujar_encabezado(c, empresa_data):
     """Dibuja el logo y los datos de la empresa (CORREGIDO v5)."""
@@ -315,7 +317,7 @@ def _dibujar_tabla_items_orden(c, items, y_start):
     y = y_start - 0.3 * inch
     
     for item in items:
-        # Ignorar items que no son 'normales' (si existieran)
+        # Ignorar items que no son 'normales'
         if item.get('tipo', 'normal') != 'normal': 
             continue
             
@@ -452,8 +454,6 @@ def _dibujar_tabla_estado_cuenta(c, transacciones, y_start):
         
         c.drawRightString(x_bal + 0.7*inch, y, f"${balance_actual:,.2f}")
         y -= 0.22 * inch
-        
-        # (Falta lógica de salto de página, pero funcionará para reportes simples)
         
     return y
 
@@ -640,6 +640,138 @@ def generar_pdf_orden_compra(proveedor_nombre, items_pedido, totales, empresa_da
         return True
     except Exception as e:
         print(f"Error al generar PDF de Orden de Compra: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def _header_footer_reporte(canvas, doc, empresa_data, titulo_reporte, fechas_str):
+    """Dibuja el encabezado y pie de página en CADA página del reporte."""
+    canvas.saveState()
+    width, height = letter
+    
+    # --- Encabezado ---
+    # Reutilizamos la función de encabezado estándar
+    _dibujar_encabezado(canvas, empresa_data)
+    
+    # --- Título del Reporte ---
+    canvas.setFont("Helvetica-Bold", 14)
+    canvas.drawCentredString(width / 2.0, 8.8 * inch, titulo_reporte)
+    
+    if fechas_str:
+        canvas.setFont("Helvetica", 11)
+        canvas.drawCentredString(width / 2.0, 8.6 * inch, fechas_str)
+
+    # --- Pie de Página ---
+    fecha_gen = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    canvas.setFont("Helvetica", 9)
+    canvas.drawString(1 * inch, 0.75 * inch, f"Generado: {fecha_gen}")
+    canvas.drawRightString(width - 1 * inch, 0.75 * inch, f"Página {canvas.getPageNumber()}")
+    
+    canvas.restoreState()
+
+def generar_pdf_reporte(titulo_reporte, fecha_ini_str, fecha_fin_str, headers, data, empresa_data, save_path, fechas_habilitadas=True):
+    """
+    Función principal para generar el PDF de un Reporte (con Platypus).
+    """
+    try:
+        # 1. Crear el documento con márgenes
+        doc = SimpleDocTemplate(save_path, pagesize=letter,
+                                leftMargin=0.75*inch, rightMargin=0.75*inch,
+                                topMargin=2.8*inch, bottomMargin=1*inch) # Margen superior amplio para header
+        
+        story = []
+        
+        # 2. Definir Estilos de Párrafo
+        styles = getSampleStyleSheet()
+        
+        # Estilo para el cuerpo de la tabla (con wrapping)
+        style_body = styles['BodyText']
+        style_body.fontSize = 9
+        style_body.alignment = TA_LEFT # Default a la izquierda
+        
+        # Estilo para los encabezados de la tabla
+        style_header = styles['Normal']
+        style_header.fontName = 'Helvetica-Bold'
+        style_header.fontSize = 10
+        style_header.textColor = colors.whitesmoke
+        style_header.alignment = TA_CENTER
+
+        # 3. Convertir datos (strings) a Paragraphs
+        
+        # Encabezados
+        wrapped_headers = [Paragraph(h, style_header) for h in headers]
+        
+        # Datos
+        wrapped_data = []
+        for row in data:
+            wrapped_row = [Paragraph(cell, style_body) for cell in row]
+            wrapped_data.append(wrapped_row)
+            
+        table_data = [wrapped_headers] + wrapped_data
+        # --- FIN DE CORRECCIÓN (Problema 3) ---
+        
+        # 4. Calcular anchos de columna (distribución equitativa)
+        num_cols = len(headers)
+        ancho_disponible = doc.width # Ancho usable (total - márgenes)
+        col_widths = [ancho_disponible / num_cols] * num_cols
+        
+        # 5. Definir Estilo de Tabla
+        ts = TableStyle([
+            # Encabezado
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#00788E")),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('ALIGN', (0,0), (-1,0), 'CENTER'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,0), 10),
+            ('BOTTOMPADDING', (0,0), (-1,0), 12),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), # Alinear verticalmente
+            
+            # Cuerpo
+            ('BACKGROUND', (0,1), (-1,-1), colors.whitesmoke),
+            ('TEXTCOLOR', (0,1), (-1,-1), colors.black),
+            ('FONTNAME', (0,1), (-1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,1), (-1,-1), 9),
+            ('ALIGN', (0,1), (-1,-1), 'LEFT'), # Default: Alinear párrafos a la izquierda
+            
+            # Rejilla
+            ('GRID', (0,0), (-1,-1), 1, colors.HexColor("#00788E")),
+            ('BOX', (0,0), (-1,-1), 1, colors.black),
+        ])
+        
+        # 6. Ajustar alineación para columnas que parezcan números o moneda
+        # Esto sobrescribe el 'ALIGN' default para columnas específicas
+        for col_idx, header in enumerate(headers):
+            header_lower = header.lower()
+            # Si el header contiene estas palabras, alinea la columna a la derecha
+            if any(s in header_lower for s in ['total', 'monto', 'saldo', 'precio', 'cant', 'stock', 'id', 'vendido', 'notas', 'folio', 'fecha']):
+                ts.add('ALIGN', (col_idx, 1), (col_idx, -1), 'RIGHT')
+
+        # 7. Crear objeto Tabla y aplicar estilo
+        t = Table(table_data, colWidths=col_widths)
+        t.setStyle(ts)
+        
+        story.append(t)
+        
+        # 8. Construir PDF
+        
+        # Definir el string de fechas que se pasará al encabezado
+        if fechas_habilitadas:
+            fechas_str = f"Periodo del {fecha_ini_str} al {fecha_fin_str}"
+        else:
+            fechas_str = "Reporte General (Sin filtro de fecha)"
+        
+        header_footer_func = partial(
+            _header_footer_reporte, 
+            empresa_data=empresa_data, 
+            titulo_reporte=titulo_reporte,
+            fechas_str=fechas_str
+        )
+        
+        doc.build(story, onFirstPage=header_footer_func, onLaterPages=header_footer_func)
+        return True
+        
+    except Exception as e:
+        print(f"Error al generar PDF de Reporte: {e}")
         import traceback
         traceback.print_exc()
         return False

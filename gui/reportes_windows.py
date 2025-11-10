@@ -1,8 +1,10 @@
 import sys
+import os
+import subprocess
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
     QLabel, QComboBox, QDateEdit, QTableView, QHeaderView,
-    QGroupBox, QMessageBox, QSizePolicy
+    QGroupBox, QMessageBox, QSizePolicy, QFileDialog
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
@@ -19,6 +21,12 @@ except ImportError:
     print("Error: No se pudo importar 'api_client' o 'ws_client'.")
     sys.exit(1) 
 
+try:
+    from gui.pdf_generador import generar_pdf_reporte
+except ImportError as e:
+    print(f"Advertencia: No se pudo cargar pdf_generator (reportes): {e}")
+    generar_pdf_reporte = None
+
 
 class ReportesWindow(QDialog):
     def __init__(self, parent=None):
@@ -34,16 +42,8 @@ class ReportesWindow(QDialog):
         self.setMinimumSize(1000, 700)
         self.setWindowState(Qt.WindowMaximized)
         self.setStyleSheet(SECONDARY_WINDOW_GRADIENT)
-
-        # === INICIO DE CAMBIOS: Eliminar datos de ejemplo ===
-        # self.datos_reportes = [] # ELIMINADO
-        # === FIN DE CAMBIOS ===
         
         self.setup_ui()
-        
-        # === INICIO DE CAMBIOS: Eliminar carga de datos de ejemplo ===
-        # self.cargar_datos_ejemplo() # ELIMINADO
-        # === FIN DE CAMBIOS ===
 
     def setup_ui(self):
         """Configurar la interfaz de usuario"""
@@ -210,8 +210,6 @@ class ReportesWindow(QDialog):
         try:
             datos_filtrados = []
             
-            # (Todas estas llamadas ahora usan api_client renombrado como db_helper)
-            
             if tipo == "Ventas por Periodo":
                 headers = ["Folio", "Fecha", "Cliente", "Total", "Saldo", "Estado"]
                 self.tabla_model.setHorizontalHeaderLabels(headers) # Restablecer headers
@@ -267,11 +265,18 @@ class ReportesWindow(QDialog):
         for i in range(self.tabla_model.columnCount()):
             self.tabla_reportes.horizontalHeader().setSectionResizeMode(i, QHeaderView.Stretch)
 
+    def _formatear_fecha_iso(self, fecha_iso):
+        """Convierte '2025-11-06T00:00:00' a '2025-11-06'."""
+        if 'T' in fecha_iso:
+            return fecha_iso.split('T')[0]
+        return fecha_iso
+    
     def poblar_tabla_ventas(self, datos):
         for dato in datos:
+            fecha_formateada = self._formatear_fecha_iso(dato['fecha'])
             fila = [
                 QStandardItem(dato['folio']),
-                QStandardItem(dato['fecha']),
+                QStandardItem(fecha_formateada), # Fecha formateada
                 QStandardItem(dato['cliente_nombre']),
                 QStandardItem(f"${dato['total']:,.2f}"),
                 QStandardItem(f"${dato['saldo']:,.2f}"),
@@ -318,9 +323,10 @@ class ReportesWindow(QDialog):
 
     def poblar_tabla_cxc(self, datos):
         for dato in datos:
+            fecha_formateada = self._formatear_fecha_iso(dato['fecha'])
             fila = [
                 QStandardItem(dato['folio']),
-                QStandardItem(dato['fecha']),
+                QStandardItem(fecha_formateada), # Fecha formateada
                 QStandardItem(dato['cliente_nombre']),
                 QStandardItem(f"${dato['total']:,.2f}"),
                 QStandardItem(f"${dato['total_pagado']:,.2f}"),
@@ -344,11 +350,78 @@ class ReportesWindow(QDialog):
             )
             return
 
-        self.mostrar_mensaje(
-            "Exportar PDF",
-            "Funcionalidad de exportación a PDF en desarrollo",
-            QMessageBox.Information
-        )
+        if not generar_pdf_reporte:
+            self.mostrar_mensaje("Error", "El módulo de generación de PDF no está disponible.", QMessageBox.Critical)
+            return
+        
+        try:
+            # 1. Obtener datos de la empresa
+            empresa_data = db_helper.get_config_empresa()
+            if not empresa_data:
+                self.mostrar_mensaje("Error", "No se pudieron obtener los datos de la empresa.", QMessageBox.Critical)
+                return
+
+            # 2. Obtener datos del reporte
+            tipo = self.combo_tipo.currentText()
+            fecha_ini_str = self.fecha_inicial.date().toString("dd/MM/yyyy")
+            fecha_fin_str = self.fecha_final.date().toString("dd/MM/yyyy")
+            fechas_habilitadas = self.fecha_inicial.isEnabled()
+            
+            # 3. Obtener Headers
+            headers = []
+            for i in range(self.tabla_model.columnCount()):
+                headers.append(self.tabla_model.headerData(i, Qt.Horizontal))
+            
+            # 4. Obtener Datos
+            data = []
+            for row in range(self.tabla_model.rowCount()):
+                row_data = []
+                for col in range(self.tabla_model.columnCount()):
+                    row_data.append(self.tabla_model.item(row, col).text())
+                data.append(row_data)
+
+            # 5. Preguntar dónde guardar
+            default_filename = f"Reporte_{tipo.replace(' ', '_')}_{self.fecha_final.date().toString('yyyyMMdd')}.pdf"
+            
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar PDF de Reporte",
+                default_filename,
+                "Archivos PDF (*.pdf)"
+            )
+            
+            if save_path:
+                # 6. Generar PDF
+                exito = generar_pdf_reporte(
+                    titulo_reporte=tipo,
+                    fecha_ini_str=fecha_ini_str,
+                    fecha_fin_str=fecha_fin_str,
+                    headers=headers,
+                    data=data,
+                    empresa_data=empresa_data,
+                    save_path=save_path,
+                    fechas_habilitadas=fechas_habilitadas
+                )
+
+                if exito:
+                    self.mostrar_mensaje("Éxito", f"PDF generado exitosamente en:\n{save_path}", QMessageBox.Information)
+                    # 7. Abrir archivo
+                    try:
+                        if sys.platform == "win32":
+                            os.startfile(save_path)
+                        elif sys.platform == "darwin":
+                            subprocess.call(["open", save_path])
+                        else:
+                            subprocess.call(["xdg-open", save_path])
+                    except Exception as e:
+                        print(f"No se pudo abrir el PDF automáticamente: {e}")
+                else:
+                    self.mostrar_mensaje("Error", "Ocurrió un error al generar el archivo PDF.", QMessageBox.Critical)
+        
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"Error al preparar la impresión: {e}", QMessageBox.Critical)
+            import traceback
+            traceback.print_exc()
 
     def exportar_excel(self):
         """Exportar reporte a Excel"""
