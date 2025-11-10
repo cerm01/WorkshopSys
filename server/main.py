@@ -911,6 +911,20 @@ async def eliminar_usuario_api(usuario_id: int, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+@app.post("/admin/init-db")
+async def init_database():
+    """Endpoint temporal para inicializar BD"""
+    try:
+        from server.database import crear_tablas
+        from server.init_db import cargar_datos_ejemplo
+        
+        crear_tablas()
+        cargar_datos_ejemplo()
+        
+        return {"success": True, "message": "Base de datos inicializada"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 # ==================== CONVERSORES (Serializers) ====================
