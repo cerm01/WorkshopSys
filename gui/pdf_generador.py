@@ -503,3 +503,64 @@ def generar_pdf_estado_cuenta(cliente_nombre, transacciones, totales, fechas, em
         import traceback
         traceback.print_exc()
         return False
+
+def _dibujar_datos_estado_cuenta_proveedor(c, proveedor_nombre, fecha_ini, fecha_fin):
+    """Dibuja los datos del proveedor y el rango de fechas."""
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, 9.0 * inch, "PROVEEDOR:")
+    c.setFont("Helvetica", 11)
+    c.drawString(1 * inch, 8.8 * inch, proveedor_nombre)
+    
+    c.setFont("Helvetica-Bold", 12)
+    c.drawRightString(7.5 * inch, 9.0 * inch, "ESTADO DE CUENTA DE PROVEEDOR")
+    
+    c.setFont("Helvetica", 11)
+    c.drawRightString(7.5 * inch, 8.8 * inch, f"Del: {fecha_ini.strftime('%d/%m/%Y')}")
+    c.drawRightString(7.5 * inch, 8.6 * inch, f"Al: {fecha_fin.strftime('%d/%m/%Y')}")
+
+def _dibujar_totales_estado_cuenta_proveedor(c, totales, y_start):
+    """Dibuja los totales del estado de cuenta del proveedor."""
+    c.setFont("Helvetica-Bold", 11)
+    x_label = 4.8 * inch
+    x_valor = 7.4 * inch
+    
+    y = y_start - 0.2*inch
+    c.line(x_label - 0.2*inch, y, 7.5*inch, y)
+    y -= 0.2 * inch
+    
+    c.drawString(x_label, y, "Total Cargos (Notas Prov):")
+    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['cargos']:,.2f}")
+    y -= 0.25 * inch
+
+    c.drawString(x_label, y, "Total Abonos (Pagos Realizados):")
+    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['abonos']:,.2f}")
+    y -= 0.25 * inch
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(x_label, y, "Saldo por Pagar del Periodo:")
+    c.drawRightString(x_valor + 0.7*inch, y, f"${totales['saldo']:,.2f}")
+
+def generar_pdf_estado_cuenta_proveedor(proveedor_nombre, transacciones, totales, fechas, empresa_data, save_path):
+    """Función principal para generar el PDF de Estado de Cuenta de Proveedor."""
+    try:
+        c = canvas.Canvas(save_path, pagesize=letter)
+        
+        _dibujar_encabezado(c, empresa_data)
+        
+        _dibujar_datos_estado_cuenta_proveedor(c, proveedor_nombre, fechas['ini'], fechas['fin'])
+
+        # Reutilizamos la función de la tabla de clientes, ya que es idéntica
+        y_tabla = 8.3 * inch
+        y_final_tabla = _dibujar_tabla_estado_cuenta(c, transacciones, y_tabla)
+        
+        y_totales = min(y_final_tabla, 4.0 * inch)
+        _dibujar_totales_estado_cuenta_proveedor(c, totales, y_totales)
+        
+        c.showPage()
+        c.save()
+        return True
+    except Exception as e:
+        print(f"Error al generar PDF de Estado de Cuenta Proveedor: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
