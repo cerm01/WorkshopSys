@@ -1,6 +1,7 @@
 import sys
 import os
 import subprocess
+import re
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
     QLabel, QComboBox, QDateEdit, QTableView, QHeaderView,
@@ -26,6 +27,13 @@ try:
 except ImportError as e:
     print(f"Advertencia: No se pudo cargar pdf_generator (reportes): {e}")
     generar_pdf_reporte = None
+
+try:
+    import openpyxl
+    from openpyxl.utils import get_column_letter
+except ImportError:
+    print("Advertencia: openpyxl no está instalado. Instalar con: pip install openpyxl")
+    openpyxl = None
 
 
 class ReportesWindow(QDialog):
@@ -433,11 +441,102 @@ class ReportesWindow(QDialog):
             )
             return
 
-        self.mostrar_mensaje(
-            "Exportar Excel",
-            "Funcionalidad de exportación a Excel en desarrollo",
-            QMessageBox.Information
+        if not openpyxl:
+            self.mostrar_mensaje("Error", "La librería 'openpyxl' es necesaria.\nInstálala con: pip install openpyxl", QMessageBox.Critical)
+            return
+
+        # Nombre de archivo sugerido
+        tipo = self.combo_tipo.currentText().replace(' ', '_')
+        default_filename = f"Reporte_{tipo}_{self.fecha_final.date().toString('yyyyMMdd')}.xlsx"
+
+        # Preguntar dónde guardar
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar Reporte Excel",
+            default_filename,
+            "Archivos Excel (*.xlsx)"
         )
+
+        if not save_path:
+            return  # El usuario canceló
+
+        try:
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = self.combo_tipo.currentText()[:31] # Título de la hoja
+
+            # Escribir cabeceras
+            headers = []
+            for col in range(self.tabla_model.columnCount()):
+                header_text = self.tabla_model.headerData(col, Qt.Horizontal)
+                ws.cell(row=1, column=col + 1).value = header_text
+                headers.append(header_text)
+
+            # Escribir datos
+            for row in range(self.tabla_model.rowCount()):
+                for col in range(self.tabla_model.columnCount()):
+                    item = self.tabla_model.item(row, col)
+                    if not item:
+                        continue
+                    
+                    valor_str = item.text()
+                    valor_final = valor_str  # Por defecto es texto
+
+                    # Intentar convertir tipos para que Excel los reconozca
+                    # 1. Moneda ($1,234.50)
+                    if valor_str.startswith('$'):
+                        try:
+                            valor_final = float(valor_str.replace('$', '').replace(',', ''))
+                        except ValueError:
+                            valor_final = valor_str
+                    # 2. Números enteros (ej: Cantidad, Stock)
+                    elif valor_str.isdigit():
+                        try:
+                            valor_final = int(valor_str)
+                        except ValueError:
+                            valor_final = valor_str
+                    # 3. Números flotantes (raro, pero posible)
+                    elif re.match(r'^-?\d+\.\d+$', valor_str):
+                        try:
+                            valor_final = float(valor_str)
+                        except ValueError:
+                            valor_final = valor_str
+
+                    # Escribir celda
+                    ws.cell(row=row + 2, column=col + 1).value = valor_final
+
+            # Ajustar ancho de columnas
+            for col_idx, header in enumerate(headers, 1):
+                max_length = len(header)
+                for row in range(2, ws.max_row + 1):
+                    cell_value = ws.cell(row=row, column=col_idx).value
+                    if cell_value:
+                        max_length = max(max_length, len(str(cell_value)))
+                # Ajustar ancho (letra de columna + 2 de padding)
+                ws.column_dimensions[get_column_letter(col_idx)].width = max_length + 2
+
+            # Guardar
+            wb.save(save_path)
+            
+            self.mostrar_mensaje(
+                "Éxito",
+                f"Reporte exportado a Excel exitosamente:\n{save_path}",
+                QMessageBox.Information
+            )
+            
+            # Abrir archivo
+            try:
+                if sys.platform == "win32":
+                    os.startfile(save_path)
+                elif sys.platform == "darwin":
+                    subprocess.call(["open", save_path])
+                else:
+                    subprocess.call(["xdg-open", save_path])
+            except Exception as e:
+                print(f"No se pudo abrir el Excel automáticamente: {e}")
+
+        except Exception as e:
+            self.mostrar_mensaje("Error", f"No se pudo guardar el archivo Excel:\n{str(e)}", QMessageBox.Critical)
 
     def limpiar_resultados(self):
             """Limpiar los resultados de la tabla"""
