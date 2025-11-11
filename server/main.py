@@ -1321,6 +1321,211 @@ async def load_sample_data():
         import traceback
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
     
+@app.post("/admin/create-missing-tables")
+async def create_missing_tables():
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # Movimientos Inventario
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS movimientos_inventario (
+                    id SERIAL PRIMARY KEY,
+                    tipo VARCHAR(20) NOT NULL,
+                    cantidad INTEGER NOT NULL,
+                    motivo VARCHAR(200),
+                    usuario VARCHAR(100),
+                    producto_id INTEGER REFERENCES inventario(id) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Órdenes
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS ordenes (
+                    id SERIAL PRIMARY KEY,
+                    folio VARCHAR(50) UNIQUE NOT NULL,
+                    cliente_id INTEGER REFERENCES clientes(id) NOT NULL,
+                    vehiculo_marca VARCHAR(100),
+                    vehiculo_modelo VARCHAR(100),
+                    vehiculo_ano VARCHAR(10),
+                    vehiculo_placas VARCHAR(20),
+                    vehiculo_vin VARCHAR(50),
+                    vehiculo_color VARCHAR(50),
+                    vehiculo_kilometraje VARCHAR(20),
+                    estado VARCHAR(50) DEFAULT 'Pendiente',
+                    mecanico_asignado VARCHAR(100),
+                    fecha_recepcion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_promesa TIMESTAMP,
+                    fecha_entrega TIMESTAMP,
+                    observaciones TEXT,
+                    nota_folio VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Órdenes Items
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS ordenes_items (
+                    id SERIAL PRIMARY KEY,
+                    orden_id INTEGER REFERENCES ordenes(id) NOT NULL,
+                    cantidad INTEGER DEFAULT 1,
+                    descripcion TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Cotizaciones
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS cotizaciones (
+                    id SERIAL PRIMARY KEY,
+                    folio VARCHAR(50) UNIQUE NOT NULL,
+                    cliente_id INTEGER REFERENCES clientes(id) NOT NULL,
+                    estado VARCHAR(50) DEFAULT 'Pendiente',
+                    fecha DATE NOT NULL,
+                    vigencia DATE,
+                    proyecto VARCHAR(200),
+                    subtotal NUMERIC(10,2) DEFAULT 0.0,
+                    impuestos NUMERIC(10,2) DEFAULT 0.0,
+                    total NUMERIC(10,2) DEFAULT 0.0,
+                    nota_folio VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Cotizaciones Items
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS cotizaciones_items (
+                    id SERIAL PRIMARY KEY,
+                    cotizacion_id INTEGER REFERENCES cotizaciones(id) NOT NULL,
+                    cantidad INTEGER DEFAULT 1,
+                    descripcion TEXT NOT NULL,
+                    precio_unitario NUMERIC(10,2) NOT NULL,
+                    importe NUMERIC(10,2) NOT NULL,
+                    impuesto NUMERIC(5,2) DEFAULT 16.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Notas Venta
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS notas_venta (
+                    id SERIAL PRIMARY KEY,
+                    folio VARCHAR(50) UNIQUE NOT NULL,
+                    cliente_id INTEGER REFERENCES clientes(id) NOT NULL,
+                    estado VARCHAR(50) DEFAULT 'Registrado',
+                    metodo_pago VARCHAR(50) DEFAULT 'Efectivo',
+                    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    observaciones TEXT,
+                    subtotal NUMERIC(10,2) DEFAULT 0.0,
+                    impuestos NUMERIC(10,2) DEFAULT 0.0,
+                    total NUMERIC(10,2) DEFAULT 0.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Notas Venta Items
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS notas_venta_items (
+                    id SERIAL PRIMARY KEY,
+                    nota_id INTEGER REFERENCES notas_venta(id) NOT NULL,
+                    producto_id INTEGER REFERENCES inventario(id),
+                    cantidad INTEGER DEFAULT 1,
+                    descripcion TEXT NOT NULL,
+                    precio_unitario NUMERIC(10,2) NOT NULL,
+                    importe NUMERIC(10,2) NOT NULL,
+                    impuesto NUMERIC(5,2) DEFAULT 16.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Notas Venta Pagos
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS notas_venta_pagos (
+                    id SERIAL PRIMARY KEY,
+                    nota_id INTEGER REFERENCES notas_venta(id) NOT NULL,
+                    monto NUMERIC(10,2) NOT NULL,
+                    fecha_pago TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    metodo_pago VARCHAR(50) DEFAULT 'Efectivo',
+                    memo TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Notas Proveedor
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS notas_proveedor (
+                    id SERIAL PRIMARY KEY,
+                    folio VARCHAR(50) UNIQUE NOT NULL,
+                    proveedor_id INTEGER REFERENCES proveedores(id) NOT NULL,
+                    estado VARCHAR(50) DEFAULT 'Registrada',
+                    fecha DATE NOT NULL,
+                    fecha_vencimiento DATE,
+                    subtotal NUMERIC(10,2) DEFAULT 0.0,
+                    impuestos NUMERIC(10,2) DEFAULT 0.0,
+                    total NUMERIC(10,2) DEFAULT 0.0,
+                    saldo_pendiente NUMERIC(10,2) DEFAULT 0.0,
+                    observaciones TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Notas Proveedor Items
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS notas_proveedor_items (
+                    id SERIAL PRIMARY KEY,
+                    nota_id INTEGER REFERENCES notas_proveedor(id) NOT NULL,
+                    producto_id INTEGER REFERENCES inventario(id),
+                    cantidad INTEGER DEFAULT 1,
+                    descripcion TEXT NOT NULL,
+                    precio_unitario NUMERIC(10,2) NOT NULL,
+                    importe NUMERIC(10,2) NOT NULL,
+                    impuesto NUMERIC(5,2) DEFAULT 16.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Notas Proveedor Pagos
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS notas_proveedor_pagos (
+                    id SERIAL PRIMARY KEY,
+                    nota_id INTEGER REFERENCES notas_proveedor(id) NOT NULL,
+                    monto NUMERIC(10,2) NOT NULL,
+                    fecha_pago TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    metodo_pago VARCHAR(50) DEFAULT 'Efectivo',
+                    memo TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            conn.commit()
+            
+            # Verificar
+            result = conn.execute(text("""
+                SELECT table_name FROM information_schema.tables 
+                WHERE table_schema = 'public' ORDER BY table_name
+            """))
+            tables = [row[0] for row in result]
+            
+            return {
+                "success": True,
+                "tables": tables,
+                "count": len(tables)
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+    
 @app.post("/admin/fix-tables")
 async def fix_missing_columns():
     """Agregar columnas faltantes a las tablas"""
