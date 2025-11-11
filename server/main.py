@@ -2083,6 +2083,62 @@ async def import_data(data: Dict[str, Any]):
             "traceback": traceback.format_exc()
         }
     
+@app.post("/admin/clear-data")
+async def clear_data():
+    """Limpiar todas las tablas excepto usuarios"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # Desactivar restricciones temporalmente
+            conn.execute(text("SET session_replication_role = 'replica'"))
+            
+            # Eliminar datos en orden inverso (por dependencias)
+            tablas = [
+                "notas_proveedor_pagos",
+                "notas_proveedor_items",
+                "notas_proveedor",
+                "notas_venta_pagos",
+                "notas_venta_items",
+                "notas_venta",
+                "cotizaciones_items",
+                "cotizaciones",
+                "ordenes_items",
+                "ordenes",
+                "movimientos_inventario",
+                "inventario",
+                "proveedores",
+                "clientes",
+                "config_empresa"
+            ]
+            
+            deleted = {}
+            for tabla in tablas:
+                result = conn.execute(text(f"DELETE FROM {tabla}"))
+                deleted[tabla] = result.rowcount
+                print(f"🗑️  {tabla}: {result.rowcount} registros eliminados")
+            
+            # Reactivar restricciones
+            conn.execute(text("SET session_replication_role = 'origin'"))
+            
+            conn.commit()
+            
+            return {
+                "success": True,
+                "deleted": deleted,
+                "total": sum(deleted.values()),
+                "message": "Datos eliminados correctamente"
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+    
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
     if not c:
