@@ -2491,38 +2491,40 @@ async def test_cotizaciones(db: Session = Depends(get_db)):
             "traceback": traceback.format_exc()
         }
     
-@app.post("/admin/fix-cotizaciones-estructura")
-async def fix_cotizaciones_estructura():
-    """Recrear SOLO tabla cotizaciones EXACTA al PDF"""
+@app.post("/admin/fix-notas-proveedor-estructura")
+async def fix_notas_proveedor_estructura():
+    """Recrear SOLO tabla notas_proveedor"""
     try:
         from server.database import engine
         from sqlalchemy import text
         
         with engine.connect() as conn:
-            # Eliminar solo cotizaciones
-            conn.execute(text("DROP TABLE IF EXISTS cotizaciones CASCADE"))
+            # Eliminar solo notas_proveedor
+            conn.execute(text("DROP TABLE IF EXISTS notas_proveedor CASCADE"))
             
-            # Recrear EXACTA al PDF
+            # Recrear EXACTA
             conn.execute(text("""
-                CREATE TABLE cotizaciones (
+                CREATE TABLE notas_proveedor (
                     id SERIAL PRIMARY KEY,
                     folio VARCHAR(50) NOT NULL,
-                    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+                    proveedor_id INTEGER NOT NULL REFERENCES proveedores(id),
                     estado VARCHAR(50),
-                    vigencia VARCHAR(50),
+                    metodo_pago VARCHAR(50),
                     subtotal REAL,
                     impuestos REAL,
                     total REAL,
+                    total_pagado REAL,
+                    saldo REAL,
                     observaciones TEXT,
+                    fecha TIMESTAMP,
                     created_at TIMESTAMP,
-                    updated_at TIMESTAMP,
-                    nota_folio TEXT
+                    updated_at TIMESTAMP
                 )
             """))
             
             conn.commit()
             
-            return {"success": True, "message": "Tabla cotizaciones corregida"}
+            return {"success": True, "message": "Tabla notas_proveedor corregida"}
             
     except Exception as e:
         import traceback
