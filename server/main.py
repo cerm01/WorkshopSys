@@ -2493,14 +2493,13 @@ async def test_cotizaciones(db: Session = Depends(get_db)):
     
 @app.post("/admin/fix-cotizaciones-estructura")
 async def fix_cotizaciones_estructura():
-    """Recrear tabla cotizaciones EXACTA al PDF"""
+    """Recrear SOLO tabla cotizaciones EXACTA al PDF"""
     try:
         from server.database import engine
         from sqlalchemy import text
         
         with engine.connect() as conn:
-            # Eliminar tabla actual
-            conn.execute(text("DROP TABLE IF EXISTS cotizaciones_items CASCADE"))
+            # Eliminar solo cotizaciones
             conn.execute(text("DROP TABLE IF EXISTS cotizaciones CASCADE"))
             
             # Recrear EXACTA al PDF
@@ -2521,23 +2520,9 @@ async def fix_cotizaciones_estructura():
                 )
             """))
             
-            # Recrear items también
-            conn.execute(text("""
-                CREATE TABLE cotizaciones_items (
-                    id SERIAL PRIMARY KEY,
-                    cotizacion_id INTEGER NOT NULL REFERENCES cotizaciones(id),
-                    cantidad INTEGER,
-                    descripcion TEXT NOT NULL,
-                    precio_unitario REAL,
-                    importe REAL,
-                    impuesto REAL,
-                    created_at TIMESTAMP
-                )
-            """))
-            
             conn.commit()
             
-            return {"success": True, "message": "Tabla cotizaciones recreada exacta al PDF"}
+            return {"success": True, "message": "Tabla cotizaciones corregida"}
             
     except Exception as e:
         import traceback
