@@ -36,7 +36,7 @@ class WebSocketClient(QThread):
 
     connection_status = pyqtSignal(bool)  # True=conectado, False=desconectado
     
-    def __init__(self, server_url: str = "localhost:8000"):
+    def __init__(self, server_url: str = "web-production-96c8.up.railway.app"): 
         super().__init__()
         self.server_url = server_url
         self.ws = None
@@ -48,7 +48,7 @@ class WebSocketClient(QThread):
         while self.running:
             try:
                 self.ws = websocket.WebSocketApp(
-                    f"ws://{self.server_url}/ws",
+                    f"wss://web-production-96c8.up.railway.app/ws",
                     on_message=self.on_message,
                     on_error=self.on_error,
                     on_close=self.on_close,
@@ -150,7 +150,7 @@ class WebSocketClient(QThread):
 # Instancia global (se inicializa en main)
 ws_client = None
 
-def init_websocket(server_url: str = "localhost:8000"):
+def init_websocket(server_url: str = "web-production-96c8.up.railway.app"):
     """Inicializar WebSocket global"""
     global ws_client
     if ws_client is None:

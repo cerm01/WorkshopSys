@@ -9,7 +9,7 @@ from gui.websocket_client import init_websocket
 from ml.auto_retrain import debe_reentrenar, reentrenar_silencioso
 
 # ==================== CONFIGURACIÓN ====================
-SERVER_URL = "localhost:8000"
+SERVER_URL = "web-production-96c8.up.railway.app"
 
 # ==================== INICIAR APLICACIÓN ====================
 if __name__ == "__main__":
