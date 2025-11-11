@@ -950,46 +950,42 @@ async def check_tables():
         }
 
 @app.post("/admin/create-admin")
-async def create_admin_user():
-    """Crear usuario admin directamente"""
+async def create_admin():
+    """Crear usuario admin si no existe"""
     try:
-        from server.database import SessionLocal
+        from server.database import SessionLocal, engine
         from server.models import Usuario
-        import hashlib
+        from sqlalchemy import text
+        import bcrypt
         
-        db = SessionLocal()
-        
-        # Verificar si existe
-        existing = db.query(Usuario).filter(Usuario.username == "admin").first()
-        if existing:
-            total = db.query(Usuario).count()
-            db.close()
-            return {"message": "Admin ya existe", "total_usuarios": total}
-        
-        # Crear admin
-        admin = Usuario(
-            username="admin",
-            password_hash=hashlib.sha256("admin123".encode()).hexdigest(),
-            nombre_completo="Administrador del Sistema",
-            email="admin@taller.com",
-            rol="Admin",
-            activo=True
-        )
-        
-        db.add(admin)
-        db.commit()
-        db.refresh(admin)
-        
-        total = db.query(Usuario).count()
-        db.close()
-        
-        return {
-            "success": True,
-            "message": "Admin creado",
-            "user_id": admin.id,
-            "total_usuarios": total
-        }
-        
+        # Usar conexión directa en lugar de ORM
+        with engine.connect() as conn:
+            # Verificar si existe
+            result = conn.execute(text("SELECT COUNT(*) FROM usuarios WHERE username = 'admin'"))
+            count = result.scalar()
+            
+            if count > 0:
+                return {"success": True, "message": "Admin ya existe"}
+            
+            # Crear password hash
+            password = "admin123"
+            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            
+            # Insertar
+            conn.execute(text("""
+                INSERT INTO usuarios (username, password_hash, nombre_completo, email, rol, activo)
+                VALUES ('admin', :password_hash, 'Administrador', 'admin@workshopsys.com', 'admin', true)
+            """), {"password_hash": password_hash})
+            
+            conn.commit()
+            
+            return {
+                "success": True,
+                "message": "Usuario admin creado",
+                "username": "admin",
+                "password": "admin123"
+            }
+            
     except Exception as e:
         import traceback
         return {
