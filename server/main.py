@@ -2230,7 +2230,7 @@ async def get_database_structure():
 
 @app.post("/admin/fix-cotizaciones")
 async def fix_cotizaciones_table():
-    """Agregar columnas faltantes a cotizaciones"""
+    """Agregar TODAS las columnas faltantes a cotizaciones"""
     try:
         from server.database import engine
         from sqlalchemy import text
@@ -2240,9 +2240,10 @@ async def fix_cotizaciones_table():
             conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS fecha DATE"))
             conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS vigencia DATE"))
             conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS nota_folio VARCHAR(50)"))
+            conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS observaciones TEXT"))
             conn.commit()
             
-            return {"success": True, "message": "Columnas agregadas a cotizaciones"}
+            return {"success": True, "message": "Todas las columnas agregadas"}
     except Exception as e:
         import traceback
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
