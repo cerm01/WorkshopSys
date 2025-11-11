@@ -2491,42 +2491,45 @@ async def test_cotizaciones(db: Session = Depends(get_db)):
             "traceback": traceback.format_exc()
         }
     
-@app.post("/admin/fix-notas-venta-estructura")
-async def fix_notas_venta_estructura():
-    """Recrear SOLO tabla notas_venta"""
+@app.post("/admin/fix-ordenes-estructura")
+async def fix_ordenes_estructura():
+    """Recrear SOLO tabla ordenes"""
     try:
         from server.database import engine
         from sqlalchemy import text
         
         with engine.connect() as conn:
-            # Eliminar solo notas_venta
-            conn.execute(text("DROP TABLE IF EXISTS notas_venta CASCADE"))
+            # Eliminar solo ordenes
+            conn.execute(text("DROP TABLE IF EXISTS ordenes CASCADE"))
             
             # Recrear EXACTA
             conn.execute(text("""
-                CREATE TABLE notas_venta (
+                CREATE TABLE ordenes (
                     id SERIAL PRIMARY KEY,
                     folio VARCHAR(50) NOT NULL,
                     cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+                    vehiculo_marca VARCHAR(100),
+                    vehiculo_modelo VARCHAR(100),
+                    vehiculo_ano VARCHAR(10),
+                    vehiculo_placas VARCHAR(20),
+                    vehiculo_vin VARCHAR(50),
+                    vehiculo_color VARCHAR(50),
+                    vehiculo_kilometraje VARCHAR(20),
                     estado VARCHAR(50),
-                    metodo_pago VARCHAR(50),
-                    subtotal REAL,
-                    impuestos REAL,
-                    total REAL,
-                    total_pagado REAL,
-                    saldo REAL,
+                    mecanico_asignado VARCHAR(100),
+                    fecha_recepcion TIMESTAMP,
+                    fecha_promesa TIMESTAMP,
+                    fecha_entrega TIMESTAMP,
                     observaciones TEXT,
-                    fecha TIMESTAMP,
                     created_at TIMESTAMP,
                     updated_at TIMESTAMP,
-                    cotizacion_folio TEXT,
-                    orden_folio TEXT
+                    nota_folio TEXT
                 )
             """))
             
             conn.commit()
             
-            return {"success": True, "message": "Tabla notas_venta corregida"}
+            return {"success": True, "message": "Tabla ordenes corregida"}
             
     except Exception as e:
         import traceback
