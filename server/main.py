@@ -1356,6 +1356,159 @@ async def fix_missing_columns():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+
+@app.post("/admin/recreate-all-tables")
+async def recreate_all_tables():
+    """Eliminar y recrear TODAS las tablas con estructura completa"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # ELIMINAR tablas existentes (en orden por dependencias)
+            conn.execute(text("DROP TABLE IF EXISTS notas_proveedor_pagos CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS notas_proveedor_items CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS notas_proveedor CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS notas_venta_pagos CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS notas_venta_items CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS notas_venta CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS cotizaciones_items CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS cotizaciones CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS ordenes_items CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS ordenes CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS movimientos_inventario CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS inventario CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS proveedores CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS clientes CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS config_empresa CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS usuarios CASCADE"))
+            
+            # CREAR TODAS las tablas
+            
+            # Usuarios
+            conn.execute(text("""
+                CREATE TABLE usuarios (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(100) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    nombre_completo VARCHAR(200) NOT NULL,
+                    email VARCHAR(150) UNIQUE,
+                    rol VARCHAR(50) DEFAULT 'Capturista',
+                    activo BOOLEAN DEFAULT true,
+                    ultimo_acceso TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Clientes
+            conn.execute(text("""
+                CREATE TABLE clientes (
+                    id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(200) NOT NULL,
+                    tipo VARCHAR(50),
+                    email VARCHAR(150),
+                    telefono VARCHAR(20),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    pais VARCHAR(100) DEFAULT 'México',
+                    rfc VARCHAR(13),
+                    activo BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Proveedores
+            conn.execute(text("""
+                CREATE TABLE proveedores (
+                    id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(200) NOT NULL,
+                    tipo VARCHAR(50),
+                    email VARCHAR(150),
+                    telefono VARCHAR(20),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    pais VARCHAR(100) DEFAULT 'México',
+                    rfc VARCHAR(13),
+                    activo BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Inventario
+            conn.execute(text("""
+                CREATE TABLE inventario (
+                    id SERIAL PRIMARY KEY,
+                    codigo VARCHAR(50) UNIQUE NOT NULL,
+                    nombre VARCHAR(200) NOT NULL,
+                    categoria VARCHAR(100) NOT NULL,
+                    stock_actual INTEGER DEFAULT 0,
+                    stock_min INTEGER DEFAULT 0,
+                    ubicacion VARCHAR(100),
+                    precio_compra NUMERIC(10,2) DEFAULT 0.0,
+                    precio_venta NUMERIC(10,2) DEFAULT 0.0,
+                    proveedor_id INTEGER REFERENCES proveedores(id),
+                    descripcion TEXT,
+                    activo BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Config Empresa
+            conn.execute(text("""
+                CREATE TABLE config_empresa (
+                    id SERIAL PRIMARY KEY,
+                    nombre_comercial VARCHAR(200) NOT NULL,
+                    razon_social VARCHAR(200),
+                    rfc VARCHAR(13),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    pais VARCHAR(100) DEFAULT 'México',
+                    telefono1 VARCHAR(20),
+                    telefono2 VARCHAR(20),
+                    email VARCHAR(150),
+                    sitio_web VARCHAR(200),
+                    logo_data BYTEA,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            conn.commit()
+            
+            # Verificar
+            result = conn.execute(text("""
+                SELECT table_name FROM information_schema.tables 
+                WHERE table_schema = 'public' ORDER BY table_name
+            """))
+            tables = [row[0] for row in result]
+            
+            return {
+                "success": True,
+                "message": "Todas las tablas recreadas",
+                "tables": tables,
+                "count": len(tables)
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
     if not c:
