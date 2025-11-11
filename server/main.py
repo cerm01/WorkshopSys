@@ -2491,6 +2491,58 @@ async def test_cotizaciones(db: Session = Depends(get_db)):
             "traceback": traceback.format_exc()
         }
     
+@app.post("/admin/fix-cotizaciones-estructura")
+async def fix_cotizaciones_estructura():
+    """Recrear tabla cotizaciones EXACTA al PDF"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # Eliminar tabla actual
+            conn.execute(text("DROP TABLE IF EXISTS cotizaciones_items CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS cotizaciones CASCADE"))
+            
+            # Recrear EXACTA al PDF
+            conn.execute(text("""
+                CREATE TABLE cotizaciones (
+                    id SERIAL PRIMARY KEY,
+                    folio VARCHAR(50) NOT NULL,
+                    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+                    estado VARCHAR(50),
+                    vigencia VARCHAR(50),
+                    subtotal REAL,
+                    impuestos REAL,
+                    total REAL,
+                    observaciones TEXT,
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP,
+                    nota_folio TEXT
+                )
+            """))
+            
+            # Recrear items también
+            conn.execute(text("""
+                CREATE TABLE cotizaciones_items (
+                    id SERIAL PRIMARY KEY,
+                    cotizacion_id INTEGER NOT NULL REFERENCES cotizaciones(id),
+                    cantidad INTEGER,
+                    descripcion TEXT NOT NULL,
+                    precio_unitario REAL,
+                    importe REAL,
+                    impuesto REAL,
+                    created_at TIMESTAMP
+                )
+            """))
+            
+            conn.commit()
+            
+            return {"success": True, "message": "Tabla cotizaciones recreada exacta al PDF"}
+            
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+    
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
     if not c:
