@@ -2491,38 +2491,37 @@ async def test_cotizaciones(db: Session = Depends(get_db)):
             "traceback": traceback.format_exc()
         }
     
-@app.post("/admin/create-admin-user")
-async def create_admin_user():
-    """Crear usuario admin con datos específicos"""
+@app.get("/admin/check-admin")
+async def check_admin():
+    """Verificar si admin existe y sus datos"""
     try:
         from server.database import engine
         from sqlalchemy import text
-        import bcrypt
         
         with engine.connect() as conn:
-            # Verificar si ya existe
-            result = conn.execute(text("SELECT COUNT(*) FROM usuarios WHERE username = 'admin'"))
-            if result.scalar() > 0:
-                return {"success": True, "message": "Usuario admin ya existe"}
+            result = conn.execute(text("""
+                SELECT id, username, nombre_completo, email, rol, activo 
+                FROM usuarios 
+                WHERE username = 'admin'
+            """))
             
-            # Hash de la contraseña
-            password_hash = bcrypt.hashpw("123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            row = result.fetchone()
             
-            # Insertar admin
-            conn.execute(text("""
-                INSERT INTO usuarios (username, password_hash, nombre_completo, email, rol, activo, created_at, updated_at)
-                VALUES ('admin', :password_hash, 'Administrador del Sistema', 'admin@taller.com', 'Admin', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            """), {"password_hash": password_hash})
-            
-            conn.commit()
-            
-            return {
-                "success": True,
-                "message": "Usuario admin creado",
-                "username": "admin",
-                "password": "123"
-            }
-            
+            if row:
+                return {
+                    "success": True,
+                    "user": {
+                        "id": row[0],
+                        "username": row[1],
+                        "nombre_completo": row[2],
+                        "email": row[3],
+                        "rol": row[4],
+                        "activo": row[5]
+                    }
+                }
+            else:
+                return {"success": False, "message": "Usuario admin no existe"}
+                
     except Exception as e:
         import traceback
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
