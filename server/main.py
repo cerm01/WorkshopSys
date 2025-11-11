@@ -2500,6 +2500,11 @@ async def create_admin_user():
         import bcrypt
         
         with engine.connect() as conn:
+            # Verificar si ya existe
+            result = conn.execute(text("SELECT COUNT(*) FROM usuarios WHERE username = 'admin'"))
+            if result.scalar() > 0:
+                return {"success": True, "message": "Usuario admin ya existe"}
+            
             # Hash de la contraseña
             password_hash = bcrypt.hashpw("123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             
@@ -2507,7 +2512,6 @@ async def create_admin_user():
             conn.execute(text("""
                 INSERT INTO usuarios (username, password_hash, nombre_completo, email, rol, activo, created_at, updated_at)
                 VALUES ('admin', :password_hash, 'Administrador del Sistema', 'admin@taller.com', 'Admin', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                ON CONFLICT (username) DO NOTHING
             """), {"password_hash": password_hash})
             
             conn.commit()
