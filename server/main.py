@@ -1560,6 +1560,36 @@ async def fix_missing_columns():
             "traceback": traceback.format_exc()
         }
 
+@app.post("/admin/fix-missing-columns")
+async def fix_missing_columns():
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # Notas Venta
+            conn.execute(text("ALTER TABLE notas_venta ADD COLUMN IF NOT EXISTS total_pagado NUMERIC(10,2) DEFAULT 0.0"))
+            conn.execute(text("ALTER TABLE notas_venta ADD COLUMN IF NOT EXISTS saldo NUMERIC(10,2) DEFAULT 0.0"))
+            conn.execute(text("ALTER TABLE notas_venta ADD COLUMN IF NOT EXISTS cotizacion_folio VARCHAR(50)"))
+            conn.execute(text("ALTER TABLE notas_venta ADD COLUMN IF NOT EXISTS orden_folio VARCHAR(50)"))
+            
+            # Cotizaciones - AGREGAR ESTAS
+            conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS fecha DATE"))
+            conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS vigencia DATE"))
+            conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS proyecto VARCHAR(200)"))
+            conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS nota_folio VARCHAR(50)"))
+            
+            # Notas Proveedor
+            conn.execute(text("ALTER TABLE notas_proveedor ADD COLUMN IF NOT EXISTS fecha_vencimiento DATE"))
+            
+            conn.commit()
+            
+            return {"success": True, "message": "Columnas agregadas"}
+            
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
 @app.post("/admin/recreate-all-tables")
 async def recreate_all_tables():
     """Eliminar y recrear TODAS las tablas con estructura completa"""
