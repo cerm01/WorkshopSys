@@ -1151,6 +1151,122 @@ async def create_table_with_raw_sql():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+    
+@app.post("/admin/create-all-tables-raw")
+async def create_all_tables_with_sql():
+    """Crear todas las tablas con SQL directo"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # Clientes
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS clientes (
+                    id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(200) NOT NULL,
+                    tipo VARCHAR(50),
+                    rfc VARCHAR(13),
+                    email VARCHAR(150),
+                    telefono VARCHAR(20),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    activo BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Proveedores
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS proveedores (
+                    id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(200) NOT NULL,
+                    tipo VARCHAR(50),
+                    rfc VARCHAR(13),
+                    email VARCHAR(150),
+                    telefono VARCHAR(20),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    activo BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Inventario
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS inventario (
+                    id SERIAL PRIMARY KEY,
+                    codigo VARCHAR(50) UNIQUE NOT NULL,
+                    nombre VARCHAR(200) NOT NULL,
+                    descripcion TEXT,
+                    categoria VARCHAR(100),
+                    precio_compra NUMERIC(10,2),
+                    precio_venta NUMERIC(10,2),
+                    stock_actual INTEGER DEFAULT 0,
+                    stock_minimo INTEGER DEFAULT 0,
+                    proveedor_id INTEGER REFERENCES proveedores(id),
+                    activo BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Config Empresa
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS config_empresa (
+                    id SERIAL PRIMARY KEY,
+                    nombre_comercial VARCHAR(200) NOT NULL,
+                    razon_social VARCHAR(200),
+                    rfc VARCHAR(13),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    pais VARCHAR(100) DEFAULT 'México',
+                    telefono1 VARCHAR(20),
+                    telefono2 VARCHAR(20),
+                    email VARCHAR(150),
+                    sitio_web VARCHAR(200),
+                    logo_data BYTEA,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            conn.commit()
+            
+            # Verificar tablas creadas
+            result = conn.execute(text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
+                ORDER BY table_name
+            """))
+            tables = [row[0] for row in result]
+            
+            return {
+                "success": True,
+                "message": "Tablas principales creadas",
+                "tables": tables,
+                "count": len(tables)
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
