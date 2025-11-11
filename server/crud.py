@@ -1087,8 +1087,8 @@ def eliminar_pago_nota_proveedor(db: Session, pago_id: int) -> Optional[NotaProv
     return nota
 
 # ==================== USUARIOS ====================
-
 import bcrypt
+from sqlalchemy import and_
 
 def get_usuario_by_username(db: Session, username: str) -> Optional[Usuario]:
     """Obtener usuario por username"""
@@ -1105,7 +1105,6 @@ def verificar_credenciales(db: Session, username: str, password: str) -> Optiona
         return None
     
     try:
-        # Verificar con bcrypt
         if bcrypt.checkpw(password.encode('utf-8'), usuario.password_hash.encode('utf-8')):
             usuario.ultimo_acceso = datetime.now()
             db.commit()
@@ -1118,9 +1117,9 @@ def verificar_credenciales(db: Session, username: str, password: str) -> Optiona
 
 def create_usuario(db: Session, usuario_data: Dict[str, Any]) -> Usuario:
     """Crear usuario con bcrypt"""
+    # Extraer password ANTES de crear el objeto
     if 'password' in usuario_data:
         password = usuario_data.pop('password')
-        # Hashear con bcrypt
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         usuario_data['password_hash'] = password_hash.decode('utf-8')
     
@@ -1142,14 +1141,15 @@ def crear_usuario_crud(db: Session, datos: Dict) -> Optional[Usuario]:
         if 'email' in datos and datos['email'] == '':
             datos['email'] = None
         
-        # Hashear password con bcrypt
+        # Extraer y hashear password ANTES de crear objeto Usuario
         if 'password' in datos:
-            password = datos.pop('password')
+            password = datos.pop('password')  # Extraer del dict
             password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
             datos['password_hash'] = password_hash.decode('utf-8')
         elif 'password_hash' not in datos:
             raise ValueError("Se requiere password")
-            
+        
+        # Ahora datos solo tiene campos válidos del modelo
         nuevo_usuario = Usuario(**datos)
         db.add(nuevo_usuario)
         db.commit()
@@ -1167,11 +1167,15 @@ def actualizar_usuario(db: Session, usuario_id: int, datos: Dict) -> Optional[Us
         if not usuario:
             return None
         
-        # Si hay password nuevo, hashearlo
+        # Si hay password nuevo, extraer y hashear ANTES de setattr
         if 'password' in datos:
             password = datos.pop('password')
             password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
             datos['password_hash'] = password_hash.decode('utf-8')
+        
+        # Email vacío a None
+        if 'email' in datos and datos['email'] == '':
+            datos['email'] = None
         
         for key, value in datos.items():
             if hasattr(usuario, key):
@@ -1185,20 +1189,31 @@ def actualizar_usuario(db: Session, usuario_id: int, datos: Dict) -> Optional[Us
         db.rollback()
         return None
 
-def create_usuario(db: Session, usuario_data: Dict[str, Any]) -> Usuario:
-    """Crear nuevo usuario"""
-    import hashlib
-    
-    # Hash del password
-    if 'password' in usuario_data:
-        password = usuario_data.pop('password')
-        usuario_data['password_hash'] = hashlib.sha256(password.encode()).hexdigest()
-    
-    nuevo_usuario = Usuario(**usuario_data)
-    db.add(nuevo_usuario)
-    db.commit()
-    db.refresh(nuevo_usuario)
-    return nuevo_usuario
+def contar_admins_activos(db: Session) -> int:
+    """Contar admins activos"""
+    try:
+        return db.query(Usuario).filter(
+            Usuario.rol == 'Admin',
+            Usuario.activo == True
+        ).count()
+    except Exception as e:
+        print(f"Error contar_admins_activos: {e}")
+        return 0
+
+def eliminar_usuario(db: Session, usuario_id: int) -> bool:
+    """Eliminar usuario (soft delete)"""
+    try:
+        usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+        if not usuario:
+            return False
+        
+        usuario.activo = False
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"Error eliminar_usuario: {e}")
+        db.rollback()
+        return False
 
 # ==================== CONFIGURACIÓN EMPRESA ====================
 
