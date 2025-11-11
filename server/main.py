@@ -2030,21 +2030,32 @@ async def import_data(data: Dict[str, Any]):
             if proveedor_id_original and proveedor_id_original in map_proveedores:
                 n_data["proveedor_id"] = map_proveedores[proveedor_id_original]
                 
-                if n_data.get("fecha"):
-                    n_data["fecha"] = datetime.fromisoformat(n_data["fecha"]).date()
-                if n_data.get("fecha_vencimiento"):
-                    n_data["fecha_vencimiento"] = datetime.fromisoformat(n_data["fecha_vencimiento"]).date()
+                # Remover campos que pueden no existir
+                fecha_value = n_data.pop("fecha", None)
+                fecha_venc_value = n_data.pop("fecha_vencimiento", None)
                 
-                nota = NotaProveedor(**n_data)
-                db.add(nota)
-                db.flush()
-                if id_original:
-                    map_notas_proveedor[id_original] = nota.id
-        
+                # Solo agregar fecha si existe y es válida
+                if fecha_value:
+                    try:
+                        n_data["fecha"] = datetime.fromisoformat(fecha_value).date()
+                    except:
+                        pass
+                
+                # NO agregar fecha_vencimiento si el modelo no lo tiene
+                
+                try:
+                    nota = NotaProveedor(**n_data)
+                    db.add(nota)
+                    db.flush()
+                    if id_original:
+                        map_notas_proveedor[id_original] = nota.id
+                except TypeError as e:
+                    print(f"⚠️  Error en nota proveedor {id_original}: {e}")
+                    continue
+
         db.commit()
         imported["notas_proveedor"] = len(data.get("notas_proveedor", []))
         print(f"✅ Notas Proveedor: {imported['notas_proveedor']}")
-        
         # ==================== NOTAS PROVEEDOR ITEMS ====================
         print("\n📦 Importando items de notas proveedor...")
         for i_data in data.get("notas_proveedor_items", []):
