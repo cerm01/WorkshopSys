@@ -1322,6 +1322,40 @@ async def load_sample_data():
     except Exception as e:
         import traceback
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+    
+@app.post("/admin/fix-tables")
+async def fix_missing_columns():
+    """Agregar columnas faltantes a las tablas"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # Agregar pais a clientes y proveedores
+            conn.execute(text("""
+                ALTER TABLE clientes 
+                ADD COLUMN IF NOT EXISTS pais VARCHAR(100) DEFAULT 'México'
+            """))
+            
+            conn.execute(text("""
+                ALTER TABLE proveedores 
+                ADD COLUMN IF NOT EXISTS pais VARCHAR(100) DEFAULT 'México'
+            """))
+            
+            conn.commit()
+            
+            return {
+                "success": True,
+                "message": "Columnas agregadas"
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
     if not c:
