@@ -2199,6 +2199,101 @@ async def clear_data():
             "traceback": traceback.format_exc()
         }
     
+@app.get("/admin/database-structure")
+async def get_database_structure():
+    """Obtener estructura de tablas"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            tables_result = conn.execute(text("""
+                SELECT table_name FROM information_schema.tables 
+                WHERE table_schema = 'public' ORDER BY table_name
+            """))
+            tables = [row[0] for row in tables_result]
+            
+            structure = {}
+            for table in tables:
+                columns_result = conn.execute(text(f"""
+                    SELECT column_name, data_type 
+                    FROM information_schema.columns 
+                    WHERE table_name = '{table}'
+                    ORDER BY ordinal_position
+                """))
+                structure[table] = [{"name": col[0], "type": col[1]} for col in columns_result]
+            
+            return {"success": True, "structure": structure}
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
+@app.post("/admin/fix-cotizaciones")
+async def fix_cotizaciones_table():
+    """Agregar columnas faltantes a cotizaciones"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS proyecto VARCHAR(200)"))
+            conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS fecha DATE"))
+            conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS vigencia DATE"))
+            conn.execute(text("ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS nota_folio VARCHAR(50)"))
+            conn.commit()
+            
+            return {"success": True, "message": "Columnas agregadas a cotizaciones"}
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
+@app.post("/admin/reimport")
+async def reimport_data(data: Dict[str, Any]):
+    """Re-importar solo cotizaciones"""
+    try:
+        from server.database import SessionLocal
+        from server.models import Cotizacion, CotizacionItem
+        from datetime import datetime
+        
+        db = SessionLocal()
+        map_cotizaciones = {}
+        
+        # Solo cotizaciones
+        for c_data in data.get("cotizaciones", []):
+            id_original = c_data.pop("id_original", None)
+            c_data.pop("cliente_id_original", None)  # Ya está mapeado
+            c_data.pop("fecha", None)  # Ignorar fechas problemáticas
+            c_data.pop("vigencia", None)
+            c_data.pop("proyecto", None)  # Ignorar proyecto
+            c_data.pop("nota_folio", None)
+            
+            try:
+                cotizacion = Cotizacion(**c_data)
+                db.add(cotizacion)
+                db.flush()
+                if id_original:
+                    map_cotizaciones[id_original] = cotizacion.id
+            except Exception as e:
+                continue
+        
+        db.commit()
+        
+        # Items
+        for i_data in data.get("cotizaciones_items", []):
+            cotizacion_id_original = i_data.pop("cotizacion_id_original", None)
+            if cotizacion_id_original and cotizacion_id_original in map_cotizaciones:
+                i_data["cotizacion_id"] = map_cotizaciones[cotizacion_id_original]
+                item = CotizacionItem(**i_data)
+                db.add(item)
+        
+        db.commit()
+        db.close()
+        
+        return {"success": True, "cotizaciones": len(map_cotizaciones)}
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+    
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
     if not c:
