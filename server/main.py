@@ -1030,6 +1030,43 @@ async def count_all_records():
             "traceback": traceback.format_exc()
         }
 
+@app.post("/admin/force-create-tables")
+async def force_create_tables():
+    """Forzar creación de tablas con verificación"""
+    try:
+        from server.database import Base, engine
+        
+        # Importar TODOS los modelos explícitamente
+        from server.models import (
+            Usuario, Cliente, Proveedor, Producto,
+            Orden, OrdenItem, Cotizacion, CotizacionItem,
+            NotaVenta, NotaVentaItem, MovimientoInventario,
+            ConfigEmpresa, NotaProveedor, NotaProveedorItem,
+            NotaProveedorPago
+        )
+        
+        # Crear todas las tablas
+        Base.metadata.create_all(bind=engine)
+        
+        # Verificar
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        
+        return {
+            "success": True,
+            "message": "Tablas creadas",
+            "tables_created": tables,
+            "count": len(tables)
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
