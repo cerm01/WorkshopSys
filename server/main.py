@@ -1067,6 +1067,90 @@ async def force_create_tables():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+    
+@app.get("/admin/test-connection")
+async def test_db_connection():
+    """Probar conexión directa a PostgreSQL"""
+    try:
+        from server.database import engine, DATABASE_URL
+        from sqlalchemy import text
+        
+        # Probar conexión
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT version()"))
+            version = result.fetchone()[0]
+            
+            # Ver qué tablas hay
+            tables_result = conn.execute(text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
+            """))
+            tables = [row[0] for row in tables_result]
+            
+            return {
+                "success": True,
+                "connected": True,
+                "postgres_version": version,
+                "database_url_prefix": DATABASE_URL[:30] + "...",
+                "existing_tables": tables,
+                "table_count": len(tables)
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.post("/admin/create-table-raw")
+async def create_table_with_raw_sql():
+    """Crear tabla usuarios con SQL directo"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # Crear tabla usuarios con SQL directo
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(100) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    nombre_completo VARCHAR(200) NOT NULL,
+                    email VARCHAR(150) UNIQUE,
+                    rol VARCHAR(50) DEFAULT 'Capturista',
+                    activo BOOLEAN DEFAULT true,
+                    ultimo_acceso TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            
+            # Verificar
+            result = conn.execute(text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_name = 'usuarios'
+            """))
+            exists = result.fetchone() is not None
+            
+            return {
+                "success": True,
+                "message": "Tabla usuarios creada con SQL directo",
+                "table_exists": exists
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
