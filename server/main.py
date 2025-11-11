@@ -2800,12 +2800,26 @@ def root():
 
 if __name__ == "__main__":
     import uvicorn
-    # Asegúrate de importar los modelos antes de crear tablas
     from server import models
     from server.database import crear_tablas
     
-    print("Creando tablas si no existen...")
-    crear_tablas() # Esto es seguro, no borra datos existentes
+    print("Creando tablas...")
+    crear_tablas()
     
-    print("Iniciando servidor Uvicorn en 0.0.0.0:8000")
+    # AGREGAR ESTO:
+    print("Verificando migración...")
+    try:
+        from migrate_db import migrate
+        migrate()
+    except Exception as e:
+        print(f"⚠️  Error en migración: {e}")
+    
+    print("Verificando admin...")
+    try:
+        from init_admin import crear_admin
+        crear_admin()
+    except Exception as e:
+        print(f"⚠️  Error creando admin: {e}")
+    
+    print("Iniciando servidor...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
