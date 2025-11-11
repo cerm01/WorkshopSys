@@ -2800,26 +2800,115 @@ def root():
 
 if __name__ == "__main__":
     import uvicorn
-    from server import models
-    from server.database import crear_tablas
+    from server.database import engine
+    from sqlalchemy import text, inspect
+    import bcrypt
     
-    print("Creando tablas...")
-    crear_tablas()
+    print("\n" + "="*60)
+    print("🚀 WORKSHOPSYS - INICIALIZANDO")
+    print("="*60)
     
-    # AGREGAR ESTO:
-    print("Verificando migración...")
     try:
-        from migrate_db import migrate
-        migrate()
+        # ==================== VERIFICAR Y CREAR TABLAS ====================
+        print("\n🔍 Verificando base de datos...")
+        
+        inspector = inspect(engine)
+        tablas_existentes = set(inspector.get_table_names())
+        
+        # Tablas requeridas
+        tablas_requeridas = {
+            'usuarios', 'clientes', 'proveedores', 'inventario',
+            'cotizaciones', 'cotizaciones_items', 
+            'ordenes', 'ordenes_items',
+            'notas_venta', 'notas_venta_items', 'notas_venta_pagos',
+            'notas_proveedor', 'notas_proveedor_items', 'notas_proveedor_pagos',
+            'movimientos_inventario', 'config_empresa'
+        }
+        
+        tablas_faltantes = tablas_requeridas - tablas_existentes
+        
+        if tablas_faltantes:
+            print(f"⚠️  Faltan {len(tablas_faltantes)} tablas")
+            print("➕ Creando tablas...")
+            
+            with engine.connect() as conn:
+                # Usuarios
+                if 'usuarios' in tablas_faltantes:
+                    print("   • usuarios...")
+                    conn.execute(text("""
+                        CREATE TABLE usuarios (
+                            id SERIAL PRIMARY KEY,
+                            username VARCHAR(100) NOT NULL UNIQUE,
+                            password_hash VARCHAR(255) NOT NULL,
+                            nombre_completo VARCHAR(200) NOT NULL,
+                            email VARCHAR(150) UNIQUE,
+                            rol VARCHAR(50) DEFAULT 'Capturista',
+                            activo BOOLEAN DEFAULT true,
+                            ultimo_acceso TIMESTAMP,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """))
+                    conn.commit()
+                
+                # Usar SQLAlchemy para crear el resto
+                from server.models import Base
+                Base.metadata.create_all(bind=engine)
+                print("✅ Tablas creadas")
+        else:
+            print(f"✓ {len(tablas_existentes)} tablas encontradas")
+            
+            # Verificar estructura de usuarios
+            if 'usuarios' in tablas_existentes:
+                columns = {col['name'] for col in inspector.get_columns('usuarios')}
+                
+                if 'ultimo_acceso' not in columns:
+                    print("➕ Agregando columna ultimo_acceso...")
+                    with engine.connect() as conn:
+                        conn.execute(text("ALTER TABLE usuarios ADD COLUMN ultimo_acceso TIMESTAMP"))
+                        conn.commit()
+                
+                # Verificar UNIQUE constraint
+                with engine.connect() as conn:
+                    try:
+                        conn.execute(text("""
+                            ALTER TABLE usuarios 
+                            ADD CONSTRAINT usuarios_username_key UNIQUE (username)
+                        """))
+                        conn.commit()
+                    except:
+                        conn.rollback()
+        
+        # ==================== VERIFICAR USUARIO ADMIN ====================
+        print("\n👤 Verificando usuario admin...")
+        
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT COUNT(*) FROM usuarios WHERE username = 'admin'"))
+            existe_admin = result.scalar() > 0
+            
+            if not existe_admin:
+                print("➕ Creando usuario admin...")
+                password_hash = bcrypt.hashpw(b'admin123', bcrypt.gensalt()).decode('utf-8')
+                
+                conn.execute(text("""
+                    INSERT INTO usuarios 
+                    (username, password_hash, nombre_completo, email, rol, activo)
+                    VALUES ('admin', :hash, 'Administrador del Sistema', 
+                            'admin@workshopsys.com', 'Admin', true)
+                """), {"hash": password_hash})
+                conn.commit()
+                print("✅ Usuario admin creado (user: admin, pass: admin123)")
+            else:
+                print("✓ Usuario admin existe")
+        
+        print("\n" + "="*60)
+        print("✅ SISTEMA LISTO - INICIANDO SERVIDOR")
+        print("="*60 + "\n")
+        
     except Exception as e:
-        print(f"⚠️  Error en migración: {e}")
+        print(f"\n❌ Error en inicialización: {e}")
+        import traceback
+        traceback.print_exc()
     
-    print("Verificando admin...")
-    try:
-        from init_admin import crear_admin
-        crear_admin()
-    except Exception as e:
-        print(f"⚠️  Error creando admin: {e}")
-    
-    print("Iniciando servidor...")
+    # Iniciar servidor
     uvicorn.run(app, host="0.0.0.0", port=8000)
