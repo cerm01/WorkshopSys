@@ -1270,15 +1270,13 @@ async def create_all_tables_with_sql():
     
 @app.post("/admin/load-sample-data")
 async def load_sample_data():
-    """Cargar datos de ejemplo SOLO una vez"""
+    """Cargar datos de ejemplo"""
     try:
         from server.database import SessionLocal
         from server.models import Cliente, Proveedor, Producto
-        import hashlib
         
         db = SessionLocal()
         
-        # Verificar si ya hay datos
         if db.query(Cliente).count() > 0:
             db.close()
             return {"message": "Ya existen datos", "skip": True}
@@ -1286,26 +1284,26 @@ async def load_sample_data():
         # Clientes
         clientes = [
             Cliente(nombre="Juan Pérez", tipo="Particular", email="juan@email.com", 
-                   telefono="3312345678", ciudad="Guadalajara", estado="Jalisco"),
+                   telefono="3312345678", ciudad="Guadalajara", estado="Jalisco", activo=True),
             Cliente(nombre="Autopartes López", tipo="Empresa", email="contacto@autopartes.com",
-                   telefono="3398765432", ciudad="Zapopan", estado="Jalisco")
+                   telefono="3398765432", ciudad="Zapopan", estado="Jalisco", activo=True)
         ]
         
         # Proveedores
         proveedores = [
             Proveedor(nombre="Refacciones del Norte", tipo="Empresa", 
                      email="ventas@refacciones.com", telefono="3311112222",
-                     ciudad="Guadalajara", estado="Jalisco")
+                     ciudad="Guadalajara", estado="Jalisco", activo=True)
         ]
         
-        # Productos
+        # Productos (campo correcto: stock_min)
         productos = [
             Producto(codigo="ACE-001", nombre="Aceite Motor 10W40", categoria="Lubricantes",
-                    precio_compra=80.00, precio_venta=120.00, stock_actual=50, stock_minimo=10),
+                    precio_compra=80.00, precio_venta=120.00, stock_actual=50, stock_min=10, activo=True),
             Producto(codigo="FIL-001", nombre="Filtro de Aceite", categoria="Filtros",
-                    precio_compra=45.00, precio_venta=75.00, stock_actual=30, stock_minimo=5),
+                    precio_compra=45.00, precio_venta=75.00, stock_actual=30, stock_min=5, activo=True),
             Producto(codigo="BAL-001", nombre="Balatas Delanteras", categoria="Frenos",
-                    precio_compra=250.00, precio_venta=400.00, stock_actual=20, stock_minimo=4)
+                    precio_compra=250.00, precio_venta=400.00, stock_actual=20, stock_min=4, activo=True)
         ]
         
         db.add_all(clientes + proveedores + productos)
