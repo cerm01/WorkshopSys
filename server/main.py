@@ -1912,18 +1912,34 @@ async def import_data(data: Dict[str, Any]):
             if cliente_id_original and cliente_id_original in map_clientes:
                 c_data["cliente_id"] = map_clientes[cliente_id_original]
                 
-                # Convertir fechas
-                if c_data.get("fecha"):
-                    c_data["fecha"] = datetime.fromisoformat(c_data["fecha"]).date()
-                if c_data.get("vigencia"):
-                    c_data["vigencia"] = datetime.fromisoformat(c_data["vigencia"]).date()
+                # Remover campos que pueden no existir en el modelo
+                fecha_value = c_data.pop("fecha", None)
+                vigencia_value = c_data.pop("vigencia", None)
                 
-                cotizacion = Cotizacion(**c_data)
-                db.add(cotizacion)
-                db.flush()
-                if id_original:
-                    map_cotizaciones[id_original] = cotizacion.id
-        
+                # Solo agregar si el modelo los tiene y tienen valor
+                if fecha_value:
+                    try:
+                        c_data["fecha"] = datetime.fromisoformat(fecha_value).date()
+                    except:
+                        pass  # Ignorar si el campo no existe
+                
+                if vigencia_value:
+                    try:
+                        c_data["vigencia"] = datetime.fromisoformat(vigencia_value).date()
+                    except:
+                        pass  # Ignorar si el campo no existe
+                
+                # Crear cotización solo con campos válidos
+                try:
+                    cotizacion = Cotizacion(**c_data)
+                    db.add(cotizacion)
+                    db.flush()
+                    if id_original:
+                        map_cotizaciones[id_original] = cotizacion.id
+                except TypeError as e:
+                    print(f"⚠️  Error en cotización {id_original}: {e}")
+                    continue
+
         db.commit()
         imported["cotizaciones"] = len(data.get("cotizaciones", []))
         print(f"✅ Cotizaciones: {imported['cotizaciones']}")
