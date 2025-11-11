@@ -1624,6 +1624,7 @@ async def recreate_all_tables():
                     email VARCHAR(100),
                     rol VARCHAR(20) DEFAULT 'usuario',
                     activo BOOLEAN DEFAULT TRUE,
+                    ultimo_acceso TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
