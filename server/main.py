@@ -2294,6 +2294,38 @@ async def reimport_data(data: Dict[str, Any]):
         import traceback
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
     
+@app.get("/admin/test-cotizaciones")
+async def test_cotizaciones(db: Session = Depends(get_db)):
+    """Diagnosticar error en cotizaciones"""
+    try:
+        from server.models import Cotizacion
+        
+        # Intentar obtener una cotización
+        cot = db.query(Cotizacion).first()
+        
+        if cot:
+            # Ver qué campos tiene
+            campos = [c.name for c in cot.__table__.columns]
+            return {
+                "success": True,
+                "campos_modelo": campos,
+                "sample": {
+                    "id": cot.id,
+                    "folio": cot.folio,
+                    "cliente_id": cot.cliente_id
+                }
+            }
+        else:
+            return {"success": True, "message": "No hay cotizaciones"}
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+    
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
     if not c:
