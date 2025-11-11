@@ -14,6 +14,13 @@ from server.models import (
 )
 from datetime import datetime, timedelta
 
+from server.models import (
+    Cliente, Proveedor, Producto, Orden, OrdenItem,
+    Cotizacion, CotizacionItem, NotaVenta, NotaVentaItem,
+    MovimientoInventario, Usuario, ConfigEmpresa,
+    NotaProveedor, NotaProveedorItem, NotaProveedorPago
+)
+
 def generar_hash_password(password: str) -> str:
     """Generar hash simple (en producción usar bcrypt)"""
     # Por ahora hash simple, luego mejorar
@@ -23,6 +30,9 @@ def generar_hash_password(password: str) -> str:
 
 def cargar_datos_ejemplo():
     """Cargar datos de ejemplo en la base de datos"""
+    from server.database import Base, engine
+    Base.metadata.create_all(bind=engine)
+    print("✅ Tablas verificadas/creadas")
     db = SessionLocal()
     
     try:

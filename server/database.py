@@ -49,5 +49,6 @@ def get_db_sync():
 
 def crear_tablas():
     """Crear todas las tablas"""
-    from server import models
+    import server.models
     Base.metadata.create_all(bind=engine)
+    print(f"✅ Tablas creadas: {list(Base.metadata.tables.keys())}")
