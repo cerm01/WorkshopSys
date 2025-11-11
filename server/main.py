@@ -1984,19 +1984,21 @@ async def import_data(data: Dict[str, Any]):
         print("\n📦 Importando items de notas venta...")
         for i_data in data.get("notas_venta_items", []):
             nota_id_original = i_data.pop("nota_id_original", None)
-            producto_id_original = i_data.pop("producto_id_original", None)
+            producto_id_original = i_data.pop("producto_id_original", None)  # Remover siempre
             
             if nota_id_original and nota_id_original in map_notas_venta:
                 i_data["nota_id"] = map_notas_venta[nota_id_original]
                 
-                if producto_id_original and producto_id_original in map_productos:
-                    i_data["producto_id"] = map_productos[producto_id_original]
-                else:
-                    i_data["producto_id"] = None
+                # NO agregar producto_id si el modelo no lo tiene
+                # El modelo solo usa: nota_id, cantidad, descripcion, precio_unitario, importe, impuesto
                 
-                item = NotaVentaItem(**i_data)
-                db.add(item)
-        
+                try:
+                    item = NotaVentaItem(**i_data)
+                    db.add(item)
+                except TypeError as e:
+                    print(f"⚠️  Error en item nota venta: {e}")
+                    continue
+
         db.commit()
         imported["notas_venta_items"] = len(data.get("notas_venta_items", []))
         print(f"✅ Items Notas Venta: {imported['notas_venta_items']}")
@@ -2047,19 +2049,20 @@ async def import_data(data: Dict[str, Any]):
         print("\n📦 Importando items de notas proveedor...")
         for i_data in data.get("notas_proveedor_items", []):
             nota_id_original = i_data.pop("nota_id_original", None)
-            producto_id_original = i_data.pop("producto_id_original", None)
+            producto_id_original = i_data.pop("producto_id_original", None)  # Remover siempre
             
             if nota_id_original and nota_id_original in map_notas_proveedor:
                 i_data["nota_id"] = map_notas_proveedor[nota_id_original]
                 
-                if producto_id_original and producto_id_original in map_productos:
-                    i_data["producto_id"] = map_productos[producto_id_original]
-                else:
-                    i_data["producto_id"] = None
+                # NO agregar producto_id
                 
-                item = NotaProveedorItem(**i_data)
-                db.add(item)
-        
+                try:
+                    item = NotaProveedorItem(**i_data)
+                    db.add(item)
+                except TypeError as e:
+                    print(f"⚠️  Error en item nota proveedor: {e}")
+                    continue
+
         db.commit()
         imported["notas_proveedor_items"] = len(data.get("notas_proveedor_items", []))
         print(f"✅ Items Notas Proveedor: {imported['notas_proveedor_items']}")
