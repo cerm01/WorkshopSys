@@ -2517,6 +2517,36 @@ def verificar_credenciales(db: Session, username: str, password: str):
         return None
     
     return None
+
+@app.get("/admin/check-all-users")
+async def check_all_users():
+    """Ver todos los usuarios y sus datos"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT id, username, nombre_completo, rol, activo 
+                FROM usuarios 
+                ORDER BY id
+            """))
+            
+            users = []
+            for row in result:
+                users.append({
+                    "id": row[0],
+                    "username": row[1],
+                    "nombre_completo": row[2],
+                    "rol": row[3],
+                    "activo": row[4]
+                })
+            
+            return {"success": True, "users": users}
+                
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
     
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
