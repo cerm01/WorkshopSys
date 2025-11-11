@@ -577,14 +577,12 @@ class ConfiguracionWindow(QDialog):
         
         # Validar candado de admin
         if self.usuario_en_edicion_id:
-            # Esta llamada ahora usa api_client
             usuario_original = db_helper.get_usuario(self.usuario_en_edicion_id)
             
             if (usuario_original and
                 usuario_original['rol'] == 'Admin' and 
                 datos['activo'] is False):
                 
-                # Esta llamada ahora usa api_client
                 usuarios = db_helper.get_usuarios()
                 conteo_admins_activos = sum(1 for u in usuarios if u['rol'] == 'Admin' and u['activo'])
                 
@@ -597,11 +595,11 @@ class ConfiguracionWindow(QDialog):
                     self.chk_activo.setChecked(True)
                     return
         
+        # Agregar password solo si se ingresó
         if password:
-            datos['password_hash'] = generar_hash_password(password)
+            datos['password'] = password  # Enviar como 'password', no como hash
         
         if self.usuario_en_edicion_id:
-            # Esta llamada ahora usa api_client
             if db_helper.actualizar_usuario(self.usuario_en_edicion_id, datos):
                 self.mostrar_mensaje("Éxito", "Usuario actualizado", QMessageBox.Information)
                 self.cargar_usuarios()
@@ -609,9 +607,6 @@ class ConfiguracionWindow(QDialog):
             else:
                 self.mostrar_mensaje("Error", "No se pudo actualizar", QMessageBox.Critical)
         else:
-            if password:
-                datos['password_hash'] = generar_hash_password(password)
-            # Esta llamada ahora usa api_client
             if db_helper.crear_usuario(datos):
                 self.mostrar_mensaje("Éxito", "Usuario creado", QMessageBox.Information)
                 self.cargar_usuarios()

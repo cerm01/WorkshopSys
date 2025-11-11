@@ -1088,33 +1088,102 @@ def eliminar_pago_nota_proveedor(db: Session, pago_id: int) -> Optional[NotaProv
 
 # ==================== USUARIOS ====================
 
+import bcrypt
+
 def get_usuario_by_username(db: Session, username: str) -> Optional[Usuario]:
     """Obtener usuario por username"""
     return db.query(Usuario).filter(Usuario.username == username).first()
 
-
 def verificar_credenciales(db: Session, username: str, password: str) -> Optional[Usuario]:
-    """
-    Verificar credenciales de usuario
-    NOTA: Por ahora usa hash simple, en producción usar bcrypt
-    """
-    import hashlib
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
-    
+    """Verificar credenciales con bcrypt"""
     usuario = db.query(Usuario).filter(
-        and_(
-            Usuario.username == username,
-            Usuario.password_hash == password_hash,
-            Usuario.activo == True
-        )
+        Usuario.username == username,
+        Usuario.activo == True
     ).first()
     
-    if usuario:
-        usuario.ultimo_acceso = datetime.now()
-        db.commit()
+    if not usuario:
+        return None
     
-    return usuario
+    try:
+        # Verificar con bcrypt
+        if bcrypt.checkpw(password.encode('utf-8'), usuario.password_hash.encode('utf-8')):
+            usuario.ultimo_acceso = datetime.now()
+            db.commit()
+            return usuario
+    except Exception as e:
+        print(f"Error verificando credenciales: {e}")
+        return None
+    
+    return None
 
+def create_usuario(db: Session, usuario_data: Dict[str, Any]) -> Usuario:
+    """Crear usuario con bcrypt"""
+    if 'password' in usuario_data:
+        password = usuario_data.pop('password')
+        # Hashear con bcrypt
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+        usuario_data['password_hash'] = password_hash.decode('utf-8')
+    
+    nuevo_usuario = Usuario(**usuario_data)
+    db.add(nuevo_usuario)
+    db.commit()
+    db.refresh(nuevo_usuario)
+    return nuevo_usuario
+
+def crear_usuario_crud(db: Session, datos: Dict) -> Optional[Usuario]:
+    """Crear nuevo usuario con validaciones"""
+    try:
+        # Validar username único
+        existe = db.query(Usuario).filter(Usuario.username == datos['username']).first()
+        if existe:
+            raise ValueError("El nombre de usuario ya existe")
+        
+        # Email vacío a None
+        if 'email' in datos and datos['email'] == '':
+            datos['email'] = None
+        
+        # Hashear password con bcrypt
+        if 'password' in datos:
+            password = datos.pop('password')
+            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+            datos['password_hash'] = password_hash.decode('utf-8')
+        elif 'password_hash' not in datos:
+            raise ValueError("Se requiere password")
+            
+        nuevo_usuario = Usuario(**datos)
+        db.add(nuevo_usuario)
+        db.commit()
+        db.refresh(nuevo_usuario)
+        return nuevo_usuario
+    except Exception as e:
+        print(f"Error crear_usuario: {e}")
+        db.rollback()
+        return None
+
+def actualizar_usuario(db: Session, usuario_id: int, datos: Dict) -> Optional[Usuario]:
+    """Actualizar usuario"""
+    try:
+        usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+        if not usuario:
+            return None
+        
+        # Si hay password nuevo, hashearlo
+        if 'password' in datos:
+            password = datos.pop('password')
+            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+            datos['password_hash'] = password_hash.decode('utf-8')
+        
+        for key, value in datos.items():
+            if hasattr(usuario, key):
+                setattr(usuario, key, value)
+        
+        db.commit()
+        db.refresh(usuario)
+        return usuario
+    except Exception as e:
+        print(f"Error actualizar_usuario: {e}")
+        db.rollback()
+        return None
 
 def create_usuario(db: Session, usuario_data: Dict[str, Any]) -> Usuario:
     """Crear nuevo usuario"""
