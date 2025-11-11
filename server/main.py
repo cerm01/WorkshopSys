@@ -1592,97 +1592,119 @@ async def fix_missing_columns():
 
 @app.post("/admin/recreate-all-tables")
 async def recreate_all_tables():
-    """Eliminar y recrear TODAS las tablas con estructura completa"""
+    """Recrear TODAS las tablas según el PDF"""
     try:
         from server.database import engine
         from sqlalchemy import text
         
         with engine.connect() as conn:
-            # ELIMINAR tablas existentes (en orden por dependencias)
-            conn.execute(text("DROP TABLE IF EXISTS notas_proveedor_pagos CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS notas_proveedor_items CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS notas_proveedor CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS notas_venta_pagos CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS notas_venta_items CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS notas_venta CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS cotizaciones_items CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS cotizaciones CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS ordenes_items CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS ordenes CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS movimientos_inventario CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS inventario CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS proveedores CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS clientes CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS config_empresa CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS usuarios CASCADE"))
+            # Desactivar restricciones
+            conn.execute(text("SET session_replication_role = 'replica'"))
             
-            # CREAR TODAS las tablas
+            # Eliminar tablas en orden
+            tables = [
+                "notas_proveedor_pagos", "notas_proveedor_items", "notas_proveedor",
+                "notas_venta_pagos", "notas_venta_items", "notas_venta",
+                "cotizaciones_items", "cotizaciones",
+                "ordenes_items", "ordenes",
+                "movimientos_inventario", "inventario",
+                "proveedores", "clientes", "config_empresa", "usuarios"
+            ]
             
-            # Usuarios
+            for table in tables:
+                conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+            
+            conn.execute(text("SET session_replication_role = 'origin'"))
+            
+            # Crear todas las tablas
+            
+            # 1. Usuarios
             conn.execute(text("""
                 CREATE TABLE usuarios (
                     id SERIAL PRIMARY KEY,
-                    username VARCHAR(100) UNIQUE NOT NULL,
+                    username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
-                    nombre_completo VARCHAR(200) NOT NULL,
-                    email VARCHAR(150) UNIQUE,
-                    rol VARCHAR(50) DEFAULT 'Capturista',
-                    activo BOOLEAN DEFAULT true,
-                    ultimo_acceso TIMESTAMP,
+                    nombre_completo VARCHAR(100),
+                    email VARCHAR(100),
+                    rol VARCHAR(20) DEFAULT 'usuario',
+                    activo BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """))
             
-            # Clientes
+            # 2. Config Empresa
+            conn.execute(text("""
+                CREATE TABLE config_empresa (
+                    id SERIAL PRIMARY KEY,
+                    nombre_comercial VARCHAR(200),
+                    razon_social VARCHAR(200),
+                    rfc VARCHAR(20),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    pais VARCHAR(100),
+                    telefono1 VARCHAR(20),
+                    telefono2 VARCHAR(20),
+                    email VARCHAR(100),
+                    sitio_web VARCHAR(200),
+                    logo_data BYTEA,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 3. Clientes
             conn.execute(text("""
                 CREATE TABLE clientes (
                     id SERIAL PRIMARY KEY,
                     nombre VARCHAR(200) NOT NULL,
-                    tipo VARCHAR(50),
-                    email VARCHAR(150),
+                    tipo VARCHAR(20),
+                    email VARCHAR(100),
                     telefono VARCHAR(20),
                     calle VARCHAR(200),
                     colonia VARCHAR(100),
                     ciudad VARCHAR(100),
                     estado VARCHAR(100),
                     cp VARCHAR(10),
-                    pais VARCHAR(100) DEFAULT 'México',
-                    rfc VARCHAR(13),
-                    activo BOOLEAN DEFAULT true,
+                    pais VARCHAR(100),
+                    rfc VARCHAR(20),
+                    activo BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """))
             
-            # Proveedores
+            # 4. Proveedores
             conn.execute(text("""
                 CREATE TABLE proveedores (
                     id SERIAL PRIMARY KEY,
                     nombre VARCHAR(200) NOT NULL,
-                    tipo VARCHAR(50),
-                    email VARCHAR(150),
+                    tipo VARCHAR(20),
+                    email VARCHAR(100),
                     telefono VARCHAR(20),
                     calle VARCHAR(200),
                     colonia VARCHAR(100),
                     ciudad VARCHAR(100),
                     estado VARCHAR(100),
                     cp VARCHAR(10),
-                    pais VARCHAR(100) DEFAULT 'México',
-                    rfc VARCHAR(13),
-                    activo BOOLEAN DEFAULT true,
+                    pais VARCHAR(100),
+                    rfc VARCHAR(20),
+                    activo BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """))
             
-            # Inventario
+            # 5. Inventario
             conn.execute(text("""
                 CREATE TABLE inventario (
                     id SERIAL PRIMARY KEY,
                     codigo VARCHAR(50) UNIQUE NOT NULL,
                     nombre VARCHAR(200) NOT NULL,
-                    categoria VARCHAR(100) NOT NULL,
+                    categoria VARCHAR(100),
                     stock_actual INTEGER DEFAULT 0,
                     stock_min INTEGER DEFAULT 0,
                     ubicacion VARCHAR(100),
@@ -1690,32 +1712,186 @@ async def recreate_all_tables():
                     precio_venta NUMERIC(10,2) DEFAULT 0.0,
                     proveedor_id INTEGER REFERENCES proveedores(id),
                     descripcion TEXT,
-                    activo BOOLEAN DEFAULT true,
+                    activo BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """))
             
-            # Config Empresa
+            # 6. Movimientos Inventario
             conn.execute(text("""
-                CREATE TABLE config_empresa (
+                CREATE TABLE movimientos_inventario (
                     id SERIAL PRIMARY KEY,
-                    nombre_comercial VARCHAR(200) NOT NULL,
-                    razon_social VARCHAR(200),
-                    rfc VARCHAR(13),
-                    calle VARCHAR(200),
-                    colonia VARCHAR(100),
-                    ciudad VARCHAR(100),
-                    estado VARCHAR(100),
-                    cp VARCHAR(10),
-                    pais VARCHAR(100) DEFAULT 'México',
-                    telefono1 VARCHAR(20),
-                    telefono2 VARCHAR(20),
-                    email VARCHAR(150),
-                    sitio_web VARCHAR(200),
-                    logo_data BYTEA,
+                    tipo VARCHAR(20) NOT NULL,
+                    cantidad INTEGER NOT NULL,
+                    motivo VARCHAR(200),
+                    usuario VARCHAR(100),
+                    producto_id INTEGER REFERENCES inventario(id) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 7. Órdenes
+            conn.execute(text("""
+                CREATE TABLE ordenes (
+                    id SERIAL PRIMARY KEY,
+                    folio VARCHAR(50) UNIQUE NOT NULL,
+                    cliente_id INTEGER REFERENCES clientes(id) NOT NULL,
+                    vehiculo_marca VARCHAR(100),
+                    vehiculo_modelo VARCHAR(100),
+                    vehiculo_ano VARCHAR(10),
+                    vehiculo_placas VARCHAR(20),
+                    vehiculo_vin VARCHAR(50),
+                    vehiculo_color VARCHAR(50),
+                    vehiculo_kilometraje VARCHAR(20),
+                    estado VARCHAR(50) DEFAULT 'Pendiente',
+                    mecanico_asignado VARCHAR(100),
+                    fecha_recepcion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_promesa TIMESTAMP,
+                    fecha_entrega TIMESTAMP,
+                    observaciones TEXT,
+                    nota_folio VARCHAR(50),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 8. Órdenes Items
+            conn.execute(text("""
+                CREATE TABLE ordenes_items (
+                    id SERIAL PRIMARY KEY,
+                    orden_id INTEGER REFERENCES ordenes(id) NOT NULL,
+                    cantidad INTEGER DEFAULT 1,
+                    descripcion TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 9. Cotizaciones
+            conn.execute(text("""
+                CREATE TABLE cotizaciones (
+                    id SERIAL PRIMARY KEY,
+                    folio VARCHAR(50) UNIQUE NOT NULL,
+                    cliente_id INTEGER REFERENCES clientes(id) NOT NULL,
+                    estado VARCHAR(50) DEFAULT 'Pendiente',
+                    fecha DATE,
+                    vigencia DATE,
+                    proyecto VARCHAR(200),
+                    subtotal NUMERIC(10,2) DEFAULT 0.0,
+                    impuestos NUMERIC(10,2) DEFAULT 0.0,
+                    total NUMERIC(10,2) DEFAULT 0.0,
+                    observaciones TEXT,
+                    nota_folio VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 10. Cotizaciones Items
+            conn.execute(text("""
+                CREATE TABLE cotizaciones_items (
+                    id SERIAL PRIMARY KEY,
+                    cotizacion_id INTEGER REFERENCES cotizaciones(id) NOT NULL,
+                    cantidad INTEGER DEFAULT 1,
+                    descripcion TEXT NOT NULL,
+                    precio_unitario NUMERIC(10,2) NOT NULL,
+                    importe NUMERIC(10,2) NOT NULL,
+                    impuesto NUMERIC(5,2) DEFAULT 16.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 11. Notas Venta
+            conn.execute(text("""
+                CREATE TABLE notas_venta (
+                    id SERIAL PRIMARY KEY,
+                    folio VARCHAR(50) UNIQUE NOT NULL,
+                    cliente_id INTEGER REFERENCES clientes(id) NOT NULL,
+                    estado VARCHAR(50) DEFAULT 'Registrado',
+                    metodo_pago VARCHAR(50) DEFAULT 'Efectivo',
+                    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    observaciones TEXT,
+                    subtotal NUMERIC(10,2) DEFAULT 0.0,
+                    impuestos NUMERIC(10,2) DEFAULT 0.0,
+                    total NUMERIC(10,2) DEFAULT 0.0,
+                    total_pagado NUMERIC(10,2) DEFAULT 0.0,
+                    saldo NUMERIC(10,2) DEFAULT 0.0,
+                    cotizacion_folio VARCHAR(50),
+                    orden_folio VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 12. Notas Venta Items
+            conn.execute(text("""
+                CREATE TABLE notas_venta_items (
+                    id SERIAL PRIMARY KEY,
+                    nota_id INTEGER REFERENCES notas_venta(id) NOT NULL,
+                    cantidad INTEGER DEFAULT 1,
+                    descripcion TEXT NOT NULL,
+                    precio_unitario NUMERIC(10,2) NOT NULL,
+                    importe NUMERIC(10,2) NOT NULL,
+                    impuesto NUMERIC(5,2) DEFAULT 16.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 13. Notas Venta Pagos
+            conn.execute(text("""
+                CREATE TABLE notas_venta_pagos (
+                    id SERIAL PRIMARY KEY,
+                    nota_id INTEGER REFERENCES notas_venta(id) NOT NULL,
+                    monto NUMERIC(10,2) NOT NULL,
+                    fecha_pago TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    metodo_pago VARCHAR(50) DEFAULT 'Efectivo',
+                    memo TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 14. Notas Proveedor
+            conn.execute(text("""
+                CREATE TABLE notas_proveedor (
+                    id SERIAL PRIMARY KEY,
+                    folio VARCHAR(50) UNIQUE NOT NULL,
+                    proveedor_id INTEGER REFERENCES proveedores(id) NOT NULL,
+                    estado VARCHAR(50) DEFAULT 'Registrada',
+                    fecha DATE,
+                    subtotal NUMERIC(10,2) DEFAULT 0.0,
+                    impuestos NUMERIC(10,2) DEFAULT 0.0,
+                    total NUMERIC(10,2) DEFAULT 0.0,
+                    saldo_pendiente NUMERIC(10,2) DEFAULT 0.0,
+                    observaciones TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 15. Notas Proveedor Items
+            conn.execute(text("""
+                CREATE TABLE notas_proveedor_items (
+                    id SERIAL PRIMARY KEY,
+                    nota_id INTEGER REFERENCES notas_proveedor(id) NOT NULL,
+                    cantidad INTEGER DEFAULT 1,
+                    descripcion TEXT NOT NULL,
+                    precio_unitario NUMERIC(10,2) NOT NULL,
+                    importe NUMERIC(10,2) NOT NULL,
+                    impuesto NUMERIC(5,2) DEFAULT 16.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # 16. Notas Proveedor Pagos
+            conn.execute(text("""
+                CREATE TABLE notas_proveedor_pagos (
+                    id SERIAL PRIMARY KEY,
+                    nota_id INTEGER REFERENCES notas_proveedor(id) NOT NULL,
+                    monto NUMERIC(10,2) NOT NULL,
+                    fecha_pago TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    metodo_pago VARCHAR(50) DEFAULT 'Efectivo',
+                    memo TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """))
             
@@ -1728,20 +1904,11 @@ async def recreate_all_tables():
             """))
             tables = [row[0] for row in result]
             
-            return {
-                "success": True,
-                "message": "Todas las tablas recreadas",
-                "tables": tables,
-                "count": len(tables)
-            }
+            return {"success": True, "tables": tables, "count": len(tables)}
             
     except Exception as e:
         import traceback
-        return {
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
     
 @app.post("/admin/fix-notas-venta")
 async def fix_notas_venta_columns():
