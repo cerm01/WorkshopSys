@@ -912,6 +912,362 @@ async def eliminar_usuario_api(usuario_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     
+@app.post("/admin/init-db")
+async def init_database():
+    """Endpoint temporal para inicializar BD"""
+    try:
+        from server.database import crear_tablas
+        from server.init_db import cargar_datos_ejemplo
+        
+        crear_tablas()
+        cargar_datos_ejemplo()
+        
+        return {"success": True, "message": "Base de datos inicializada"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/admin/check-tables")
+async def check_tables():
+    """Verificar qué tablas existen"""
+    try:
+        from server.database import engine
+        from sqlalchemy import inspect
+        
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        
+        return {
+            "success": True,
+            "tables": tables,
+            "count": len(tables)
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.post("/admin/create-admin")
+async def create_admin_user():
+    """Crear usuario admin directamente"""
+    try:
+        from server.database import SessionLocal
+        from server.models import Usuario
+        import hashlib
+        
+        db = SessionLocal()
+        
+        # Verificar si existe
+        existing = db.query(Usuario).filter(Usuario.username == "admin").first()
+        if existing:
+            total = db.query(Usuario).count()
+            db.close()
+            return {"message": "Admin ya existe", "total_usuarios": total}
+        
+        # Crear admin
+        admin = Usuario(
+            username="admin",
+            password_hash=hashlib.sha256("admin123".encode()).hexdigest(),
+            nombre_completo="Administrador del Sistema",
+            email="admin@taller.com",
+            rol="Admin",
+            activo=True
+        )
+        
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+        
+        total = db.query(Usuario).count()
+        db.close()
+        
+        return {
+            "success": True,
+            "message": "Admin creado",
+            "user_id": admin.id,
+            "total_usuarios": total
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.get("/admin/count-all")
+async def count_all_records():
+    """Contar registros en todas las tablas"""
+    try:
+        from server.database import SessionLocal
+        from server.models import Usuario, Cliente, Proveedor, Producto
+        
+        db = SessionLocal()
+        
+        counts = {
+            "usuarios": db.query(Usuario).count(),
+            "clientes": db.query(Cliente).count(),
+            "proveedores": db.query(Proveedor).count(),
+            "productos": db.query(Producto).count()
+        }
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "counts": counts,
+            "total": sum(counts.values())
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.post("/admin/force-create-tables")
+async def force_create_tables():
+    """Forzar creación de tablas con verificación"""
+    try:
+        from server.database import Base, engine
+        
+        # Importar TODOS los modelos explícitamente
+        from server.models import (
+            Usuario, Cliente, Proveedor, Producto,
+            Orden, OrdenItem, Cotizacion, CotizacionItem,
+            NotaVenta, NotaVentaItem, MovimientoInventario,
+            ConfigEmpresa, NotaProveedor, NotaProveedorItem,
+            NotaProveedorPago
+        )
+        
+        # Crear todas las tablas
+        Base.metadata.create_all(bind=engine)
+        
+        # Verificar
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        
+        return {
+            "success": True,
+            "message": "Tablas creadas",
+            "tables_created": tables,
+            "count": len(tables)
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+    
+@app.get("/admin/test-connection")
+async def test_db_connection():
+    """Probar conexión directa a PostgreSQL"""
+    try:
+        from server.database import engine, DATABASE_URL
+        from sqlalchemy import text
+        
+        # Probar conexión
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT version()"))
+            version = result.fetchone()[0]
+            
+            # Ver qué tablas hay
+            tables_result = conn.execute(text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
+            """))
+            tables = [row[0] for row in tables_result]
+            
+            return {
+                "success": True,
+                "connected": True,
+                "postgres_version": version,
+                "database_url_prefix": DATABASE_URL[:30] + "...",
+                "existing_tables": tables,
+                "table_count": len(tables)
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.post("/admin/create-table-raw")
+async def create_table_with_raw_sql():
+    """Crear tabla usuarios con SQL directo"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # Crear tabla usuarios con SQL directo
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(100) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    nombre_completo VARCHAR(200) NOT NULL,
+                    email VARCHAR(150) UNIQUE,
+                    rol VARCHAR(50) DEFAULT 'Capturista',
+                    activo BOOLEAN DEFAULT true,
+                    ultimo_acceso TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            
+            # Verificar
+            result = conn.execute(text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_name = 'usuarios'
+            """))
+            exists = result.fetchone() is not None
+            
+            return {
+                "success": True,
+                "message": "Tabla usuarios creada con SQL directo",
+                "table_exists": exists
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+    
+@app.post("/admin/create-all-tables-raw")
+async def create_all_tables_with_sql():
+    """Crear todas las tablas con SQL directo"""
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            # Clientes
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS clientes (
+                    id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(200) NOT NULL,
+                    tipo VARCHAR(50),
+                    rfc VARCHAR(13),
+                    email VARCHAR(150),
+                    telefono VARCHAR(20),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    activo BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Proveedores
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS proveedores (
+                    id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(200) NOT NULL,
+                    tipo VARCHAR(50),
+                    rfc VARCHAR(13),
+                    email VARCHAR(150),
+                    telefono VARCHAR(20),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    activo BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Inventario
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS inventario (
+                    id SERIAL PRIMARY KEY,
+                    codigo VARCHAR(50) UNIQUE NOT NULL,
+                    nombre VARCHAR(200) NOT NULL,
+                    descripcion TEXT,
+                    categoria VARCHAR(100),
+                    precio_compra NUMERIC(10,2),
+                    precio_venta NUMERIC(10,2),
+                    stock_actual INTEGER DEFAULT 0,
+                    stock_minimo INTEGER DEFAULT 0,
+                    proveedor_id INTEGER REFERENCES proveedores(id),
+                    activo BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            # Config Empresa
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS config_empresa (
+                    id SERIAL PRIMARY KEY,
+                    nombre_comercial VARCHAR(200) NOT NULL,
+                    razon_social VARCHAR(200),
+                    rfc VARCHAR(13),
+                    calle VARCHAR(200),
+                    colonia VARCHAR(100),
+                    ciudad VARCHAR(100),
+                    estado VARCHAR(100),
+                    cp VARCHAR(10),
+                    pais VARCHAR(100) DEFAULT 'México',
+                    telefono1 VARCHAR(20),
+                    telefono2 VARCHAR(20),
+                    email VARCHAR(150),
+                    sitio_web VARCHAR(200),
+                    logo_data BYTEA,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            
+            conn.commit()
+            
+            # Verificar tablas creadas
+            result = conn.execute(text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
+                ORDER BY table_name
+            """))
+            tables = [row[0] for row in result]
+            
+            return {
+                "success": True,
+                "message": "Tablas principales creadas",
+                "tables": tables,
+                "count": len(tables)
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+    
 @app.post("/admin/load-sample-data")
 async def load_sample_data():
     """Cargar datos de ejemplo SOLO una vez"""
