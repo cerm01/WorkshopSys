@@ -1712,6 +1712,42 @@ async def recreate_all_tables():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+    
+@app.post("/admin/fix-notas-venta")
+async def fix_notas_venta_columns():
+    try:
+        from server.database import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            conn.execute(text("""
+                ALTER TABLE notas_venta 
+                ADD COLUMN IF NOT EXISTS total_pagado NUMERIC(10,2) DEFAULT 0.0
+            """))
+            
+            conn.execute(text("""
+                ALTER TABLE notas_venta 
+                ADD COLUMN IF NOT EXISTS saldo NUMERIC(10,2) DEFAULT 0.0
+            """))
+            
+            conn.execute(text("""
+                ALTER TABLE notas_venta 
+                ADD COLUMN IF NOT EXISTS cotizacion_folio VARCHAR(50)
+            """))
+            
+            conn.execute(text("""
+                ALTER TABLE notas_venta 
+                ADD COLUMN IF NOT EXISTS orden_folio VARCHAR(50)
+            """))
+            
+            conn.commit()
+            
+            return {"success": True, "message": "Columnas agregadas a notas_venta"}
+            
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+    
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
     if not c:
