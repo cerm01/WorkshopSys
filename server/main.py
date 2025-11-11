@@ -926,6 +926,110 @@ async def init_database():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.get("/admin/check-tables")
+async def check_tables():
+    """Verificar qué tablas existen"""
+    try:
+        from server.database import engine
+        from sqlalchemy import inspect
+        
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        
+        return {
+            "success": True,
+            "tables": tables,
+            "count": len(tables)
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.post("/admin/create-admin")
+async def create_admin_user():
+    """Crear usuario admin directamente"""
+    try:
+        from server.database import SessionLocal
+        from server.models import Usuario
+        import hashlib
+        
+        db = SessionLocal()
+        
+        # Verificar si existe
+        existing = db.query(Usuario).filter(Usuario.username == "admin").first()
+        if existing:
+            total = db.query(Usuario).count()
+            db.close()
+            return {"message": "Admin ya existe", "total_usuarios": total}
+        
+        # Crear admin
+        admin = Usuario(
+            username="admin",
+            password_hash=hashlib.sha256("admin123".encode()).hexdigest(),
+            nombre_completo="Administrador del Sistema",
+            email="admin@taller.com",
+            rol="Admin",
+            activo=True
+        )
+        
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+        
+        total = db.query(Usuario).count()
+        db.close()
+        
+        return {
+            "success": True,
+            "message": "Admin creado",
+            "user_id": admin.id,
+            "total_usuarios": total
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.get("/admin/count-all")
+async def count_all_records():
+    """Contar registros en todas las tablas"""
+    try:
+        from server.database import SessionLocal
+        from server.models import Usuario, Cliente, Proveedor, Producto
+        
+        db = SessionLocal()
+        
+        counts = {
+            "usuarios": db.query(Usuario).count(),
+            "clientes": db.query(Cliente).count(),
+            "proveedores": db.query(Proveedor).count(),
+            "productos": db.query(Producto).count()
+        }
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "counts": counts,
+            "total": sum(counts.values())
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
 
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
