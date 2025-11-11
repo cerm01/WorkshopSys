@@ -2491,36 +2491,31 @@ async def test_cotizaciones(db: Session = Depends(get_db)):
             "traceback": traceback.format_exc()
         }
     
-@app.get("/admin/check-admin")
-async def check_admin():
-    """Verificar si admin existe y sus datos"""
+@app.post("/admin/test-login")
+async def test_login():
+    """Probar login directo"""
     try:
         from server.database import engine
         from sqlalchemy import text
+        import bcrypt
         
         with engine.connect() as conn:
             result = conn.execute(text("""
-                SELECT id, username, nombre_completo, email, rol, activo 
-                FROM usuarios 
-                WHERE username = 'admin'
+                SELECT password_hash FROM usuarios WHERE username = 'admin'
             """))
             
             row = result.fetchone()
             
-            if row:
-                return {
-                    "success": True,
-                    "user": {
-                        "id": row[0],
-                        "username": row[1],
-                        "nombre_completo": row[2],
-                        "email": row[3],
-                        "rol": row[4],
-                        "activo": row[5]
-                    }
-                }
+            if not row:
+                return {"success": False, "message": "Usuario no encontrado"}
+            
+            stored_hash = row[0]
+            
+            # Probar con "123"
+            if bcrypt.checkpw("123".encode('utf-8'), stored_hash.encode('utf-8')):
+                return {"success": True, "message": "Contraseña correcta"}
             else:
-                return {"success": False, "message": "Usuario admin no existe"}
+                return {"success": False, "message": "Contraseña incorrecta"}
                 
     except Exception as e:
         import traceback
