@@ -2491,36 +2491,33 @@ async def test_cotizaciones(db: Session = Depends(get_db)):
             "traceback": traceback.format_exc()
         }
     
-@app.post("/admin/fix-usuarios-estructura")
-async def fix_usuarios_estructura():
-    """Recrear SOLO tabla usuarios"""
+@app.post("/admin/create-admin-user")
+async def create_admin_user():
+    """Crear usuario admin con datos específicos"""
     try:
         from server.database import engine
         from sqlalchemy import text
+        import bcrypt
         
         with engine.connect() as conn:
-            # Eliminar solo usuarios
-            conn.execute(text("DROP TABLE IF EXISTS usuarios CASCADE"))
+            # Hash de la contraseña
+            password_hash = bcrypt.hashpw("123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             
-            # Recrear EXACTA
+            # Insertar admin
             conn.execute(text("""
-                CREATE TABLE usuarios (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(100) NOT NULL,
-                    password_hash VARCHAR(255) NOT NULL,
-                    nombre_completo VARCHAR(200) NOT NULL,
-                    email VARCHAR(150) UNIQUE,
-                    rol VARCHAR(50),
-                    activo BOOLEAN,
-                    ultimo_acceso TIMESTAMP,
-                    created_at TIMESTAMP,
-                    updated_at TIMESTAMP
-                )
-            """))
+                INSERT INTO usuarios (username, password_hash, nombre_completo, email, rol, activo, created_at, updated_at)
+                VALUES ('admin', :password_hash, 'Administrador del Sistema', 'admin@taller.com', 'Admin', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (username) DO NOTHING
+            """), {"password_hash": password_hash})
             
             conn.commit()
             
-            return {"success": True, "message": "Tabla usuarios corregida"}
+            return {
+                "success": True,
+                "message": "Usuario admin creado",
+                "username": "admin",
+                "password": "123"
+            }
             
     except Exception as e:
         import traceback
