@@ -2490,36 +2490,33 @@ async def test_cotizaciones(db: Session = Depends(get_db)):
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+
+def verificar_credenciales(db: Session, username: str, password: str):
+    """Verificar credenciales de usuario"""
+    import bcrypt
     
-@app.post("/admin/test-login")
-async def test_login():
-    """Probar login directo"""
+    # Buscar usuario
+    usuario = db.query(Usuario).filter(Usuario.username == username).first()
+    
+    if not usuario:
+        return None
+    
+    # Verificar si está activo (convertir a bool explícitamente)
+    if not bool(usuario.activo):
+        return None
+    
+    # Verificar contraseña
     try:
-        from server.database import engine
-        from sqlalchemy import text
-        import bcrypt
-        
-        with engine.connect() as conn:
-            result = conn.execute(text("""
-                SELECT password_hash FROM usuarios WHERE username = 'admin'
-            """))
-            
-            row = result.fetchone()
-            
-            if not row:
-                return {"success": False, "message": "Usuario no encontrado"}
-            
-            stored_hash = row[0]
-            
-            # Probar con "123"
-            if bcrypt.checkpw("123".encode('utf-8'), stored_hash.encode('utf-8')):
-                return {"success": True, "message": "Contraseña correcta"}
-            else:
-                return {"success": False, "message": "Contraseña incorrecta"}
-                
-    except Exception as e:
-        import traceback
-        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+        if bcrypt.checkpw(password.encode('utf-8'), usuario.password_hash.encode('utf-8')):
+            # Actualizar último acceso
+            from datetime import datetime
+            usuario.ultimo_acceso = datetime.now()
+            db.commit()
+            return usuario
+    except:
+        return None
+    
+    return None
     
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
