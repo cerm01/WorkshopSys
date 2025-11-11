@@ -2491,23 +2491,23 @@ async def test_cotizaciones(db: Session = Depends(get_db)):
             "traceback": traceback.format_exc()
         }
     
-@app.post("/admin/fix-notas-proveedor-estructura")
-async def fix_notas_proveedor_estructura():
-    """Recrear SOLO tabla notas_proveedor"""
+@app.post("/admin/fix-notas-venta-estructura")
+async def fix_notas_venta_estructura():
+    """Recrear SOLO tabla notas_venta"""
     try:
         from server.database import engine
         from sqlalchemy import text
         
         with engine.connect() as conn:
-            # Eliminar solo notas_proveedor
-            conn.execute(text("DROP TABLE IF EXISTS notas_proveedor CASCADE"))
+            # Eliminar solo notas_venta
+            conn.execute(text("DROP TABLE IF EXISTS notas_venta CASCADE"))
             
             # Recrear EXACTA
             conn.execute(text("""
-                CREATE TABLE notas_proveedor (
+                CREATE TABLE notas_venta (
                     id SERIAL PRIMARY KEY,
                     folio VARCHAR(50) NOT NULL,
-                    proveedor_id INTEGER NOT NULL REFERENCES proveedores(id),
+                    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
                     estado VARCHAR(50),
                     metodo_pago VARCHAR(50),
                     subtotal REAL,
@@ -2518,13 +2518,15 @@ async def fix_notas_proveedor_estructura():
                     observaciones TEXT,
                     fecha TIMESTAMP,
                     created_at TIMESTAMP,
-                    updated_at TIMESTAMP
+                    updated_at TIMESTAMP,
+                    cotizacion_folio TEXT,
+                    orden_folio TEXT
                 )
             """))
             
             conn.commit()
             
-            return {"success": True, "message": "Tabla notas_proveedor corregida"}
+            return {"success": True, "message": "Tabla notas_venta corregida"}
             
     except Exception as e:
         import traceback
