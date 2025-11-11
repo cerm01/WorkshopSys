@@ -1748,6 +1748,341 @@ async def fix_notas_venta_columns():
         import traceback
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
     
+@app.post("/admin/import-data")
+async def import_data(data: Dict[str, Any]):
+    """Importar datos desde JSON con mapeo de IDs"""
+    try:
+        from server.database import SessionLocal
+        from server.models import (
+            Cliente, Proveedor, Producto, Orden, OrdenItem,
+            Cotizacion, CotizacionItem, NotaVenta, NotaVentaItem,
+            NotaVentaPago, NotaProveedor, NotaProveedorItem,
+            NotaProveedorPago, MovimientoInventario, ConfigEmpresa
+        )
+        from datetime import datetime
+        import base64
+        
+        db = SessionLocal()
+        imported = {}
+        
+        # Mapeos de IDs antiguos → nuevos
+        map_clientes = {}
+        map_proveedores = {}
+        map_productos = {}
+        map_ordenes = {}
+        map_cotizaciones = {}
+        map_notas_venta = {}
+        map_notas_proveedor = {}
+        
+        print("\n🔄 INICIANDO IMPORTACIÓN...")
+        
+        # ==================== CONFIG EMPRESA ====================
+        print("\n📋 Importando configuración empresa...")
+        for c_data in data.get("config_empresa", []):
+            if c_data.get("logo_data"):
+                c_data["logo_data"] = base64.b64decode(c_data["logo_data"])
+            
+            # Verificar si ya existe
+            existing = db.query(ConfigEmpresa).first()
+            if existing:
+                # Actualizar existente
+                for key, value in c_data.items():
+                    setattr(existing, key, value)
+            else:
+                config = ConfigEmpresa(**c_data)
+                db.add(config)
+        
+        db.commit()
+        imported["config_empresa"] = len(data.get("config_empresa", []))
+        print(f"✅ Config: {imported['config_empresa']}")
+        
+        # ==================== CLIENTES ====================
+        print("\n👥 Importando clientes...")
+        for c_data in data.get("clientes", []):
+            id_original = c_data.pop("id_original", None)
+            cliente = Cliente(**c_data)
+            db.add(cliente)
+            db.flush()
+            if id_original:
+                map_clientes[id_original] = cliente.id
+        
+        db.commit()
+        imported["clientes"] = len(data.get("clientes", []))
+        print(f"✅ Clientes: {imported['clientes']}")
+        
+        # ==================== PROVEEDORES ====================
+        print("\n🏭 Importando proveedores...")
+        for p_data in data.get("proveedores", []):
+            id_original = p_data.pop("id_original", None)
+            proveedor = Proveedor(**p_data)
+            db.add(proveedor)
+            db.flush()
+            if id_original:
+                map_proveedores[id_original] = proveedor.id
+        
+        db.commit()
+        imported["proveedores"] = len(data.get("proveedores", []))
+        print(f"✅ Proveedores: {imported['proveedores']}")
+        
+        # ==================== PRODUCTOS ====================
+        print("\n📦 Importando productos...")
+        for p_data in data.get("productos", []):
+            id_original = p_data.pop("id_original", None)
+            proveedor_id_original = p_data.pop("proveedor_id_original", None)
+            
+            # Mapear proveedor
+            if proveedor_id_original and proveedor_id_original in map_proveedores:
+                p_data["proveedor_id"] = map_proveedores[proveedor_id_original]
+            else:
+                p_data["proveedor_id"] = None
+            
+            producto = Producto(**p_data)
+            db.add(producto)
+            db.flush()
+            if id_original:
+                map_productos[id_original] = producto.id
+        
+        db.commit()
+        imported["productos"] = len(data.get("productos", []))
+        print(f"✅ Productos: {imported['productos']}")
+        
+        # ==================== MOVIMIENTOS INVENTARIO ====================
+        print("\n📊 Importando movimientos inventario...")
+        for m_data in data.get("movimientos_inventario", []):
+            producto_id_original = m_data.pop("producto_id_original", None)
+            
+            if producto_id_original and producto_id_original in map_productos:
+                m_data["producto_id"] = map_productos[producto_id_original]
+                
+                # Convertir fecha
+                if m_data.get("created_at"):
+                    m_data["created_at"] = datetime.fromisoformat(m_data["created_at"])
+                
+                movimiento = MovimientoInventario(**m_data)
+                db.add(movimiento)
+        
+        db.commit()
+        imported["movimientos_inventario"] = len(data.get("movimientos_inventario", []))
+        print(f"✅ Movimientos: {imported['movimientos_inventario']}")
+        
+        # ==================== ÓRDENES ====================
+        print("\n🔧 Importando órdenes...")
+        for o_data in data.get("ordenes", []):
+            id_original = o_data.pop("id_original", None)
+            cliente_id_original = o_data.pop("cliente_id_original", None)
+            
+            if cliente_id_original and cliente_id_original in map_clientes:
+                o_data["cliente_id"] = map_clientes[cliente_id_original]
+                
+                # Convertir fechas
+                for campo in ["fecha_recepcion", "fecha_promesa", "fecha_entrega"]:
+                    if o_data.get(campo):
+                        o_data[campo] = datetime.fromisoformat(o_data[campo])
+                
+                orden = Orden(**o_data)
+                db.add(orden)
+                db.flush()
+                if id_original:
+                    map_ordenes[id_original] = orden.id
+        
+        db.commit()
+        imported["ordenes"] = len(data.get("ordenes", []))
+        print(f"✅ Órdenes: {imported['ordenes']}")
+        
+        # ==================== ÓRDENES ITEMS ====================
+        print("\n📝 Importando items de órdenes...")
+        for i_data in data.get("ordenes_items", []):
+            orden_id_original = i_data.pop("orden_id_original", None)
+            
+            if orden_id_original and orden_id_original in map_ordenes:
+                i_data["orden_id"] = map_ordenes[orden_id_original]
+                item = OrdenItem(**i_data)
+                db.add(item)
+        
+        db.commit()
+        imported["ordenes_items"] = len(data.get("ordenes_items", []))
+        print(f"✅ Items Órdenes: {imported['ordenes_items']}")
+        
+        # ==================== COTIZACIONES ====================
+        print("\n💰 Importando cotizaciones...")
+        for c_data in data.get("cotizaciones", []):
+            id_original = c_data.pop("id_original", None)
+            cliente_id_original = c_data.pop("cliente_id_original", None)
+            
+            if cliente_id_original and cliente_id_original in map_clientes:
+                c_data["cliente_id"] = map_clientes[cliente_id_original]
+                
+                # Convertir fechas
+                if c_data.get("fecha"):
+                    c_data["fecha"] = datetime.fromisoformat(c_data["fecha"]).date()
+                if c_data.get("vigencia"):
+                    c_data["vigencia"] = datetime.fromisoformat(c_data["vigencia"]).date()
+                
+                cotizacion = Cotizacion(**c_data)
+                db.add(cotizacion)
+                db.flush()
+                if id_original:
+                    map_cotizaciones[id_original] = cotizacion.id
+        
+        db.commit()
+        imported["cotizaciones"] = len(data.get("cotizaciones", []))
+        print(f"✅ Cotizaciones: {imported['cotizaciones']}")
+        
+        # ==================== COTIZACIONES ITEMS ====================
+        print("\n📋 Importando items de cotizaciones...")
+        for i_data in data.get("cotizaciones_items", []):
+            cotizacion_id_original = i_data.pop("cotizacion_id_original", None)
+            
+            if cotizacion_id_original and cotizacion_id_original in map_cotizaciones:
+                i_data["cotizacion_id"] = map_cotizaciones[cotizacion_id_original]
+                item = CotizacionItem(**i_data)
+                db.add(item)
+        
+        db.commit()
+        imported["cotizaciones_items"] = len(data.get("cotizaciones_items", []))
+        print(f"✅ Items Cotizaciones: {imported['cotizaciones_items']}")
+        
+        # ==================== NOTAS VENTA ====================
+        print("\n🧾 Importando notas de venta...")
+        for n_data in data.get("notas_venta", []):
+            id_original = n_data.pop("id_original", None)
+            cliente_id_original = n_data.pop("cliente_id_original", None)
+            
+            if cliente_id_original and cliente_id_original in map_clientes:
+                n_data["cliente_id"] = map_clientes[cliente_id_original]
+                
+                if n_data.get("fecha"):
+                    n_data["fecha"] = datetime.fromisoformat(n_data["fecha"])
+                
+                nota = NotaVenta(**n_data)
+                db.add(nota)
+                db.flush()
+                if id_original:
+                    map_notas_venta[id_original] = nota.id
+        
+        db.commit()
+        imported["notas_venta"] = len(data.get("notas_venta", []))
+        print(f"✅ Notas Venta: {imported['notas_venta']}")
+        
+        # ==================== NOTAS VENTA ITEMS ====================
+        print("\n📦 Importando items de notas venta...")
+        for i_data in data.get("notas_venta_items", []):
+            nota_id_original = i_data.pop("nota_id_original", None)
+            producto_id_original = i_data.pop("producto_id_original", None)
+            
+            if nota_id_original and nota_id_original in map_notas_venta:
+                i_data["nota_id"] = map_notas_venta[nota_id_original]
+                
+                if producto_id_original and producto_id_original in map_productos:
+                    i_data["producto_id"] = map_productos[producto_id_original]
+                else:
+                    i_data["producto_id"] = None
+                
+                item = NotaVentaItem(**i_data)
+                db.add(item)
+        
+        db.commit()
+        imported["notas_venta_items"] = len(data.get("notas_venta_items", []))
+        print(f"✅ Items Notas Venta: {imported['notas_venta_items']}")
+        
+        # ==================== NOTAS VENTA PAGOS ====================
+        print("\n💳 Importando pagos de notas venta...")
+        for p_data in data.get("notas_venta_pagos", []):
+            nota_id_original = p_data.pop("nota_id_original", None)
+            
+            if nota_id_original and nota_id_original in map_notas_venta:
+                p_data["nota_id"] = map_notas_venta[nota_id_original]
+                
+                if p_data.get("fecha_pago"):
+                    p_data["fecha_pago"] = datetime.fromisoformat(p_data["fecha_pago"])
+                
+                pago = NotaVentaPago(**p_data)
+                db.add(pago)
+        
+        db.commit()
+        imported["notas_venta_pagos"] = len(data.get("notas_venta_pagos", []))
+        print(f"✅ Pagos Notas Venta: {imported['notas_venta_pagos']}")
+        
+        # ==================== NOTAS PROVEEDOR ====================
+        print("\n🏪 Importando notas de proveedor...")
+        for n_data in data.get("notas_proveedor", []):
+            id_original = n_data.pop("id_original", None)
+            proveedor_id_original = n_data.pop("proveedor_id_original", None)
+            
+            if proveedor_id_original and proveedor_id_original in map_proveedores:
+                n_data["proveedor_id"] = map_proveedores[proveedor_id_original]
+                
+                if n_data.get("fecha"):
+                    n_data["fecha"] = datetime.fromisoformat(n_data["fecha"]).date()
+                if n_data.get("fecha_vencimiento"):
+                    n_data["fecha_vencimiento"] = datetime.fromisoformat(n_data["fecha_vencimiento"]).date()
+                
+                nota = NotaProveedor(**n_data)
+                db.add(nota)
+                db.flush()
+                if id_original:
+                    map_notas_proveedor[id_original] = nota.id
+        
+        db.commit()
+        imported["notas_proveedor"] = len(data.get("notas_proveedor", []))
+        print(f"✅ Notas Proveedor: {imported['notas_proveedor']}")
+        
+        # ==================== NOTAS PROVEEDOR ITEMS ====================
+        print("\n📦 Importando items de notas proveedor...")
+        for i_data in data.get("notas_proveedor_items", []):
+            nota_id_original = i_data.pop("nota_id_original", None)
+            producto_id_original = i_data.pop("producto_id_original", None)
+            
+            if nota_id_original and nota_id_original in map_notas_proveedor:
+                i_data["nota_id"] = map_notas_proveedor[nota_id_original]
+                
+                if producto_id_original and producto_id_original in map_productos:
+                    i_data["producto_id"] = map_productos[producto_id_original]
+                else:
+                    i_data["producto_id"] = None
+                
+                item = NotaProveedorItem(**i_data)
+                db.add(item)
+        
+        db.commit()
+        imported["notas_proveedor_items"] = len(data.get("notas_proveedor_items", []))
+        print(f"✅ Items Notas Proveedor: {imported['notas_proveedor_items']}")
+        
+        # ==================== NOTAS PROVEEDOR PAGOS ====================
+        print("\n💵 Importando pagos de notas proveedor...")
+        for p_data in data.get("notas_proveedor_pagos", []):
+            nota_id_original = p_data.pop("nota_id_original", None)
+            
+            if nota_id_original and nota_id_original in map_notas_proveedor:
+                p_data["nota_id"] = map_notas_proveedor[nota_id_original]
+                
+                if p_data.get("fecha_pago"):
+                    p_data["fecha_pago"] = datetime.fromisoformat(p_data["fecha_pago"])
+                
+                pago = NotaProveedorPago(**p_data)
+                db.add(pago)
+        
+        db.commit()
+        imported["notas_proveedor_pagos"] = len(data.get("notas_proveedor_pagos", []))
+        print(f"✅ Pagos Notas Proveedor: {imported['notas_proveedor_pagos']}")
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "imported": imported,
+            "total": sum(imported.values()),
+            "message": "Datos importados correctamente"
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+    
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
     if not c:
