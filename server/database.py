@@ -1,36 +1,28 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
 from typing import Generator
 import os
 
 # ==================== CONFIGURACIÓN ====================
 
-# Para desarrollo: SQLite (simple, sin instalación)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./taller.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Para producción: PostgreSQL
-# DATABASE_URL = "postgresql://usuario:password@localhost/taller_db"
+if not DATABASE_URL:
+    raise RuntimeError("La variable de entorno DATABASE_URL no está configurada.")
+
+# Railway entrega URLs con prefijo "postgres://", SQLAlchemy requiere "postgresql://"
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # ==================== ENGINE ====================
 
-if DATABASE_URL.startswith("sqlite"):
-    # SQLite: configuración especial para multi-threading
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=True  # Ver queries SQL en consola (desactivar en producción)
-    )
-else:
-    # PostgreSQL/MySQL: configuración estándar
-    engine = create_engine(
-        DATABASE_URL,
-        pool_size=10,  # Conexiones simultáneas
-        max_overflow=20,
-        pool_pre_ping=True,  # Verificar conexión antes de usar
-        echo=True
-    )
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+    echo=os.getenv("SQL_ECHO", "false").lower() == "true"
+)
 
 # ==================== SESSION ====================
 
@@ -89,12 +81,9 @@ def eliminar_tablas():
 # ==================== VERIFICACIÓN ====================
 
 def verificar_conexion() -> bool:
-    """
-    Verificar que la conexión a la base de datos funciona.
-    """
     try:
         db = SessionLocal()
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db.close()
         print("✅ Conexión a base de datos exitosa")
         return True
