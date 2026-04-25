@@ -5,7 +5,7 @@ from datetime import datetime
 import base64 # Requerido para manejar el logo
 
 class TallerAPIClient:
-    def __init__(self, base_url: str = "http://localhost:8000"):
+    def __init__(self, base_url: str = "https://web-production-96c8.up.railway.app"):
         self.base_url = base_url
         self.session = requests.Session()
         self.session.headers.update({'Content-Type': 'application/json'})

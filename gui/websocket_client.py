@@ -48,7 +48,7 @@ class WebSocketClient(QThread):
         while self.running:
             try:
                 self.ws = websocket.WebSocketApp(
-                    f"ws://{self.server_url}/ws",
+                    f"wss://{self.server_url}/ws",
                     on_message=self.on_message,
                     on_error=self.on_error,
                     on_close=self.on_close,

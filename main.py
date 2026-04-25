@@ -9,26 +9,12 @@ from gui.websocket_client import init_websocket
 from ml.auto_retrain import debe_reentrenar, reentrenar_silencioso
 
 # ==================== CONFIGURACIÓN ====================
-SERVER_URL = "localhost:8000"
+SERVER_URL = "web-production-96c8.up.railway.app"
 
 # ==================== INICIAR APLICACIÓN ====================
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
-    print("🔍 Verificando modelo ML...")
-    debe, razon = debe_reentrenar()
-    
-    if debe:
-        print(f"🔄 Reentrenando modelo: {razon}")
-        exito = reentrenar_silencioso()
-        
-        if exito:
-            print("✅ Modelo actualizado")
-        else:
-            print("⚠️  Error en reentrenamiento")
-    else:
-        print(f"✅ Modelo OK: {razon}")
-    
+
     # Inicializar WebSocket para notificaciones en tiempo real
     print("🔌 Conectando a servidor...")
     ws_client = init_websocket(SERVER_URL)
