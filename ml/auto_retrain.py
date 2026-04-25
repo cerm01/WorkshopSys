@@ -1,24 +1,24 @@
 import os
 import pickle
 from datetime import datetime
-from server.database import SessionLocal
-from server.models import Cotizacion
 
 def debe_reentrenar():
     """Verificar si necesita reentrenamiento (SIMPLE)"""
-    
+
     # Si no existe metadata, entrenar
     if not os.path.exists('modelo_metadata.pkl'):
         return True, "Primera vez"
-    
+
     # Cargar datos previos
     try:
         with open('modelo_metadata.pkl', 'rb') as f:
             metadata = pickle.load(f)
-        
+
         cot_previas = metadata.get('cotizaciones', 0)
-        
+
         # Contar cotizaciones actuales
+        from server.database import SessionLocal
+        from server.models import Cotizacion
         db = SessionLocal()
         cot_actuales = db.query(Cotizacion).count()
         db.close()
@@ -47,6 +47,8 @@ def reentrenar_silencioso():
         from entrenar_onehot import entrenar_modelo_correcto
         entrenar_modelo_correcto()
 
+        from server.database import SessionLocal
+        from server.models import Cotizacion
         db = SessionLocal()
         total = db.query(Cotizacion).count()
         db.close()
