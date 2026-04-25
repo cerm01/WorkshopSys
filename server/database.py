@@ -63,7 +63,7 @@ def crear_tablas():
     Crear todas las tablas en la base de datos.
     Llamar una sola vez al inicio.
     """
-    from models import Base
+    from server.models import Base
     Base.metadata.create_all(bind=engine)
     print("✅ Tablas creadas exitosamente")
 
@@ -73,7 +73,7 @@ def eliminar_tablas():
     PELIGRO: Elimina todas las tablas.
     Solo usar en desarrollo.
     """
-    from models import Base
+    from server.models import Base
     Base.metadata.drop_all(bind=engine)
     print("⚠️  Tablas eliminadas")
 

@@ -13,7 +13,7 @@ from sqlalchemy.orm import joinedload
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from server.database import get_db_sync, SessionLocal
+from server.database import get_db
 from server import crud
 import json
 from datetime import datetime
@@ -31,17 +31,17 @@ from server.crud import verificar_credenciales
 
 app = FastAPI(title="Taller API Distribuida")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Modelo Pydantic para el login
 class LoginData(BaseModel):
     username: str
     password: str
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # ==================== LOGIN ====================
 @app.post("/login")
@@ -52,13 +52,6 @@ def login(data: LoginData, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
     # _usuario_to_dict ya está definido al final de main.py
     return _usuario_to_dict(usuario)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # ==================== WEBSOCKET MANAGER ====================
 class ConnectionManager:
@@ -76,8 +69,8 @@ class ConnectionManager:
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
-            except:
-                pass
+            except Exception:
+                self.disconnect(connection)
 
 manager = ConnectionManager()
 

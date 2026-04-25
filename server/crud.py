@@ -1183,16 +1183,22 @@ def get_usuario(db: Session, usuario_id: int) -> Optional[Usuario]:
 
 def crear_usuario_crud(db: Session, datos: Dict) -> Optional[Usuario]:
     """Crear nuevo usuario (adaptado de db_helper)"""
+    import hashlib
     try:
         # Validar username único
         existe = db.query(Usuario).filter(Usuario.username == datos['username']).first()
         if existe:
             raise ValueError("El nombre de usuario ya existe")
-        
+
+        # Hash del password (cliente envía 'password' en texto plano)
+        if 'password' in datos:
+            password = datos.pop('password')
+            datos['password_hash'] = hashlib.sha256(password.encode()).hexdigest()
+
         # Convertir email vacío ('') a None (NULL) para evitar error UNIQUE
         if 'email' in datos and datos['email'] == '':
             datos['email'] = None
-            
+
         nuevo_usuario = Usuario(**datos)
         db.add(nuevo_usuario)
         db.commit()
@@ -1205,12 +1211,18 @@ def crear_usuario_crud(db: Session, datos: Dict) -> Optional[Usuario]:
 
 def actualizar_usuario(db: Session, usuario_id: int, datos: Dict) -> Optional[Usuario]:
     """Actualizar usuario existente"""
+    import hashlib
     try:
         usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
-        
+
         if not usuario:
             return None
-        
+
+        # Hash del password si viene en texto plano
+        if 'password' in datos:
+            password = datos.pop('password')
+            datos['password_hash'] = hashlib.sha256(password.encode()).hexdigest()
+
         for key, value in datos.items():
             if hasattr(usuario, key):
                 setattr(usuario, key, value)
