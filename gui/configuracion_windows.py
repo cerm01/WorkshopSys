@@ -598,8 +598,8 @@ class ConfiguracionWindow(QDialog):
                     return
         
         if password:
-            datos['password_hash'] = generar_hash_password(password)
-        
+            datos['password'] = password
+
         if self.usuario_en_edicion_id:
             # Esta llamada ahora usa api_client
             if db_helper.actualizar_usuario(self.usuario_en_edicion_id, datos):
@@ -610,7 +610,7 @@ class ConfiguracionWindow(QDialog):
                 self.mostrar_mensaje("Error", "No se pudo actualizar", QMessageBox.Critical)
         else:
             if password:
-                datos['password_hash'] = generar_hash_password(password)
+                datos['password'] = password
             # Esta llamada ahora usa api_client
             if db_helper.crear_usuario(datos):
                 self.mostrar_mensaje("Éxito", "Usuario creado", QMessageBox.Information)

@@ -37,37 +37,32 @@ def debe_reentrenar():
 
 def reentrenar_silencioso():
     """Reentrenar sin mostrar mensajes (para background)"""
-    
+    import sys
+    from io import StringIO
+
+    old_stdout = sys.stdout
     try:
-        # Importar función de entrenamiento
-        import sys
-        from io import StringIO
-        
-        # Capturar output
-        old_stdout = sys.stdout
         sys.stdout = StringIO()
-        
-        # Ejecutar entrenamiento
+
         from entrenar_onehot import entrenar_modelo_correcto
         entrenar_modelo_correcto()
-        
-        # Restaurar output
-        sys.stdout = old_stdout
-        
-        # Guardar metadata
+
         db = SessionLocal()
         total = db.query(Cotizacion).count()
         db.close()
-        
+
         with open('modelo_metadata.pkl', 'wb') as f:
             pickle.dump({
                 'cotizaciones': total,
                 'fecha': datetime.now()
             }, f)
-        
+
         return True
-        
+
     except Exception as e:
         sys.stdout = old_stdout
         print(f"Error reentrenando: {e}")
         return False
+
+    finally:
+        sys.stdout = old_stdout
