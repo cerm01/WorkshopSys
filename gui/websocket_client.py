@@ -56,7 +56,12 @@ class WebSocketClient(QThread):
                 )
                 
                 # Correr WebSocket (bloquea hasta cerrar conexión)
-                self.ws.run_forever()
+                import ssl
+                self.ws.run_forever(
+                    sslopt={"cert_reqs": ssl.CERT_NONE},
+                    ping_interval=30,
+                    ping_timeout=10
+                )
                 
             except Exception as e:
                 print(f"WebSocket error: {e}")
