@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import QApplication
 from gui.login_windows import LoginWindow
 from gui.main_windows import MainWindow
 from gui.websocket_client import init_websocket
-from ml.auto_retrain import debe_reentrenar, reentrenar_silencioso
 
 # ==================== CONFIGURACIÓN ====================
 SERVER_URL = "web-production-96c8.up.railway.app"
