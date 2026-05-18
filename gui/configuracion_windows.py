@@ -512,7 +512,7 @@ class ConfiguracionWindow(QDialog):
         
         self.tabla_usuarios_model = QStandardItemModel()
         self.tabla_usuarios_model.setHorizontalHeaderLabels(
-            ["ID", "Usuario", "Nombre", "Email", "Rol", "Estado", "Último AccGceso"]
+            ["ID", "Usuario", "Nombre", "Email", "Rol", "Estado", "Último Acceso"]
         )
         self.tabla_usuarios.setModel(self.tabla_usuarios_model)
         

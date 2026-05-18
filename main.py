@@ -41,7 +41,6 @@ if __name__ == "__main__":
         exit_code = main_window.exec_()
         
         # 4. Analizar el código de salida
-        print(f"DEBUG (main.py): Bucle de aplicación terminado. Código recibido: {exit_code}")
         if exit_code != RESTART_CODE:
             # Si NO es el código de reinicio (ej. se cerró con la 'X'),
             # salimos del bucle while
