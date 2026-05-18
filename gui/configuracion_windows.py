@@ -3,6 +3,7 @@ import os
 import shutil
 import re
 import hashlib
+import json
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFrame, QTabWidget, QWidget,
@@ -733,25 +734,39 @@ class ConfiguracionWindow(QDialog):
     def crear_respaldo(self):
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            archivo_origen = os.path.join(self.base_dir, "taller.db")
-            
+
             archivo_destino, _ = QFileDialog.getSaveFileName(
                 self,
                 "Guardar Respaldo",
-                f"respaldo_taller_{timestamp}.db",
-                "Base de Datos (*.db)"
+                f"respaldo_taller_{timestamp}.json",
+                "Respaldo JSON (*.json)"
             )
-            
-            if archivo_destino:
-                if os.path.exists(archivo_origen):
-                    shutil.copy2(archivo_origen, archivo_destino)
-                    self.mostrar_mensaje(
-                        "Éxito",
-                        f"Respaldo creado exitosamente en:\n{archivo_destino}",
-                        QMessageBox.Information
-                    )
-                else:
-                    self.mostrar_mensaje("Error", f"No se encontró la base de datos en: {archivo_origen}", QMessageBox.Critical)
+
+            if not archivo_destino:
+                return
+
+            backup_data = db_helper.crear_backup()
+            if backup_data is None:
+                self.mostrar_mensaje(
+                    "Error",
+                    "No se pudo obtener los datos del servidor.\n"
+                    "Verifica tu conexión e inténtalo de nuevo.",
+                    QMessageBox.Critical
+                )
+                return
+
+            with open(archivo_destino, 'w', encoding='utf-8') as f:
+                json.dump(backup_data, f, ensure_ascii=False, indent=2)
+
+            total_registros = sum(len(v) for v in backup_data.get('tablas', {}).values())
+            self.mostrar_mensaje(
+                "Respaldo creado",
+                f"Respaldo creado exitosamente.\n\n"
+                f"Archivo: {archivo_destino}\n"
+                f"Fecha: {backup_data.get('fecha', '')[:19]}\n"
+                f"Registros respaldados: {total_registros}",
+                QMessageBox.Information
+            )
         except Exception as e:
             self.mostrar_mensaje("Error", f"Error al crear respaldo: {str(e)}", QMessageBox.Critical)
     
@@ -760,38 +775,59 @@ class ConfiguracionWindow(QDialog):
             self,
             "⚠️ Advertencia",
             "Esta acción reemplazará TODA la base de datos actual.\n"
-            "La aplicación debe reiniciarse después de la restauración.\n"
+            "Todos los datos existentes serán borrados y reemplazados\n"
+            "por los datos del archivo de respaldo.\n\n"
             "¿Está seguro de continuar?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-        
+
         if respuesta == QMessageBox.No:
             return
-        
+
         try:
             archivo_origen, _ = QFileDialog.getOpenFileName(
                 self,
                 "Seleccionar Respaldo",
                 "",
-                "Base de Datos (*.db)"
+                "Respaldo JSON (*.json)"
             )
-            
-            if archivo_origen:
-                archivo_destino = os.path.join(self.base_dir, "taller.db")
-                # Esta llamada ahora usa api_client (renombrado como db_helper)
-                db_helper.close()
-                shutil.copy2(archivo_origen, archivo_destino)
-                
+
+            if not archivo_origen:
+                return
+
+            with open(archivo_origen, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+
+            if backup_data.get("version") != "1.0":
                 self.mostrar_mensaje(
-                    "Éxito",
-                    "Base de datos restaurada exitosamente.\n"
-                    "Por favor, REINICIE la aplicación ahora.",
+                    "Error",
+                    "El archivo seleccionado no es un respaldo válido de este sistema.",
+                    QMessageBox.Critical
+                )
+                return
+
+            exito = db_helper.restaurar_backup(backup_data)
+
+            if exito:
+                self.mostrar_mensaje(
+                    "Restauración completada",
+                    "Base de datos restaurada exitosamente desde:\n"
+                    f"{archivo_origen}\n\n"
+                    "Los datos han sido actualizados en el servidor.",
                     QMessageBox.Information
                 )
-                self.close()
+            else:
+                self.mostrar_mensaje(
+                    "Error",
+                    "El servidor no pudo completar la restauración.\n"
+                    "Revisa los logs del servidor para más detalles.",
+                    QMessageBox.Critical
+                )
+        except json.JSONDecodeError:
+            self.mostrar_mensaje("Error", "El archivo seleccionado no es un JSON válido.", QMessageBox.Critical)
         except Exception as e:
-            self.mostrar_mensaje("Error", f"Error al restaurar: {str(e)}.\nDebe reiniciar la aplicación.", QMessageBox.Critical)
+            self.mostrar_mensaje("Error", f"Error al restaurar: {str(e)}", QMessageBox.Critical)
     
     # ==================== UTILIDADES ====================
     

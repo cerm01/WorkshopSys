@@ -909,6 +909,207 @@ async def eliminar_usuario_api(usuario_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# ==================== BACKUP / RESTORE ====================
+import base64 as _b64
+
+@app.get("/backup")
+def crear_backup_api(db: Session = Depends(get_db)):
+    """Exporta toda la base de datos como JSON"""
+
+    def serialize_row(row):
+        result = {}
+        for col in row.__table__.columns:
+            val = getattr(row, col.name)
+            if isinstance(val, datetime):
+                result[col.name] = val.isoformat() if val else None
+            elif isinstance(val, (bytes, bytearray)):
+                result[col.name] = _b64.b64encode(val).decode('utf-8') if val else None
+            else:
+                result[col.name] = val
+        return result
+
+    return {
+        "version": "1.0",
+        "fecha": datetime.now().isoformat(),
+        "tablas": {
+            "config_empresa":         [serialize_row(r) for r in db.query(ConfigEmpresa).all()],
+            "usuarios":               [serialize_row(r) for r in db.query(Usuario).all()],
+            "clientes":               [serialize_row(r) for r in db.query(Cliente).all()],
+            "proveedores":            [serialize_row(r) for r in db.query(Proveedor).all()],
+            "inventario":             [serialize_row(r) for r in db.query(Producto).all()],
+            "movimientos_inventario": [serialize_row(r) for r in db.query(MovimientoInventario).all()],
+            "ordenes":                [serialize_row(r) for r in db.query(Orden).all()],
+            "ordenes_items":          [serialize_row(r) for r in db.query(OrdenItem).all()],
+            "cotizaciones":           [serialize_row(r) for r in db.query(Cotizacion).all()],
+            "cotizaciones_items":     [serialize_row(r) for r in db.query(CotizacionItem).all()],
+            "notas_venta":            [serialize_row(r) for r in db.query(NotaVenta).all()],
+            "notas_venta_items":      [serialize_row(r) for r in db.query(NotaVentaItem).all()],
+            "notas_venta_pagos":      [serialize_row(r) for r in db.query(NotaVentaPago).all()],
+            "notas_proveedor":        [serialize_row(r) for r in db.query(NotaProveedor).all()],
+            "notas_proveedor_items":  [serialize_row(r) for r in db.query(NotaProveedorItem).all()],
+            "notas_proveedor_pagos":  [serialize_row(r) for r in db.query(NotaProveedorPago).all()],
+        }
+    }
+
+
+@app.post("/restore")
+def restaurar_backup_api(backup: Dict[str, Any], db: Session = Depends(get_db)):
+    """Restaura toda la base de datos desde un JSON de backup"""
+    from sqlalchemy import text
+
+    if backup.get("version") != "1.0":
+        raise HTTPException(status_code=400, detail="Versión de backup no compatible")
+
+    tablas = backup.get("tablas", {})
+
+    def parse_dt(val):
+        if val is None:
+            return None
+        try:
+            return datetime.fromisoformat(val)
+        except Exception:
+            return None
+
+    def parse_bytes(val):
+        if val is None:
+            return None
+        try:
+            import base64 as b64
+            return b64.b64decode(val)
+        except Exception:
+            return None
+
+    try:
+        # Borrar en orden inverso (respetando FK)
+        for tabla in [
+            "notas_proveedor_pagos", "notas_proveedor_items", "notas_proveedor",
+            "notas_venta_pagos", "notas_venta_items", "notas_venta",
+            "cotizaciones_items", "cotizaciones",
+            "ordenes_items", "ordenes",
+            "movimientos_inventario", "inventario",
+            "proveedores", "clientes", "usuarios", "config_empresa"
+        ]:
+            db.execute(text(f"DELETE FROM {tabla}"))
+        db.commit()
+
+        # Insertar en orden correcto (respetando FK)
+        for row in tablas.get("config_empresa", []):
+            row = {**row}
+            for f in ['created_at', 'updated_at']:
+                row[f] = parse_dt(row.get(f))
+            if row.get('logo_data'):
+                row['logo_data'] = parse_bytes(row['logo_data'])
+            db.add(ConfigEmpresa(**row))
+
+        for row in tablas.get("usuarios", []):
+            row = {**row}
+            for f in ['created_at', 'updated_at', 'ultimo_acceso']:
+                row[f] = parse_dt(row.get(f))
+            db.add(Usuario(**row))
+
+        for row in tablas.get("clientes", []):
+            row = {**row}
+            for f in ['created_at', 'updated_at']:
+                row[f] = parse_dt(row.get(f))
+            db.add(Cliente(**row))
+
+        for row in tablas.get("proveedores", []):
+            row = {**row}
+            for f in ['created_at', 'updated_at']:
+                row[f] = parse_dt(row.get(f))
+            db.add(Proveedor(**row))
+
+        for row in tablas.get("inventario", []):
+            row = {**row}
+            for f in ['created_at', 'updated_at']:
+                row[f] = parse_dt(row.get(f))
+            db.add(Producto(**row))
+
+        for row in tablas.get("movimientos_inventario", []):
+            row = {**row}
+            row['created_at'] = parse_dt(row.get('created_at'))
+            db.add(MovimientoInventario(**row))
+
+        for row in tablas.get("ordenes", []):
+            row = {**row}
+            for f in ['created_at', 'updated_at', 'fecha_recepcion', 'fecha_promesa', 'fecha_entrega']:
+                row[f] = parse_dt(row.get(f))
+            db.add(Orden(**row))
+
+        for row in tablas.get("ordenes_items", []):
+            row = {**row}
+            row['created_at'] = parse_dt(row.get('created_at'))
+            db.add(OrdenItem(**row))
+
+        for row in tablas.get("cotizaciones", []):
+            row = {**row}
+            for f in ['created_at', 'updated_at']:
+                row[f] = parse_dt(row.get(f))
+            db.add(Cotizacion(**row))
+
+        for row in tablas.get("cotizaciones_items", []):
+            row = {**row}
+            row['created_at'] = parse_dt(row.get('created_at'))
+            db.add(CotizacionItem(**row))
+
+        for row in tablas.get("notas_venta", []):
+            row = {**row}
+            for f in ['created_at', 'updated_at', 'fecha']:
+                row[f] = parse_dt(row.get(f))
+            db.add(NotaVenta(**row))
+
+        for row in tablas.get("notas_venta_items", []):
+            row = {**row}
+            row['created_at'] = parse_dt(row.get('created_at'))
+            db.add(NotaVentaItem(**row))
+
+        for row in tablas.get("notas_venta_pagos", []):
+            row = {**row}
+            for f in ['created_at', 'fecha_pago']:
+                row[f] = parse_dt(row.get(f))
+            db.add(NotaVentaPago(**row))
+
+        for row in tablas.get("notas_proveedor", []):
+            row = {**row}
+            for f in ['created_at', 'updated_at', 'fecha']:
+                row[f] = parse_dt(row.get(f))
+            db.add(NotaProveedor(**row))
+
+        for row in tablas.get("notas_proveedor_items", []):
+            row = {**row}
+            row['created_at'] = parse_dt(row.get('created_at'))
+            db.add(NotaProveedorItem(**row))
+
+        for row in tablas.get("notas_proveedor_pagos", []):
+            row = {**row}
+            for f in ['created_at', 'fecha_pago']:
+                row[f] = parse_dt(row.get(f))
+            db.add(NotaProveedorPago(**row))
+
+        db.commit()
+
+        # Resetear secuencias de PostgreSQL para que los próximos IDs sean correctos
+        for tabla in [
+            "config_empresa", "usuarios", "clientes", "proveedores",
+            "inventario", "movimientos_inventario", "ordenes", "ordenes_items",
+            "cotizaciones", "cotizaciones_items", "notas_venta", "notas_venta_items",
+            "notas_venta_pagos", "notas_proveedor", "notas_proveedor_items", "notas_proveedor_pagos"
+        ]:
+            try:
+                db.execute(text(
+                    f"SELECT setval(pg_get_serial_sequence('{tabla}', 'id'), COALESCE(MAX(id), 1)) FROM {tabla}"
+                ))
+            except Exception:
+                pass
+        db.commit()
+
+        return {"success": True, "mensaje": "Base de datos restaurada exitosamente"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al restaurar: {str(e)}")
+
+
 # ==================== CONVERSORES (Serializers) ====================
 def _cliente_to_dict(c):
     if not c:

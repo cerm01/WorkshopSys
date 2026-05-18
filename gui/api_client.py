@@ -382,5 +382,33 @@ class TallerAPIClient:
         # _post maneja los errores HTTP (como 401) y devuelve None si falla
         return self._post("/login", data)
 
+    # ==================== BACKUP / RESTORE ====================
+
+    def crear_backup(self) -> Optional[Dict]:
+        """Descarga un respaldo completo de la base de datos como JSON."""
+        try:
+            response = self.session.get(f"{self.base_url}/backup", timeout=60)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error al crear backup: {e}")
+            return None
+
+    def restaurar_backup(self, datos: Dict) -> bool:
+        """Envía un respaldo JSON al servidor para restaurar la base de datos."""
+        try:
+            response = self.session.post(
+                f"{self.base_url}/restore",
+                json=datos,
+                timeout=120
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result.get('success', False)
+        except Exception as e:
+            print(f"Error al restaurar backup: {e}")
+            return False
+
+
 # Crear instancia global
 api_client = TallerAPIClient()
