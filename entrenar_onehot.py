@@ -8,6 +8,9 @@ import re
 import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from server.database import SessionLocal
 from server.models import Cotizacion, CotizacionItem, Cliente
 from sklearn.linear_model import LinearRegression
