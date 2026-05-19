@@ -4,11 +4,17 @@ Variables: servicio, tipo_cliente, mes, historial, dias_inactivo
 """
 import sys
 import os
+import re
+import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from server.database import SessionLocal
 from server.models import Cotizacion, CotizacionItem, Cliente
 from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 import pandas as pd
@@ -16,6 +22,27 @@ import numpy as np
 import pickle
 from datetime import datetime
 import random
+
+
+def normalizar_servicio(texto):
+    """
+    Normaliza nombres de servicios para consistencia:
+    - Convierte a minúsculas
+    - Elimina acentos (afinación → afinacion)
+    - Elimina caracteres especiales
+    - Colapsa espacios múltiples
+    """
+    texto = texto.lower().strip()
+    # Quitar acentos
+    texto = ''.join(
+        c for c in unicodedata.normalize('NFD', texto)
+        if unicodedata.category(c) != 'Mn'
+    )
+    # Solo letras, números y espacios
+    texto = re.sub(r'[^a-z0-9\s]', '', texto)
+    # Espacios múltiples → uno solo
+    texto = re.sub(r'\s+', ' ', texto).strip()
+    return texto
 
 def entrenar_modelo_correcto():
     print("=" * 60)
@@ -64,7 +91,7 @@ def entrenar_modelo_correcto():
             for item in cot.items:
                 if item.precio_unitario > 0:
                     data.append({
-                        'servicio': item.descripcion.lower().strip(),
+                        'servicio': normalizar_servicio(item.descripcion),
                         'tipo_cliente': cliente.tipo.lower().strip(),
                         'mes': mes,
                         'historial': historial,
@@ -108,11 +135,19 @@ def entrenar_modelo_correcto():
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
         )
-        
+
+        # Escalar variables numéricas (fit solo en train, transform en ambos)
+        cols_numericas = ['mes', 'historial', 'dias_inactivo']
+        scaler = StandardScaler()
+        X_train = X_train.copy()
+        X_test = X_test.copy()
+        X_train[cols_numericas] = scaler.fit_transform(X_train[cols_numericas])
+        X_test[cols_numericas] = scaler.transform(X_test[cols_numericas])
+
         print(f"\n🔄 Entrenando...")
         print(f"   • Entrenamiento: {len(X_train)} registros")
         print(f"   • Prueba: {len(X_test)} registros")
-        
+
         # Entrenar
         modelo = LinearRegression()
         modelo.fit(X_train, y_train)
@@ -167,6 +202,7 @@ def entrenar_modelo_correcto():
             pickle.dump({
                 'modelo': modelo,
                 'columnas': list(X.columns),
+                'scaler': scaler,
                 'metricas': {
                     'mae': round(mae, 2),
                     'mape': round(mape, 2),

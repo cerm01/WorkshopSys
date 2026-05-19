@@ -1,4 +1,5 @@
 env/
+.claude/
 gui/__pycache__/
 gui/pruebas.py
 server/__pycache__/

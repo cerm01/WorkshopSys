@@ -6,16 +6,33 @@ Variables: servicio, tipo_cliente, mes, historial, dias_inactivo
 import pandas as pd
 import pickle
 import os
+import re
+import unicodedata
 from datetime import datetime
+
+
+def normalizar_servicio(texto):
+    """
+    Normaliza nombres de servicios (debe ser idéntica a la de entrenar_onehot.py)
+    """
+    texto = texto.lower().strip()
+    texto = ''.join(
+        c for c in unicodedata.normalize('NFD', texto)
+        if unicodedata.category(c) != 'Mn'
+    )
+    texto = re.sub(r'[^a-z0-9\s]', '', texto)
+    texto = re.sub(r'\s+', ' ', texto).strip()
+    return texto
 
 class PredictorML:
     def __init__(self):
         self.modelo = None
         self.columnas = None
+        self.scaler = None
         self.metricas = {'mae': 0, 'mape': 0, 'r2': 0, 'n_datos': 0}
         self.entrenado = False
         self.cargar_modelo()
-    
+
     def cargar_modelo(self):
         """Cargar modelo entrenado"""
         if os.path.exists('modelo_ml_onehot.pkl'):
@@ -24,6 +41,7 @@ class PredictorML:
                     data = pickle.load(f)
                     self.modelo = data['modelo']
                     self.columnas = data['columnas']
+                    self.scaler = data.get('scaler', None)
                     self.metricas = data['metricas']
                     self.entrenado = True
                 print("✅ Modelo ML cargado correctamente")
@@ -59,9 +77,9 @@ class PredictorML:
         # Si no se especifica mes, usar el actual
         if mes is None:
             mes = datetime.now().month
-        
-        # Normalizar inputs
-        servicio = servicio.lower().strip()
+
+        # Normalizar inputs (misma función que en entrenamiento)
+        servicio = normalizar_servicio(servicio)
         tipo_cliente = tipo_cliente.lower().strip()
         
         # Crear DataFrame con las 5 variables
@@ -83,7 +101,15 @@ class PredictorML:
         
         # Mantener solo las columnas del modelo (en el mismo orden)
         input_encoded = input_encoded[self.columnas]
-        
+
+        # Aplicar el mismo escalado que se usó en el entrenamiento
+        if self.scaler is not None:
+            cols_numericas = ['mes', 'historial', 'dias_inactivo']
+            input_encoded = input_encoded.copy()
+            input_encoded[cols_numericas] = self.scaler.transform(
+                input_encoded[cols_numericas]
+            )
+
         # Predecir
         precio = self.modelo.predict(input_encoded)[0]
         
