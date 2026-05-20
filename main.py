@@ -1,7 +1,17 @@
 """
 MAIN.PY - Punto de entrada con sistema distribuido y Auto-Retrain ML
 """
+import os
 import sys
+
+# ── Fix para PyInstaller (--onefile) ──────────────────────────────────────────
+# Cuando el exe está empaquetado, los recursos se extraen en sys._MEIPASS.
+# Cambiamos el CWD ahí para que todas las rutas relativas funcionen igual
+# que en desarrollo (assets/icons/*, modelo_ml_onehot.pkl, etc.)
+if getattr(sys, 'frozen', False):
+    os.chdir(sys._MEIPASS)
+# ──────────────────────────────────────────────────────────────────────────────
+
 from PyQt5.QtWidgets import QApplication
 from gui.login_windows import LoginWindow
 from gui.main_windows import MainWindow
