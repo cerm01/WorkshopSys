@@ -851,17 +851,17 @@ def get_usuarios_api(db: Session = Depends(get_db)):
     usuarios = crud.get_usuarios(db)
     return [_usuario_to_dict(u) for u in usuarios]
 
+@app.get("/usuarios/contar_admins")
+def get_contar_admins_api(db: Session = Depends(get_db)):
+    count = crud.contar_admins_activos(db)
+    return {"admins_activos": count}
+
 @app.get("/usuarios/{usuario_id}")
 def get_usuario_api(usuario_id: int, db: Session = Depends(get_db)):
     usuario = crud.get_usuario(db, usuario_id)
     if usuario:
         return _usuario_to_dict(usuario)
     raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-@app.get("/usuarios/contar_admins")
-def get_contar_admins_api(db: Session = Depends(get_db)):
-    count = crud.contar_admins_activos(db)
-    return {"admins_activos": count}
 
 @app.post("/usuarios")
 async def crear_usuario_api(datos: Dict[str, Any], db: Session = Depends(get_db)):

@@ -461,7 +461,7 @@ class ConfiguracionWindow(QDialog):
         lbl_rol.setStyleSheet(LABEL_STYLE)
         self.cmb_rol = QComboBox()
         self.cmb_rol.setStyleSheet(INPUT_STYLE)
-        self.cmb_rol.addItems(["Capturista", "Vendedor", "Mecánico", "Admin"])
+        self.cmb_rol.addItems(["Capturista", "Vendedor", "Mecanico", "Admin"])
         
         lbl_activo = QLabel("Activo")
         lbl_activo.setStyleSheet(LABEL_STYLE)

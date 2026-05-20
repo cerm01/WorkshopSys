@@ -247,8 +247,8 @@ class MainWindow(QDialog):
             "administracion": (["Admin", "Vendedor", "Mecanico"], "Acceso a módulos administrativos"),
             "clientes": (["Admin", "Vendedor"], "Gestión de clientes"),
             "proveedores": (["Admin", "Vendedor"], "Gestión de proveedores"),
-            "inventario": (["Admin", "Vendedor", "Capturista"], "Gestión de inventario"),
-            "reportes": (["Admin", "Vendedor", "Capturista"], "Visualización de reportes"),
+            "inventario": (["Admin", "Vendedor", "Mecanico", "Capturista"], "Gestión de inventario"),
+            "reportes": (["Admin", "Vendedor", "Mecanico", "Capturista"], "Visualización de reportes"),
             "configuracion": (["Admin"], "Configuración del sistema"),
             "cerrar": (["Admin", "Vendedor", "Mecanico", "Capturista"], "Cerrar sesión")
         }
