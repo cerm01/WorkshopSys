@@ -1223,6 +1223,10 @@ def actualizar_usuario(db: Session, usuario_id: int, datos: Dict) -> Optional[Us
             password = datos.pop('password')
             datos['password_hash'] = hashlib.sha256(password.encode()).hexdigest()
 
+        # Convertir email vacío a None para no violar restricción UNIQUE
+        if 'email' in datos and datos['email'] == '':
+            datos['email'] = None
+
         for key, value in datos.items():
             if hasattr(usuario, key):
                 setattr(usuario, key, value)
